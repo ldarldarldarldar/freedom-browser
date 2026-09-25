@@ -28,6 +28,7 @@ interface NewTabPageProps {
   defaultSearchEngine: SearchEngineId;
   palette?: ThemePalette;
   isPerformanceMode?: boolean;
+  onOpenSettings?: () => void;
 }
 
 export const NewTabPage: React.FC<NewTabPageProps> = ({
@@ -35,6 +36,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   defaultSearchEngine,
   palette,
   isPerformanceMode = false,
+  onOpenSettings,
 }) => {
   const [query, setQuery] = useState('');
   const [time, setTime] = useState<string>('');
@@ -105,12 +107,20 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         </div>
       </div>
 
-      {/* Freedom Brand Header */}
+      {/* Freedom Brand Header - clicking logo/icon opens Settings */}
       <div className="flex flex-col items-center mb-8">
-        <FreedomLogo size={64} className="mb-3 hover:scale-105 transition-transform" />
-        <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-          <span>FREEDOM</span>
-        </h1>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="Open Settings"
+          aria-label="Open Settings"
+          className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-2xl p-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
+        >
+          <FreedomLogo size={64} className="mb-3 transition-transform group-hover:brightness-110" />
+          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <span>FREEDOM</span>
+          </h1>
+        </button>
         <p className="text-xs text-neutral-400 mt-1 font-mono flex items-center gap-3">
           <span className="flex items-center gap-1" style={{ color: accent }}>
             <Shield className="w-3 h-3" /> Freedom

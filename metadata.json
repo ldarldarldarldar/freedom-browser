@@ -1,5 +1,6 @@
 {
   "name": "Freedom Browser",
+  "version": "0.4.4",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser built with Rust, Tauri 2, and modern web engines.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

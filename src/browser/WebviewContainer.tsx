@@ -20,6 +20,7 @@ interface WebviewContainerProps {
   defaultSearchEngine: SearchEngineId;
   palette?: ThemePalette;
   isPerformanceMode?: boolean;
+  onOpenSettings?: () => void;
 }
 
 const ElectronWebviewTab: React.FC<{
@@ -135,6 +136,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   defaultSearchEngine,
   palette,
   isPerformanceMode = false,
+  onOpenSettings,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const isElectron = isElectronEnvironment();
@@ -239,6 +241,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
         defaultSearchEngine={defaultSearchEngine}
         palette={palette}
         isPerformanceMode={isPerformanceMode}
+        onOpenSettings={onOpenSettings}
       />
     );
   }

@@ -1,6 +1,6 @@
 [package]
 name = "freedom"
-version = "1.0.0"
+version = "0.4.4"
 description = "Freedom - Lightweight, fast, privacy-focused desktop web browser"
 authors = ["Freedom Browser Team"]
 license = "MIT"

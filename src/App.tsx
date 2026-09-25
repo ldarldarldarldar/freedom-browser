@@ -640,6 +640,7 @@ export default function App() {
           defaultSearchEngine={settings.defaultSearchEngine}
           palette={settings.palette}
           isPerformanceMode={isPerformanceMode}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       </div>
 
