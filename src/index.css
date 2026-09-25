@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+/* Performance Mode: Completely eliminates CSS transitions, keyframe animations, and expensive backdrop filters to minimize GPU/CPU */
+.performance-mode * {
+  transition: none !important;
+  animation: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Low-overhead dark scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--fb-scrollbar, rgba(255, 255, 255, 0.15));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fb-accent, #10b981);
+}
+
+::selection {
+  background: var(--fb-accent, #10b981);
+  color: #000000;
+}
