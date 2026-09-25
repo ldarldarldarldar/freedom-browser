@@ -19,11 +19,19 @@ export interface BrowserTab {
   security: 'secure' | 'insecure' | 'internal';
 }
 
+export interface BookmarkFolder {
+  id: string;
+  name: string;
+  parentId?: string;
+  createdAt: number;
+}
+
 export interface Bookmark {
   id: string;
   title: string;
   url: string;
   favicon?: string;
+  folderId: string; // 'bar' (Bookmarks Bar) | 'other' (Other Bookmarks) | folder id
   addedAt: number;
 }
 
@@ -31,8 +39,18 @@ export interface HistoryItem {
   id: string;
   title: string;
   url: string;
+  favicon?: string;
   visitedAt: number;
-  visitCount: number;
+  visitCount?: number;
+}
+
+export interface ClosedTabEntry {
+  id: string;
+  title: string;
+  url: string;
+  favicon?: string;
+  zoomLevel: number;
+  closedAt: number;
 }
 
 export interface DownloadItem {
@@ -53,4 +71,11 @@ export interface DiagnosticLog {
   level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
   category: 'KERNEL' | 'RENDERER' | 'NETWORK' | 'MEMORY' | 'SECURITY';
   message: string;
+}
+
+export interface FindInPageState {
+  isOpen: boolean;
+  text: string;
+  activeMatchOrdinal: number;
+  numberOfMatches: number;
 }

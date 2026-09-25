@@ -9,12 +9,20 @@ import { AboutModal } from './pages/AboutModal';
 import { DownloadDrawer } from './components/DownloadDrawer';
 import { DevToolsDrawer } from './components/DevToolsDrawer';
 import { FreenMascot } from './components/FreenMascot';
-import { BrowserTab, DownloadItem } from './browser/types';
+import { HistoryDrawer } from './components/HistoryDrawer';
+import { BookmarksDrawer } from './components/BookmarksDrawer';
+import { BookmarksBar } from './components/BookmarksBar';
+import { FindInPageBar } from './components/FindInPageBar';
+import { BrowserTab, DownloadItem, Bookmark, FindInPageState } from './browser/types';
 import { BrowserSettings } from './settings/types';
 import { DEFAULT_SETTINGS } from './settings/defaults';
 import { SearchEngineService } from './services/searchEngineService';
 import { logger } from './services/loggerService';
 import { tauriBridge } from './services/tauriBridge';
+import { HistoryService } from './services/historyService';
+import { BookmarkService } from './services/bookmarkService';
+import { SessionService } from './services/sessionService';
+import { ZoomService } from './services/zoomService';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
@@ -61,6 +69,24 @@ export default function App() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
+
+  // Bookmarks State
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => BookmarkService.getBookmarks());
+
+  // Closed tabs count for TabBar restoration indicator
+  const [closedTabsCount, setClosedTabsCount] = useState<number>(
+    () => SessionService.getRecentlyClosed().length
+  );
+
+  // Find in page state
+  const [findState, setFindState] = useState<FindInPageState>({
+    isOpen: false,
+    text: '',
+    activeMatchOrdinal: 0,
+    numberOfMatches: 0,
+  });
 
   // Downloads state: initialized from local history without fake preloaded entries
   const [downloads, setDownloads] = useState<DownloadItem[]>(() => {
@@ -212,6 +238,12 @@ export default function App() {
         return;
       }
 
+      const tabToClose = tabs.find((t) => t.id === id);
+      if (tabToClose) {
+        SessionService.recordClosedTab(tabToClose, false);
+        setClosedTabsCount(SessionService.getRecentlyClosed().length);
+      }
+
       const index = tabs.findIndex((t) => t.id === id);
       const remaining = tabs.filter((t) => t.id !== id);
       setTabs(remaining);
@@ -224,6 +256,101 @@ export default function App() {
     },
     [tabs, activeTabId]
   );
+
+  const handleRestoreClosedTab = useCallback(() => {
+    const restored = SessionService.popRecentlyClosed();
+    if (!restored) return;
+    setClosedTabsCount(SessionService.getRecentlyClosed().length);
+    const newTab: BrowserTab = {
+      id: `tab-${Date.now()}`,
+      title: restored.title,
+      url: restored.url,
+      displayUrl: restored.url,
+      favicon: restored.favicon,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSuspended: false,
+      lastActive: Date.now(),
+      isCrashed: false,
+      history: [restored.url],
+      historyIndex: 0,
+      zoomLevel: restored.zoomLevel || 100,
+      security: restored.url.startsWith('https://') ? 'secure' : 'insecure',
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(newTab.id);
+  }, []);
+
+  const isCurrentBookmarked = activeTab ? BookmarkService.isBookmarked(activeTab.url) : false;
+
+  const handleToggleBookmark = useCallback(() => {
+    if (!activeTab || activeTab.url.startsWith('freedom://newtab')) return;
+    BookmarkService.toggleBookmark(activeTab.title, activeTab.url, activeTab.favicon);
+    setBookmarks(BookmarkService.getBookmarks());
+  }, [activeTab]);
+
+  const handleZoomIn = useCallback(() => {
+    if (!activeTab) return;
+    const next = ZoomService.zoomIn(activeTab.zoomLevel, activeTab.url);
+    setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, zoomLevel: next } : t)));
+    tauriBridge.setWebviewZoom(activeTab.id, next / 100);
+  }, [activeTab]);
+
+  const handleZoomOut = useCallback(() => {
+    if (!activeTab) return;
+    const next = ZoomService.zoomOut(activeTab.zoomLevel, activeTab.url);
+    setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, zoomLevel: next } : t)));
+    tauriBridge.setWebviewZoom(activeTab.id, next / 100);
+  }, [activeTab]);
+
+  const handleResetZoom = useCallback(() => {
+    if (!activeTab) return;
+    ZoomService.resetZoom(activeTab.url);
+    setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, zoomLevel: 100 } : t)));
+    tauriBridge.setWebviewZoom(activeTab.id, 1.0);
+  }, [activeTab]);
+
+  const handleFind = useCallback(
+    (text: string, forward: boolean = true, findNext: boolean = false) => {
+      if (!activeTab) return;
+      setFindState((prev) => ({ ...prev, text }));
+      if (!text.trim()) {
+        tauriBridge.stopFindInPage(activeTab.id, 'clearSelection');
+        setFindState((prev) => ({ ...prev, activeMatchOrdinal: 0, numberOfMatches: 0 }));
+        return;
+      }
+      tauriBridge.findInPage(activeTab.id, text, { forward, findNext });
+    },
+    [activeTab]
+  );
+
+  const handleCloseFind = useCallback(() => {
+    if (activeTab) {
+      tauriBridge.stopFindInPage(activeTab.id, 'clearSelection');
+    }
+    setFindState({
+      isOpen: false,
+      text: '',
+      activeMatchOrdinal: 0,
+      numberOfMatches: 0,
+    });
+  }, [activeTab]);
+
+  const handleFoundInPage = useCallback(
+    (result: { activeMatchOrdinal: number; numberOfMatches: number }) => {
+      setFindState((prev) => ({
+        ...prev,
+        activeMatchOrdinal: result.activeMatchOrdinal,
+        numberOfMatches: result.numberOfMatches,
+      }));
+    },
+    []
+  );
+
+  const handleRemoveDownloadItem = useCallback((id: string) => {
+    setDownloads((prev) => prev.filter((d) => d.id !== id));
+  }, []);
 
   const handleNavigate = useCallback(
     (url: string) => {
@@ -390,6 +517,10 @@ export default function App() {
         prev.map((t) => {
           if (t.id === tabId) {
             const isInternal = url.startsWith('freedom://');
+            // Record history for external pages
+            if (!isInternal && url) {
+              HistoryService.addEntry(t.title, url, t.favicon, false);
+            }
             return {
               ...t,
               url,
@@ -409,27 +540,67 @@ export default function App() {
 
   const handleTabTitleChange = useCallback((tabId: string, title: string) => {
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, title } : t))
+      prev.map((t) => {
+        if (t.id === tabId) {
+          HistoryService.updateEntryTitleAndFavicon(t.url, title, undefined);
+          return { ...t, title };
+        }
+        return t;
+      })
     );
   }, []);
 
   const handleTabFaviconChange = useCallback((tabId: string, favicon: string) => {
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, favicon } : t))
+      prev.map((t) => {
+        if (t.id === tabId) {
+          HistoryService.updateEntryTitleAndFavicon(t.url, undefined, favicon);
+          return { ...t, favicon };
+        }
+        return t;
+      })
     );
   }, []);
 
   const handleTabLoadingChange = useCallback((tabId: string, isLoading: boolean) => {
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, isLoading } : t))
+      prev.map((t) => {
+        if (t.id === tabId) {
+          if (!isLoading && t.url && !t.url.startsWith('freedom://')) {
+            HistoryService.addEntry(t.title, t.url, t.favicon, false);
+          }
+          return { ...t, isLoading };
+        }
+        return t;
+      })
     );
   }, []);
 
-  // Electron IPC download & new window events
+  // Per-site Zoom synchronization when active tab changes
+  useEffect(() => {
+    if (activeTab && !activeTab.url.startsWith('freedom://')) {
+      const storedZoom = ZoomService.getZoomForUrl(activeTab.url);
+      if (storedZoom !== activeTab.zoomLevel) {
+        setTabs((prev) =>
+          prev.map((t) => (t.id === activeTab.id ? { ...t, zoomLevel: storedZoom } : t))
+        );
+      }
+      tauriBridge.setWebviewZoom(activeTab.id, (storedZoom || 100) / 100);
+    }
+  }, [activeTab?.id, activeTab?.url]);
+
+  // Electron IPC events (downloads, new-window, context menu open-tab, search-text)
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).electronAPI?.on) {
       const unsubNewWindow = (window as any).electronAPI.on('webview-new-window', ({ url }: { url: string }) => {
         handleNewTab(url);
+      });
+      const unsubOpenTab = (window as any).electronAPI.on('webview-open-tab', ({ url }: { url: string }) => {
+        handleNewTab(url);
+      });
+      const unsubSearchText = (window as any).electronAPI.on('webview-search-text', ({ text }: { text: string }) => {
+        const targetUrl = SearchEngineService.resolveInputToUrl(text, settings.defaultSearchEngine);
+        handleNewTab(targetUrl);
       });
       const unsubDlStart = (window as any).electronAPI.on('download-start', (item: DownloadItem) => {
         setDownloads((prev) => [item, ...prev.filter((d) => d.id !== item.id)]);
@@ -460,43 +631,195 @@ export default function App() {
 
       return () => {
         unsubNewWindow?.();
+        unsubOpenTab?.();
+        unsubSearchText?.();
         unsubDlStart?.();
         unsubDlProgress?.();
         unsubDlDone?.();
       };
     }
-  }, [handleNewTab]);
+  }, [handleNewTab, settings.defaultSearchEngine]);
 
-  // Keyboard shortcuts (Ctrl+T, Ctrl+W, Ctrl+R, Shift+Esc, F12, Ctrl+J)
+  // Full suite of Standard Browser Shortcuts (Requirement 8)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 't') {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      // Ctrl+L: Focus address bar
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'l') {
         e.preventDefault();
-        handleNewTab();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
+        const omnibar = document.getElementById('browser-omnibar-input');
+        omnibar?.focus();
+        (omnibar as HTMLInputElement)?.select?.();
+        return;
+      }
+
+      // Ctrl+T: New tab
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        handleNewTab('freedom://newtab');
+        return;
+      }
+
+      // Ctrl+Shift+T: Restore recently closed tab
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        handleRestoreClosedTab();
+        return;
+      }
+
+      // Ctrl+W: Close current tab
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'w') {
         e.preventDefault();
         if (activeTabId) handleCloseTab(activeTabId);
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') {
+        return;
+      }
+
+      // Ctrl+Tab: Next tab
+      if (isCtrlOrCmd && !e.shiftKey && e.key === 'Tab') {
         e.preventDefault();
-        handleReload();
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+        const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
+        const nextIndex = (currentIndex + 1) % tabs.length;
+        setActiveTabId(tabs[nextIndex].id);
+        return;
+      }
+
+      // Ctrl+Shift+Tab: Previous tab
+      if (isCtrlOrCmd && e.shiftKey && e.key === 'Tab') {
+        e.preventDefault();
+        const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
+        const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+        setActiveTabId(tabs[prevIndex].id);
+        return;
+      }
+
+      // Ctrl+F: Find in page
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }));
+        return;
+      }
+
+      // Ctrl+D: Toggle Bookmark
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        handleToggleBookmark();
+        return;
+      }
+
+      // Ctrl+H: History
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'h') {
+        e.preventDefault();
+        setIsHistoryOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl+J: Downloads
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'j') {
         e.preventDefault();
         setIsDownloadsOpen((prev) => !prev);
-      } else if (e.shiftKey && e.key === 'Escape') {
+        return;
+      }
+
+      // Ctrl+R: Reload active tab
+      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        handleReload();
+        return;
+      }
+
+      // Ctrl+Shift+R: Hard reload
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        if (activeTab) tauriBridge.reloadTab(activeTab.id, true);
+        return;
+      }
+
+      // Ctrl+0: Reset zoom
+      if (isCtrlOrCmd && (e.key === '0' || e.key === 'NumPad0')) {
+        e.preventDefault();
+        handleResetZoom();
+        return;
+      }
+
+      // Ctrl++ or Ctrl+=: Zoom in
+      if (isCtrlOrCmd && (e.key === '=' || e.key === '+' || e.key === 'Add')) {
+        e.preventDefault();
+        handleZoomIn();
+        return;
+      }
+
+      // Ctrl+-: Zoom out
+      if (isCtrlOrCmd && (e.key === '-' || e.key === 'Subtract')) {
+        e.preventDefault();
+        handleZoomOut();
+        return;
+      }
+
+      // Shift+Esc: Task Manager
+      if (e.shiftKey && e.key === 'Escape') {
         e.preventDefault();
         setIsTaskManagerOpen((prev) => !prev);
-      } else if (e.key === 'F12' || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i')) {
+        return;
+      }
+
+      // F12 or Ctrl+Shift+I: DevTools
+      if (e.key === 'F12' || (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'i')) {
         e.preventDefault();
         setIsDevToolsOpen((prev) => !prev);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        return;
+      }
+
+      // Ctrl+,: Settings
+      if (isCtrlOrCmd && e.key === ',') {
         e.preventDefault();
         setIsSettingsOpen(true);
+        return;
+      }
+
+      // Escape: Close transient UI
+      if (e.key === 'Escape') {
+        if (findState.isOpen) {
+          handleCloseFind();
+        } else if (isHistoryOpen) {
+          setIsHistoryOpen(false);
+        } else if (isBookmarksOpen) {
+          setIsBookmarksOpen(false);
+        } else if (isDownloadsOpen) {
+          setIsDownloadsOpen(false);
+        } else if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+        } else if (isAboutOpen) {
+          setIsAboutOpen(false);
+        } else if (isTaskManagerOpen) {
+          setIsTaskManagerOpen(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleNewTab, handleCloseTab, handleReload, activeTabId]);
+  }, [
+    tabs,
+    activeTabId,
+    activeTab,
+    findState.isOpen,
+    isHistoryOpen,
+    isBookmarksOpen,
+    isDownloadsOpen,
+    isSettingsOpen,
+    isAboutOpen,
+    isTaskManagerOpen,
+    handleNewTab,
+    handleRestoreClosedTab,
+    handleCloseTab,
+    handleToggleBookmark,
+    handleReload,
+    handleZoomIn,
+    handleZoomOut,
+    handleResetZoom,
+    handleCloseFind,
+  ]);
 
   const isPerformanceMode = settings.browserMode === 'performance';
 
@@ -598,6 +921,8 @@ export default function App() {
         onCloseTab={handleCloseTab}
         onNewTab={() => handleNewTab('freedom://newtab')}
         headerColorClass={getHeaderColorClass()}
+        onRestoreClosedTab={handleRestoreClosedTab}
+        closedTabsCount={closedTabsCount}
       />
 
       {/* Navigation & Controls Bar */}
@@ -622,6 +947,22 @@ export default function App() {
         downloadsCount={downloads.filter((d) => d.state === 'progressing').length}
         headerColorClass={getHeaderColorClass()}
         isDevToolsOpen={isDevToolsOpen}
+        isBookmarked={isCurrentBookmarked}
+        onToggleBookmark={handleToggleBookmark}
+        onOpenBookmarks={() => setIsBookmarksOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
+        onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
+        zoomLevel={activeTab?.zoomLevel || 100}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onResetZoom={handleResetZoom}
+      />
+
+      {/* Bookmarks Bar */}
+      <BookmarksBar
+        bookmarks={bookmarks}
+        onNavigate={handleNavigate}
+        onOpenBookmarksManager={() => setIsBookmarksOpen(true)}
       />
 
       {/* Primary Browser Content Viewport */}
@@ -641,6 +982,18 @@ export default function App() {
           palette={settings.palette}
           isPerformanceMode={isPerformanceMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onFoundInPage={handleFoundInPage}
+        />
+
+        {/* Find In Page Overlay */}
+        <FindInPageBar
+          isOpen={findState.isOpen}
+          onClose={handleCloseFind}
+          onFind={handleFind}
+          activeMatchOrdinal={findState.activeMatchOrdinal}
+          numberOfMatches={findState.numberOfMatches}
+          searchText={findState.text}
+          setSearchText={(text) => setFindState((prev) => ({ ...prev, text }))}
         />
       </div>
 
@@ -676,6 +1029,21 @@ export default function App() {
         onOpenFolder={async () => {
           await tauriBridge.openDownloadFolder(settings.downloadsLocation);
         }}
+        onRemoveItem={handleRemoveDownloadItem}
+      />
+
+      {/* History Drawer */}
+      <HistoryDrawer
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        onNavigate={handleNavigate}
+      />
+
+      {/* Bookmarks Drawer */}
+      <BookmarksDrawer
+        isOpen={isBookmarksOpen}
+        onClose={() => setIsBookmarksOpen(false)}
+        onNavigate={handleNavigate}
       />
 
       {/* Task Manager Modal */}

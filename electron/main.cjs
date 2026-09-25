@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, clipboard } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -159,6 +159,109 @@ app.on('web-contents-created', (event, contents) => {
         mainWindow.webContents.send('webview-new-window', { url });
       }
       return { action: 'deny' };
+    });
+
+    // Native Browser Context Menu for Web Content
+    contents.on('context-menu', (event, params) => {
+      event.preventDefault();
+      const menu = new Menu();
+
+      // 1. Link Actions
+      if (params.linkURL) {
+        menu.append(new MenuItem({
+          label: 'Open Link',
+          click: () => { contents.loadURL(params.linkURL); },
+        }));
+        menu.append(new MenuItem({
+          label: 'Open Link in New Tab',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: true });
+            }
+          },
+        }));
+        menu.append(new MenuItem({
+          label: 'Open Link in Background Tab',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: false });
+            }
+          },
+        }));
+        menu.append(new MenuItem({
+          label: 'Copy Link Address',
+          click: () => { clipboard.writeText(params.linkURL); },
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
+      // 2. Image Actions
+      if (params.mediaType === 'image' && params.srcURL) {
+        menu.append(new MenuItem({
+          label: 'Open Image in New Tab',
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('webview-open-tab', { url: params.srcURL, active: true });
+            }
+          },
+        }));
+        menu.append(new MenuItem({
+          label: 'Save Image As...',
+          click: () => { contents.downloadURL(params.srcURL); },
+        }));
+        menu.append(new MenuItem({
+          label: 'Copy Image Address',
+          click: () => { clipboard.writeText(params.srcURL); },
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
+      // 3. Text Selection Actions
+      if (params.selectionText && params.selectionText.trim().length > 0) {
+        const text = params.selectionText.trim();
+        menu.append(new MenuItem({
+          label: 'Copy',
+          role: 'copy',
+        }));
+        const truncated = text.length > 25 ? text.substring(0, 25) + '...' : text;
+        menu.append(new MenuItem({
+          label: `Search Web for "${truncated}"`,
+          click: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('webview-search-text', { text });
+            }
+          },
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
+      // 4. Editable Inputs
+      if (params.isEditable) {
+        menu.append(new MenuItem({ label: 'Cut', role: 'cut', enabled: params.editFlags.canCut }));
+        menu.append(new MenuItem({ label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy }));
+        menu.append(new MenuItem({ label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste }));
+        menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
+      // 5. Page Navigation Actions
+      menu.append(new MenuItem({
+        label: 'Back',
+        enabled: contents.canGoBack(),
+        click: () => { contents.goBack(); },
+      }));
+      menu.append(new MenuItem({
+        label: 'Forward',
+        enabled: contents.canGoForward(),
+        click: () => { contents.goForward(); },
+      }));
+      menu.append(new MenuItem({
+        label: 'Reload',
+        accelerator: 'CmdOrCtrl+R',
+        click: () => { contents.reload(); },
+      }));
+
+      menu.popup({ window: mainWindow });
     });
   }
 });

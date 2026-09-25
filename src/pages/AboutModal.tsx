@@ -39,7 +39,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             <FreedomLogo size={72} className="mb-3" />
             <h1 className="text-xl font-bold text-white tracking-tight">FREEDOM</h1>
             <p className="text-xs text-neutral-400 font-mono mt-0.5">
-              Version 0.4.4-release (x86_64 / aarch64)
+              Version 0.5.0-release (x86_64 / aarch64)
             </p>
           </div>
 

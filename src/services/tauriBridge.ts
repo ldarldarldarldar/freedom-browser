@@ -402,6 +402,69 @@ export class TauriBridge {
     }
     return '~/Downloads';
   }
+  /**
+   * Find in Page for active webview
+   */
+  public findInPage(
+    tabId: string,
+    text: string,
+    options: { forward?: boolean; findNext?: boolean } = {}
+  ): number | null {
+    const wv = this.getWebview(tabId);
+    if (wv && typeof wv.findInPage === 'function') {
+      try {
+        return wv.findInPage(text, options);
+      } catch (e) {
+        console.warn('findInPage failed:', e);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Stop Find in Page and optionally clear selection
+   */
+  public stopFindInPage(
+    tabId: string,
+    action: 'clearSelection' | 'keepSelection' | 'activateSelection' = 'clearSelection'
+  ): void {
+    const wv = this.getWebview(tabId);
+    if (wv && typeof wv.stopFindInPage === 'function') {
+      try {
+        wv.stopFindInPage(action);
+      } catch (e) {
+        console.warn('stopFindInPage failed:', e);
+      }
+    }
+  }
+
+  /**
+   * Set Zoom Factor for webview (1.0 = 100%)
+   */
+  public setWebviewZoom(tabId: string, factor: number): void {
+    const wv = this.getWebview(tabId);
+    if (wv && typeof wv.setZoomFactor === 'function') {
+      try {
+        wv.setZoomFactor(factor);
+      } catch (e) {
+        console.warn('setZoomFactor failed:', e);
+      }
+    }
+  }
+
+  /**
+   * Reload tab, optionally ignoring cache (hard reload)
+   */
+  public reloadTab(tabId: string, ignoreCache: boolean = false): void {
+    const wv = this.getWebview(tabId);
+    if (wv) {
+      if (ignoreCache && typeof wv.reloadIgnoringCache === 'function') {
+        wv.reloadIgnoringCache();
+      } else if (typeof wv.reload === 'function') {
+        wv.reload();
+      }
+    }
+  }
 }
 
 export const tauriBridge = TauriBridge.getInstance();

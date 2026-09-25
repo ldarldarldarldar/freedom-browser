@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, X, Globe, Moon, Volume2, VolumeX, ShieldCheck } from 'lucide-react';
+import { Plus, X, Globe, Moon, Volume2, VolumeX, ShieldCheck, RotateCcw } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 
 interface TabBarProps {
@@ -11,6 +11,8 @@ interface TabBarProps {
   onDuplicateTab?: (id: string) => void;
   onToggleMuteTab?: (id: string) => void;
   headerColorClass?: string;
+  onRestoreClosedTab?: () => void;
+  closedTabsCount?: number;
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -21,6 +23,8 @@ export const TabBar: React.FC<TabBarProps> = ({
   onNewTab,
   onToggleMuteTab,
   headerColorClass = 'bg-[#090b10]',
+  onRestoreClosedTab,
+  closedTabsCount = 0,
 }) => {
   return (
     <div
@@ -134,6 +138,19 @@ export const TabBar: React.FC<TabBarProps> = ({
         >
           <Plus className="w-4 h-4" />
         </button>
+
+        {/* Restore Recently Closed Tab Button */}
+        {onRestoreClosedTab && closedTabsCount > 0 && (
+          <button
+            id="btn-restore-closed-tab"
+            type="button"
+            onClick={onRestoreClosedTab}
+            className="flex items-center justify-center w-7 h-7 ml-0.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-white/5 active:scale-95 transition-all"
+            title={`Restore closed tab (Ctrl+Shift+T) - ${closedTabsCount} available`}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        )}
 
         {/* Empty space for double clicking */}
         <div id="tab-bar-empty-area" className="flex-1 h-full cursor-default" />

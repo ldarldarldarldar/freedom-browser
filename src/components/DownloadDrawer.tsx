@@ -27,6 +27,7 @@ interface DownloadDrawerProps {
   onOpenFile: (item: DownloadItem) => void;
   onShowInFolder?: (item: DownloadItem) => void;
   onOpenFolder: () => void;
+  onRemoveItem?: (id: string) => void;
 }
 
 export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
@@ -38,6 +39,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
   onOpenFile,
   onShowInFolder,
   onOpenFolder,
+  onRemoveItem,
 }) => {
   if (!isOpen) return null;
 
@@ -203,42 +205,54 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                    {item.state === 'completed' && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => onOpenFile(item)}
-                          className="p-1.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                          title="Open file"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
-                        {onShowInFolder && (
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                      {item.state === 'completed' && (
+                        <>
                           <button
                             type="button"
-                            onClick={() => onShowInFolder(item)}
-                            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-                            title="Show in folder"
+                            onClick={() => onOpenFile(item)}
+                            className="p-1.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                            title="Open file"
                           >
-                            <Folder className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-3.5 h-3.5" />
                           </button>
-                        )}
-                      </>
-                    )}
+                          {onShowInFolder && (
+                            <button
+                              type="button"
+                              onClick={() => onShowInFolder(item)}
+                              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+                              title="Show in folder"
+                            >
+                              <Folder className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </>
+                      )}
 
-                    {item.state === 'progressing' && (
-                      <button
-                        type="button"
-                        onClick={() => onCancelDownload(item.id)}
-                        className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Cancel download"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                      {item.state === 'progressing' && (
+                        <button
+                          type="button"
+                          onClick={() => onCancelDownload(item.id)}
+                          className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Cancel download"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+
+                      {/* Remove from list (does NOT delete file on disk) */}
+                      {item.state !== 'progressing' && onRemoveItem && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveItem(item.id)}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-white/10 transition-all"
+                          title="Remove from list (keeps file on disk)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                 </div>
 
                 {/* Progress bar */}

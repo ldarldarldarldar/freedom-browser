@@ -21,6 +21,7 @@ interface WebviewContainerProps {
   palette?: ThemePalette;
   isPerformanceMode?: boolean;
   onOpenSettings?: () => void;
+  onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
 }
 
 const ElectronWebviewTab: React.FC<{
@@ -31,6 +32,7 @@ const ElectronWebviewTab: React.FC<{
   onTabLoadingChange?: (tabId: string, isLoading: boolean) => void;
   onTabNavigationChange?: (tabId: string, url: string, canGoBack: boolean, canGoForward: boolean) => void;
   onNewTabRequested?: (url: string) => void;
+  onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
 }> = ({
   tab,
   isActive,
@@ -39,6 +41,7 @@ const ElectronWebviewTab: React.FC<{
   onTabLoadingChange,
   onTabNavigationChange,
   onNewTabRequested,
+  onFoundInPage,
 }) => {
   const wvRef = useRef<any>(null);
 
@@ -85,6 +88,15 @@ const ElectronWebviewTab: React.FC<{
       }
     };
 
+    const handleFoundInPage = (e: any) => {
+      if (e.result) {
+        onFoundInPage?.({
+          activeMatchOrdinal: e.result.activeMatchOrdinal || 0,
+          numberOfMatches: e.result.matches || 0,
+        });
+      }
+    };
+
     el.addEventListener('did-navigate', handleDidNavigate);
     el.addEventListener('did-navigate-in-page', handleDidNavigate);
     el.addEventListener('page-title-updated', handleTitleUpdated);
@@ -92,6 +104,15 @@ const ElectronWebviewTab: React.FC<{
     el.addEventListener('did-start-loading', handleStartLoading);
     el.addEventListener('did-stop-loading', handleStopLoading);
     el.addEventListener('new-window', handleNewWindow);
+    el.addEventListener('found-in-page', handleFoundInPage);
+
+    // Initial zoom application
+    const factor = (tab.zoomLevel || 100) / 100;
+    try {
+      if (typeof el.setZoomFactor === 'function') {
+        el.setZoomFactor(factor);
+      }
+    } catch {}
 
     return () => {
       tauriBridge.unregisterWebview(tab.id);
@@ -102,8 +123,21 @@ const ElectronWebviewTab: React.FC<{
       el.removeEventListener('did-start-loading', handleStartLoading);
       el.removeEventListener('did-stop-loading', handleStopLoading);
       el.removeEventListener('new-window', handleNewWindow);
+      el.removeEventListener('found-in-page', handleFoundInPage);
     };
-  }, [tab.id, onTabTitleChange, onTabFaviconChange, onTabLoadingChange, onTabNavigationChange, onNewTabRequested, tab.url]);
+  }, [tab.id, onTabTitleChange, onTabFaviconChange, onTabLoadingChange, onTabNavigationChange, onNewTabRequested, onFoundInPage, tab.url]);
+
+  // Sync zoom changes dynamically
+  useEffect(() => {
+    const el = wvRef.current;
+    if (!el) return;
+    const factor = (tab.zoomLevel || 100) / 100;
+    try {
+      if (typeof el.setZoomFactor === 'function') {
+        el.setZoomFactor(factor);
+      }
+    } catch {}
+  }, [tab.zoomLevel]);
 
   return (
     <div
@@ -137,6 +171,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   palette,
   isPerformanceMode = false,
   onOpenSettings,
+  onFoundInPage,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const isElectron = isElectronEnvironment();
@@ -265,6 +300,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
             onTabLoadingChange={onTabLoadingChange}
             onTabNavigationChange={onTabNavigationChange}
             onNewTabRequested={onNewTabRequested}
+            onFoundInPage={onFoundInPage}
           />
         ))}
       </div>
