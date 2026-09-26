@@ -21,12 +21,18 @@ import {
   Bookmark as BookmarkIcon,
   ZoomIn,
   ZoomOut,
+  ArrowUpDown,
+  Cpu,
+  Copy,
+  ArrowDownAZ,
+  Globe,
 } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { SearchEngineId } from '../settings/types';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { tauriBridge } from '../services/tauriBridge';
+import { TabSortMode } from '../services/tabSortService';
 
 interface NavigationProps {
   currentTab: BrowserTab | undefined;
@@ -54,6 +60,7 @@ interface NavigationProps {
   onZoomIn?: () => void;
   onZoomOut?: () => void;
   onResetZoom?: () => void;
+  onSortTabs?: (mode: TabSortMode) => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -82,6 +89,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onZoomIn,
   onZoomOut,
   onResetZoom,
+  onSortTabs,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -136,13 +144,13 @@ export const Navigation: React.FC<NavigationProps> = ({
       }}
     >
       {/* Navigation History Controls */}
-      <div className="flex items-center space-x-0.5 app-no-drag">
+      <div className="flex items-center space-x-1 app-no-drag">
         <button
           id="nav-btn-back"
           type="button"
           onClick={onBack}
           disabled={!currentTab?.canGoBack}
-          className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent active:scale-95 transition-all"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:border-transparent active:scale-95 transition-all"
           title="Back (Alt+Left)"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -152,7 +160,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           type="button"
           onClick={onForward}
           disabled={!currentTab?.canGoForward}
-          className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent active:scale-95 transition-all"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:border-transparent active:scale-95 transition-all"
           title="Forward (Alt+Right)"
         >
           <ArrowRight className="w-4 h-4" />
@@ -161,7 +169,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="nav-btn-reload"
           type="button"
           onClick={currentTab?.isLoading ? onStop : onReload}
-          className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
           title={currentTab?.isLoading ? 'Stop loading (Esc)' : 'Reload page (Ctrl+R)'}
         >
           {currentTab?.isLoading ? <X className="w-4 h-4 text-emerald-400" /> : <RotateCcw className="w-4 h-4" />}
@@ -170,7 +178,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="nav-btn-home"
           type="button"
           onClick={onHome}
-          className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
           title="Open New Tab (Home)"
         >
           <Home className="w-4 h-4" />
@@ -310,7 +318,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-toggle-find"
             type="button"
             onClick={onToggleFind}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
             title="Find in page (Ctrl+F)"
           >
             <Search className="w-4 h-4" />
@@ -323,7 +331,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-open-bookmarks"
             type="button"
             onClick={onOpenBookmarks}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
             title="Bookmarks Manager"
           >
             <BookmarkIcon className="w-4 h-4" />
@@ -336,7 +344,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-open-history"
             type="button"
             onClick={onOpenHistory}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
             title="Browsing History (Ctrl+H)"
           >
             <HistoryIcon className="w-4 h-4" />
@@ -348,7 +356,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="btn-open-task-manager"
           type="button"
           onClick={onOpenTaskManager}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-300 hover:text-white hover:bg-white/5 border border-white/5 hover:border-white/10 active:scale-95 transition-all"
+          className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs text-neutral-300 hover:text-white hover:bg-white/5 border border-white/5 hover:border-white/10 active:scale-95 transition-all"
           title="Open Freedom Task Manager (Shift+Esc)"
         >
           <Activity className="w-3.5 h-3.5 text-emerald-400" />
@@ -360,7 +368,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="btn-open-downloads"
           type="button"
           onClick={onOpenDownloads}
-          className="relative p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+          className="relative w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
           title="Downloads (Ctrl+J)"
         >
           <Download className="w-4 h-4" />
@@ -376,10 +384,10 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="btn-toggle-devtools"
           type="button"
           onClick={onToggleDevTools}
-          className={`p-1.5 rounded-lg transition-all active:scale-95 ${
+          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all active:scale-95 ${
             isDevToolsOpen
               ? 'text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 shadow-sm'
-              : 'text-neutral-400 hover:text-white hover:bg-white/5'
+              : 'text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
           }`}
           title="Developer Tools / Inspector (F12 or Ctrl+Shift+I)"
         >
@@ -392,14 +400,14 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-main-menu"
             type="button"
             onClick={() => setShowMenu(!showMenu)}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
             title="Customize and control Freedom"
           >
             <Menu className="w-4 h-4" />
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-9 w-64 py-1.5 rounded-xl bg-neutral-900 border border-white/10 shadow-2xl z-50 text-xs text-neutral-200">
+            <div className="absolute right-0 top-10 w-64 py-1.5 rounded-xl bg-neutral-900/98 backdrop-blur-xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.85)] z-50 text-xs text-neutral-200 animate-fade-in">
               <button
                 type="button"
                 onClick={() => {
@@ -497,6 +505,60 @@ export const Navigation: React.FC<NavigationProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Tab Sorting Options */}
+              {onSortTabs && (
+                <>
+                  <div className="my-1 border-t border-white/5" />
+                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                    Sort Tabs
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onSortTabs('site');
+                    }}
+                    className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Group by Site</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onSortTabs('ram');
+                    }}
+                    className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
+                  >
+                    <Cpu className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Sort by RAM Usage</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onSortTabs('duplicates');
+                    }}
+                    className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Group Duplicates</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      onSortTabs('title');
+                    }}
+                    className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
+                  >
+                    <ArrowDownAZ className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Sort by Title (A-Z)</span>
+                  </button>
+                </>
+              )}
 
               <div className="my-1 border-t border-white/5" />
 

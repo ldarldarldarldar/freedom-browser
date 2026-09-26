@@ -59,6 +59,35 @@ export class TauriBridge {
   }
 
   /**
+   * Get real non-duplicated physical memory for active webviews
+   */
+  public async getWebviewsMemory(tabs: { id: string }[]): Promise<Record<string, number>> {
+    const result: Record<string, number> = {};
+    if (isElectronEnvironment() && (window as any).electronAPI) {
+      try {
+        const mappings = tabs.map((t) => {
+          const el = this.webviews.get(t.id);
+          let webContentsId: number | null = null;
+          if (el && typeof el.getWebContentsId === 'function') {
+            try {
+              webContentsId = el.getWebContentsId();
+            } catch {}
+          }
+          return { tabId: t.id, webContentsId };
+        });
+
+        const res = await (window as any).electronAPI.invoke('get_webviews_memory', mappings);
+        if (res && typeof res === 'object') {
+          return res;
+        }
+      } catch (err) {
+        console.warn('[TauriBridge] getWebviewsMemory error:', err);
+      }
+    }
+    return result;
+  }
+
+  /**
    * Invoke a Tauri Rust backend command safely
    */
   public async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {

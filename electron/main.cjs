@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, clipboard, webContents } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -14,8 +14,11 @@ app.commandLine.appendSwitch('disable-background-networking'); // Eliminates bac
 app.commandLine.appendSwitch('disable-client-side-phishing-detection'); // Disables remote heuristic scraping
 app.commandLine.appendSwitch('disable-default-apps');
 app.commandLine.appendSwitch('no-default-browser-check');
+app.commandLine.appendSwitch('disable-features', 'MediaRouter,OptimizationHints,InterestFeedContentSuggestions,Translate,CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('renderer-process-limit', '6'); // Prevents runaway process explosion
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=256'); // Keep V8 memory lean
+app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache (keeps working set lean)
+app.commandLine.appendSwitch('media-cache-size', '33554432'); // 32MB media cache
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128'); // Keep V8 memory lean (128MB ceiling)
 
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 let mainWindow = null;
@@ -74,10 +77,19 @@ function createWindow() {
     }
   });
 
+  const urlArg = process.argv.find((a) => a.startsWith('http://') || a.startsWith('https://'));
+  const tabsCountArg = process.argv.find((a) => a.startsWith('--tabs='));
+  const query = {};
+  if (urlArg) query.openUrl = urlArg;
+  if (tabsCountArg) query.tabCount = tabsCountArg.split('=')[1];
+
   if (isDev) {
-    mainWindow.loadURL('http://localhost:3000');
+    const devUrl = new URL('http://localhost:3000');
+    if (query.openUrl) devUrl.searchParams.set('openUrl', query.openUrl);
+    if (query.tabCount) devUrl.searchParams.set('tabCount', query.tabCount);
+    mainWindow.loadURL(devUrl.toString());
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), { query });
   }
 
   mainWindow.on('closed', () => {
@@ -517,6 +529,59 @@ ipcMain.handle('get_system_task_manager_stats', async () => {
     console.error('Failed to get real metrics:', err);
     return null;
   }
+});
+
+// Real per-tab webview memory usage without duplication
+ipcMain.handle('get_webviews_memory', async (event, mappings) => {
+  const result = {};
+  if (!Array.isArray(mappings)) return result;
+
+  try {
+    const metrics = app.getAppMetrics();
+    const metricsByPid = new Map();
+    for (const m of metrics) {
+      metricsByPid.set(m.pid, m);
+    }
+    const isLinux = process.platform === 'linux';
+
+    for (const item of mappings) {
+      if (!item || !item.tabId) continue;
+      let ramBytes = 0;
+      if (item.webContentsId) {
+        try {
+          const wc = webContents.fromId(item.webContentsId);
+          if (wc && !wc.isDestroyed()) {
+            const pid = wc.getOSProcessId();
+            if (pid) {
+              if (isLinux) {
+                const linuxMem = getLinuxProcessMemory(pid);
+                if (linuxMem) {
+                  ramBytes = linuxMem.pssBytes;
+                } else {
+                  const m = metricsByPid.get(pid);
+                  ramBytes = (m?.memory?.privateBytes || (m?.memory?.workingSetSize ? m.memory.workingSetSize * 512 : 0)) * 1024;
+                }
+              } else {
+                const m = metricsByPid.get(pid);
+                if (m) {
+                  const privateBytes = (m.memory?.privateBytes || 0) * 1024;
+                  const workingSetBytes = (m.memory?.workingSetSize || 0) * 1024;
+                  ramBytes = privateBytes > 0 ? privateBytes : Math.round(workingSetBytes * 0.6);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // ignore error for destroyed webcontents
+        }
+      }
+      result[item.tabId] = ramBytes;
+    }
+  } catch (err) {
+    console.warn('Error fetching webviews memory:', err);
+  }
+
+  return result;
 });
 
 // Terminate process safely

@@ -41,7 +41,13 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   const [query, setQuery] = useState('');
   const [time, setTime] = useState<string>('');
   const [date, setDate] = useState<string>('');
-  const [icons, setIcons] = useState<Record<string, string>>({});
+  const [icons] = useState<Record<string, string>>(() => {
+    const loaded: Record<string, string> = {};
+    for (const item of QUICK_SHORTCUTS) {
+      loaded[item.url] = FaviconService.getFaviconSync(item.url);
+    }
+    return loaded;
+  });
 
   useEffect(() => {
     const updateTime = () => {
@@ -60,24 +66,6 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
     return () => clearInterval(timer);
   }, [isPerformanceMode]);
 
-  // Load real favicons for quick access sites
-  useEffect(() => {
-    let isMounted = true;
-    const loadIcons = async () => {
-      const loaded: Record<string, string> = {};
-      for (const item of QUICK_SHORTCUTS) {
-        const icon = await FaviconService.getFavicon(item.url);
-        loaded[item.url] = icon;
-      }
-      if (isMounted) {
-        setIcons(loaded);
-      }
-    };
-    loadIcons();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

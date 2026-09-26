@@ -23,6 +23,7 @@ import { HistoryService } from './services/historyService';
 import { BookmarkService } from './services/bookmarkService';
 import { SessionService } from './services/sessionService';
 import { ZoomService } from './services/zoomService';
+import { TabSortService, TabSortMode } from './services/tabSortService';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
@@ -41,6 +42,85 @@ export default function App() {
 
   // Tabs State
   const [tabs, setTabs] = useState<BrowserTab[]>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const openUrl = params.get('openUrl');
+      const tabCount = parseInt(params.get('tabCount') || '1', 10);
+
+      if (openUrl) {
+        return [
+          {
+            id: 'tab-1',
+            title: SearchEngineService.extractDomain(openUrl),
+            url: openUrl,
+            displayUrl: openUrl,
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false,
+            isSuspended: false,
+            lastActive: Date.now(),
+            isCrashed: false,
+            history: [openUrl],
+            historyIndex: 0,
+            zoomLevel: ZoomService.getZoomForUrl(openUrl),
+            security: openUrl.startsWith('https://') ? 'secure' : 'insecure',
+          },
+        ];
+      }
+
+      if (tabCount > 1) {
+        const demoUrls = [
+          'https://duckduckgo.com',
+          'https://github.com',
+          'https://wikipedia.org',
+          'https://reddit.com',
+          'https://news.ycombinator.com',
+          'https://developer.mozilla.org',
+          'https://archlinux.org',
+          'https://kernel.org',
+          'https://electronjs.org',
+        ];
+        const initialTabs: BrowserTab[] = [
+          {
+            id: 'tab-1',
+            title: 'New Tab',
+            url: 'freedom://newtab',
+            displayUrl: 'freedom://newtab',
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false,
+            isSuspended: false,
+            lastActive: Date.now(),
+            isCrashed: false,
+            history: ['freedom://newtab'],
+            historyIndex: 0,
+            zoomLevel: 100,
+            security: 'internal',
+          },
+        ];
+        for (let i = 2; i <= tabCount; i++) {
+          const u = demoUrls[(i - 2) % demoUrls.length];
+          initialTabs.push({
+            id: `tab-${i}`,
+            title: SearchEngineService.extractDomain(u),
+            url: u,
+            displayUrl: u,
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false,
+            isSuspended: false,
+            lastActive: Date.now(),
+            isCrashed: false,
+            history: [u],
+            historyIndex: 0,
+            zoomLevel: 100,
+            security: 'secure',
+          });
+        }
+        return initialTabs;
+      }
+    } catch {}
+
     return [
       {
         id: 'tab-1',
@@ -79,6 +159,9 @@ export default function App() {
   const [closedTabsCount, setClosedTabsCount] = useState<number>(
     () => SessionService.getRecentlyClosed().length
   );
+
+  // Tab sorting mode state
+  const [activeSortMode, setActiveSortMode] = useState<TabSortMode | 'none'>('none');
 
   // Find in page state
   const [findState, setFindState] = useState<FindInPageState>({
@@ -159,20 +242,23 @@ export default function App() {
     const timeoutMs = settings.tabSuspensionTimeoutMinutes * 60 * 1000;
     const interval = setInterval(() => {
       const now = Date.now();
-      setTabs((prev) =>
-        prev.map((t) => {
+      setTabs((prev) => {
+        let hasChanges = false;
+        const next = prev.map((t) => {
           if (
             t.id !== activeTabId &&
             !t.isSuspended &&
             !t.url.startsWith('freedom://') &&
             now - t.lastActive > timeoutMs
           ) {
+            hasChanges = true;
             logger.log('INFO', 'MEMORY', `Suspending inactive tab '${t.title}' to free RAM.`);
             return { ...t, isSuspended: true };
           }
           return t;
-        })
-      );
+        });
+        return hasChanges ? next : prev;
+      });
     }, 30000);
 
     return () => clearInterval(interval);
@@ -511,6 +597,175 @@ export default function App() {
     );
     logger.log('INFO', 'MEMORY', `Tab ${tabId} suspended manually.`);
   }, []);
+
+  const handleSuspendTabs = useCallback((tabIds: string[]) => {
+    const idSet = new Set(tabIds);
+    setTabs((prev) =>
+      prev.map((t) =>
+        idSet.has(t.id) && !t.url.startsWith('freedom://') ? { ...t, isSuspended: true } : t
+      )
+    );
+    logger.log('INFO', 'MEMORY', `Suspended ${tabIds.length} tabs to reclaim RAM.`);
+  }, []);
+
+  const handleDuplicateTab = useCallback(
+    (tabId: string) => {
+      const sourceTab = tabs.find((t) => t.id === tabId);
+      if (!sourceTab) return;
+      const newId = `tab-${Date.now()}`;
+      const newTab: BrowserTab = {
+        ...sourceTab,
+        id: newId,
+        isLoading: false,
+        isSuspended: false,
+        lastActive: Date.now(),
+        history: [...sourceTab.history],
+      };
+      const index = tabs.findIndex((t) => t.id === tabId);
+      const updated = [...tabs];
+      updated.splice(index + 1, 0, newTab);
+      setTabs(updated);
+      setActiveTabId(newId);
+      logger.log('INFO', 'RENDERER', `Duplicated tab ${tabId} as ${newId}`);
+    },
+    [tabs]
+  );
+
+  const handleCloseTabsFromSite = useCallback(
+    (hostname: string) => {
+      const target = TabSortService.extractHostname(hostname).toLowerCase();
+      const matchingTabs = tabs.filter(
+        (t) => TabSortService.extractHostname(t.url).toLowerCase() === target
+      );
+      const remaining = tabs.filter(
+        (t) => TabSortService.extractHostname(t.url).toLowerCase() !== target
+      );
+
+      if (remaining.length === 0) {
+        // All tabs belong to this site: keep exactly 1 New Tab, never close the last tab
+        const [keepTab, ...closeTabs] = matchingTabs;
+        closeTabs.forEach((t) => {
+          tauriBridge.closeNativeTab(t.id);
+          SessionService.recordClosedTab(t, false);
+        });
+        setClosedTabsCount(SessionService.getRecentlyClosed().length);
+
+        const singleTab: BrowserTab = {
+          ...keepTab,
+          title: 'New Tab',
+          url: 'freedom://newtab',
+          displayUrl: 'freedom://newtab',
+          isLoading: false,
+          isSuspended: false,
+          isCrashed: false,
+          history: ['freedom://newtab'],
+          historyIndex: 0,
+        };
+
+        setTabs([singleTab]);
+        setActiveTabId(singleTab.id);
+        logger.log('INFO', 'RENDERER', `Closed tabs from site ${hostname}, left exactly 1 New Tab`);
+        return;
+      }
+
+      matchingTabs.forEach((t) => {
+        tauriBridge.closeNativeTab(t.id);
+        SessionService.recordClosedTab(t, false);
+      });
+      setClosedTabsCount(SessionService.getRecentlyClosed().length);
+
+      setTabs(remaining);
+      if (!remaining.some((t) => t.id === activeTabId)) {
+        setActiveTabId(remaining[0].id);
+      }
+      logger.log('INFO', 'RENDERER', `Closed all tabs from site: ${hostname}`);
+    },
+    [tabs, activeTabId]
+  );
+
+  const handleCloseOtherTabs = useCallback(
+    (tabId: string) => {
+      const toClose = tabs.filter((t) => t.id !== tabId);
+      toClose.forEach((t) => {
+        tauriBridge.closeNativeTab(t.id);
+        SessionService.recordClosedTab(t, false);
+      });
+      setClosedTabsCount(SessionService.getRecentlyClosed().length);
+
+      const remaining = tabs.filter((t) => t.id === tabId);
+      if (remaining.length > 0) {
+        setTabs(remaining);
+        setActiveTabId(remaining[0].id);
+        logger.log('INFO', 'RENDERER', `Closed other tabs, kept ${tabId}`);
+      }
+    },
+    [tabs]
+  );
+
+  const handleCloseTabsToRight = useCallback(
+    (tabId: string) => {
+      const index = tabs.findIndex((t) => t.id === tabId);
+      if (index === -1) return;
+      const toClose = tabs.slice(index + 1);
+      toClose.forEach((t) => {
+        tauriBridge.closeNativeTab(t.id);
+        SessionService.recordClosedTab(t, false);
+      });
+      setClosedTabsCount(SessionService.getRecentlyClosed().length);
+
+      const remaining = tabs.slice(0, index + 1);
+      setTabs(remaining);
+      if (!remaining.some((t) => t.id === activeTabId)) {
+        setActiveTabId(tabId);
+      }
+      logger.log('INFO', 'RENDERER', `Closed tabs to the right of ${tabId}`);
+    },
+    [tabs, activeTabId]
+  );
+
+  const handleReloadTab = useCallback(
+    (tabId: string) => {
+      if (tabId === activeTabId) {
+        handleReload();
+      } else {
+        const wv = tauriBridge.getWebview(tabId);
+        if (wv && typeof wv.reload === 'function') {
+          try {
+            wv.reload();
+          } catch {}
+        }
+      }
+    },
+    [activeTabId, handleReload]
+  );
+
+  const handleSortTabs = useCallback(
+    async (mode: TabSortMode) => {
+      setActiveSortMode(mode);
+      if (mode === 'site') {
+        setTabs((prev) => TabSortService.groupBySite(prev));
+        logger.log('INFO', 'RENDERER', 'Tabs organized by site');
+      } else if (mode === 'ram') {
+        try {
+          const ramMap = await tauriBridge.getWebviewsMemory(tabs);
+          setTabs((prev) => TabSortService.sortByRam(prev, ramMap));
+          logger.log('INFO', 'MEMORY', 'Tabs sorted by actual RAM usage');
+        } catch (err) {
+          console.warn('Failed to sort tabs by RAM:', err);
+        }
+      } else if (mode === 'duplicates') {
+        setTabs((prev) => {
+          const { sortedTabs } = TabSortService.groupDuplicates(prev);
+          return sortedTabs;
+        });
+        logger.log('INFO', 'RENDERER', 'Duplicate tabs grouped together');
+      } else if (mode === 'title') {
+        setTabs((prev) => TabSortService.sortByTitle(prev));
+        logger.log('INFO', 'RENDERER', 'Tabs sorted alphabetically by title');
+      }
+    },
+    [tabs]
+  );
 
   // Webview lifecycle synchronization
   const handleTabNavigationChange = useCallback(
@@ -969,7 +1224,8 @@ export default function App() {
         enabled={
           !isPerformanceMode &&
           settings.starAnimationEnabled &&
-          settings.backgroundParticlesEnabled
+          settings.backgroundParticlesEnabled &&
+          activeTab?.url === 'freedom://newtab'
         }
         density={settings.starDensity}
         intensity={settings.animationIntensity}
@@ -1011,6 +1267,15 @@ export default function App() {
         headerColorClass={getHeaderColorClass()}
         onRestoreClosedTab={handleRestoreClosedTab}
         closedTabsCount={closedTabsCount}
+        onSortTabs={handleSortTabs}
+        activeSortMode={activeSortMode}
+        onDuplicateTab={handleDuplicateTab}
+        onReloadTab={handleReloadTab}
+        onSuspendTab={handleSuspendTab}
+        onSuspendTabs={handleSuspendTabs}
+        onCloseTabsFromSite={handleCloseTabsFromSite}
+        onCloseOtherTabs={handleCloseOtherTabs}
+        onCloseTabsToRight={handleCloseTabsToRight}
       />
 
       {/* Navigation & Controls Bar (Below the Tab Bar) */}
@@ -1044,6 +1309,7 @@ export default function App() {
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
+        onSortTabs={handleSortTabs}
       />
 
       {/* Bookmarks Bar */}
@@ -1087,80 +1353,94 @@ export default function App() {
       </div>
 
       {/* Developer Tools Drawer */}
-      <DevToolsDrawer
-        isOpen={isDevToolsOpen}
-        onClose={() => setIsDevToolsOpen(false)}
-        activeTab={activeTab}
-      />
+      {isDevToolsOpen && (
+        <DevToolsDrawer
+          isOpen={isDevToolsOpen}
+          onClose={() => setIsDevToolsOpen(false)}
+          activeTab={activeTab}
+        />
+      )}
 
       {/* Downloads Popover Drawer */}
-      <DownloadDrawer
-        isOpen={isDownloadsOpen}
-        onClose={() => setIsDownloadsOpen(false)}
-        downloads={downloads}
-        onCancelDownload={async (id) => {
-          await tauriBridge.cancelDownload(id);
-          setDownloads((prev) =>
-            prev.map((d) => (d.id === id ? { ...d, state: 'cancelled' } : d))
-          );
-        }}
-        onClearHistory={() => setDownloads([])}
-        onOpenFile={async (item) => {
-          const success = await tauriBridge.openDownloadFile(item.filepath);
-          if (!success) {
-            // File no longer on disk - prune from list
-            setDownloads((prev) => prev.filter((d) => d.id !== item.id));
-          }
-        }}
-        onShowInFolder={async (item) => {
-          await tauriBridge.showItemInFolder(item.filepath);
-        }}
-        onOpenFolder={async () => {
-          await tauriBridge.openDownloadFolder(settings.downloadsLocation);
-        }}
-        onRemoveItem={handleRemoveDownloadItem}
-      />
+      {isDownloadsOpen && (
+        <DownloadDrawer
+          isOpen={isDownloadsOpen}
+          onClose={() => setIsDownloadsOpen(false)}
+          downloads={downloads}
+          onCancelDownload={async (id) => {
+            await tauriBridge.cancelDownload(id);
+            setDownloads((prev) =>
+              prev.map((d) => (d.id === id ? { ...d, state: 'cancelled' } : d))
+            );
+          }}
+          onClearHistory={() => setDownloads([])}
+          onOpenFile={async (item) => {
+            const success = await tauriBridge.openDownloadFile(item.filepath);
+            if (!success) {
+              // File no longer on disk - prune from list
+              setDownloads((prev) => prev.filter((d) => d.id !== item.id));
+            }
+          }}
+          onShowInFolder={async (item) => {
+            await tauriBridge.showItemInFolder(item.filepath);
+          }}
+          onOpenFolder={async () => {
+            await tauriBridge.openDownloadFolder(settings.downloadsLocation);
+          }}
+          onRemoveItem={handleRemoveDownloadItem}
+        />
+      )}
 
       {/* History Drawer */}
-      <HistoryDrawer
-        isOpen={isHistoryOpen}
-        onClose={() => setIsHistoryOpen(false)}
-        onNavigate={handleNavigate}
-      />
+      {isHistoryOpen && (
+        <HistoryDrawer
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          onNavigate={handleNavigate}
+        />
+      )}
 
       {/* Bookmarks Drawer */}
-      <BookmarksDrawer
-        isOpen={isBookmarksOpen}
-        onClose={() => setIsBookmarksOpen(false)}
-        onNavigate={handleNavigate}
-      />
+      {isBookmarksOpen && (
+        <BookmarksDrawer
+          isOpen={isBookmarksOpen}
+          onClose={() => setIsBookmarksOpen(false)}
+          onNavigate={handleNavigate}
+        />
+      )}
 
       {/* Task Manager Modal */}
-      <TaskManagerModal
-        isOpen={isTaskManagerOpen}
-        onClose={() => setIsTaskManagerOpen(false)}
-        tabs={tabs}
-        onTerminateTab={handleTerminateTab}
-        onReloadTab={handleReload}
-        onSuspendTab={handleSuspendTab}
-      />
+      {isTaskManagerOpen && (
+        <TaskManagerModal
+          isOpen={isTaskManagerOpen}
+          onClose={() => setIsTaskManagerOpen(false)}
+          tabs={tabs}
+          onTerminateTab={handleTerminateTab}
+          onReloadTab={handleReload}
+          onSuspendTab={handleSuspendTab}
+        />
+      )}
 
       {/* Settings Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        settings={settings}
-        onUpdateSettings={(newSettings) =>
-          setSettings((prev) => ({ ...prev, ...newSettings }))
-        }
-        onClearBrowsingData={() => {
-          logger.clearLogs();
-          localStorage.removeItem(TABS_KEY);
-        }}
-      />
+      {isSettingsOpen && (
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          settings={settings}
+          onUpdateSettings={(newSettings) =>
+            setSettings((prev) => ({ ...prev, ...newSettings }))
+          }
+          onClearBrowsingData={() => {
+            logger.clearLogs();
+            localStorage.removeItem(TABS_KEY);
+          }}
+        />
+      )}
 
       {/* About Modal */}
-      <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+      {isAboutOpen && (
+        <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+      )}
 
       {/* Freedom Mascot: Freen in bottom-right corner */}
       <FreenMascot enabled={settings.showFreenMascot} />

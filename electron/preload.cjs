@@ -28,4 +28,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeWindow: () => ipcRenderer.invoke('window_close'),
   isWindowMaximized: () => ipcRenderer.invoke('window_is_maximized'),
   setZoomFactor: (webContentsId, factor) => ipcRenderer.invoke('set_zoom_factor', { webContentsId, factor }),
+  getWebviewsMemory: (mappings) => ipcRenderer.invoke('get_webviews_memory', mappings),
 });

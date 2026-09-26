@@ -307,7 +307,52 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
     );
   }
 
-  // 3. New Tab Page (internal Freedom document)
+  // 3. Electron Desktop Mode: Native Chromium Webviews with true top-level multi-tab rendering
+  if (isElectron) {
+    const isNewTab = activeTab.url === 'freedom://newtab';
+    // Collect all open external tabs that are not suspended
+    const externalTabs = tabs.length > 0
+      ? tabs.filter((t) => !t.url.startsWith('freedom://') && !t.isSuspended)
+      : (!isNewTab ? [activeTab] : []);
+
+    return (
+      <div className="relative w-full h-full bg-neutral-950 overflow-hidden">
+        {isNewTab && (
+          <div
+            id="newtab-zoom-viewport"
+            className="relative w-full h-full overflow-y-auto no-scrollbar z-10"
+            style={{
+              zoom: (activeTab.zoomLevel || 100) / 100,
+            }}
+          >
+            <NewTabPage
+              onNavigate={onNavigate}
+              defaultSearchEngine={defaultSearchEngine}
+              palette={palette}
+              isPerformanceMode={isPerformanceMode}
+              onOpenSettings={onOpenSettings}
+            />
+          </div>
+        )}
+        {externalTabs.map((t) => (
+          <ElectronWebviewTab
+            key={t.id}
+            tab={t}
+            isActive={!isNewTab && t.id === activeTab.id}
+            onTabTitleChange={onTabTitleChange}
+            onTabFaviconChange={onTabFaviconChange}
+            onTabLoadingChange={onTabLoadingChange}
+            onTabNavigationChange={onTabNavigationChange}
+            onNewTabRequested={onNewTabRequested}
+            onFoundInPage={onFoundInPage}
+            onTabZoomChange={onTabZoomChange}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // 4. Non-Electron New Tab Page (internal Freedom document)
   if (activeTab.url === 'freedom://newtab') {
     const zoomFactor = (activeTab.zoomLevel || 100) / 100;
     return (
@@ -325,33 +370,6 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
           isPerformanceMode={isPerformanceMode}
           onOpenSettings={onOpenSettings}
         />
-      </div>
-    );
-  }
-
-  // 4. Electron Desktop Mode: Native Chromium Webviews with true top-level multi-tab rendering
-  if (isElectron) {
-    // Collect all open external tabs that are not suspended
-    const externalTabs = tabs.length > 0
-      ? tabs.filter((t) => !t.url.startsWith('freedom://') && !t.isSuspended)
-      : [activeTab];
-
-    return (
-      <div className="relative w-full h-full bg-neutral-950 overflow-hidden">
-        {externalTabs.map((t) => (
-          <ElectronWebviewTab
-            key={t.id}
-            tab={t}
-            isActive={t.id === activeTab.id}
-            onTabTitleChange={onTabTitleChange}
-            onTabFaviconChange={onTabFaviconChange}
-            onTabLoadingChange={onTabLoadingChange}
-            onTabNavigationChange={onTabNavigationChange}
-            onNewTabRequested={onNewTabRequested}
-            onFoundInPage={onFoundInPage}
-            onTabZoomChange={onTabZoomChange}
-          />
-        ))}
       </div>
     );
   }
