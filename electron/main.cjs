@@ -49,6 +49,8 @@ function createWindow() {
     backgroundColor: '#06080b',
     title: 'Freedom Browser',
     icon: iconPath,
+    frame: false, // Completely eliminates OS title bar and native borders (Frameless window)
+    titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -58,6 +60,18 @@ function createWindow() {
       spellcheck: false, // Disables background spellcheck memory footprint
       sandbox: false,
     },
+  });
+
+  mainWindow.on('maximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-maximized-change', true);
+    }
+  });
+
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-maximized-change', false);
+    }
   });
 
   if (isDev) {
@@ -159,6 +173,100 @@ app.on('web-contents-created', (event, contents) => {
         mainWindow.webContents.send('webview-new-window', { url });
       }
       return { action: 'deny' };
+    });
+
+    // Intercept keyboard shortcuts inside webview before page can swallow them
+    contents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+
+      const isCtrl = process.platform === 'darwin' ? input.meta : input.control;
+      if (!isCtrl) return;
+
+      // Zoom In: Ctrl + + / Ctrl + = / NumpadAdd
+      if (
+        input.key === '+' ||
+        input.key === '=' ||
+        input.key === 'Add' ||
+        input.code === 'Equal' ||
+        input.code === 'NumpadAdd'
+      ) {
+        event.preventDefault();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('webview-zoom-in');
+        }
+        return;
+      }
+
+      // Zoom Out: Ctrl + - / Ctrl + _ / NumpadSubtract
+      if (
+        input.key === '-' ||
+        input.key === '_' ||
+        input.key === 'Subtract' ||
+        input.code === 'Minus' ||
+        input.code === 'NumpadSubtract'
+      ) {
+        event.preventDefault();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('webview-zoom-out');
+        }
+        return;
+      }
+
+      // Zoom Reset: Ctrl + 0 / Numpad0
+      if (input.key === '0' || input.code === 'Digit0' || input.code === 'Numpad0') {
+        event.preventDefault();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('webview-zoom-reset');
+        }
+        return;
+      }
+
+      // Essential browser navigation shortcuts forwarded to main window
+      if (input.key.toLowerCase() === 't' && !input.shift) {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'new-tab');
+        return;
+      }
+      if (input.key.toLowerCase() === 'w') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'close-tab');
+        return;
+      }
+      if (input.key.toLowerCase() === 't' && input.shift) {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'restore-tab');
+        return;
+      }
+      if (input.key.toLowerCase() === 'l') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'focus-url');
+        return;
+      }
+      if (input.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'find-in-page');
+        return;
+      }
+      if (input.key.toLowerCase() === 'h') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'open-history');
+        return;
+      }
+      if (input.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'toggle-bookmark');
+        return;
+      }
+      if (input.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'open-downloads');
+        return;
+      }
+      if (input.key.toLowerCase() === 'r') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', input.shift ? 'hard-reload' : 'reload');
+        return;
+      }
     });
 
     // Native Browser Context Menu for Web Content
@@ -550,6 +658,54 @@ ipcMain.handle('set_window_title', (event, title) => {
 
 ipcMain.handle('close_app', () => {
   app.quit();
+});
+
+// Frameless Window Control Handlers
+ipcMain.handle('window_minimize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.minimize();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('window_maximize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+    return mainWindow.isMaximized();
+  }
+  return false;
+});
+
+ipcMain.handle('window_close', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('window_is_maximized', () => {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false;
+});
+
+// Direct WebContents Zoom Factor Handler
+ipcMain.handle('set_zoom_factor', (event, { webContentsId, factor }) => {
+  try {
+    const { webContents } = require('electron');
+    const target = webContents.fromId(webContentsId);
+    if (target && !target.isDestroyed()) {
+      target.setZoomFactor(factor);
+      return true;
+    }
+  } catch (err) {
+    console.warn('Failed to set zoom factor:', err);
+  }
+  return false;
 });
 
 // App lifecycle

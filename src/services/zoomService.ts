@@ -1,14 +1,28 @@
 const ZOOM_STORAGE_KEY = 'freedom_browser_site_zoom_v1';
-const MIN_ZOOM = 30;
-const MAX_ZOOM = 300;
-const STEP_ZOOM = 10;
+
+/**
+ * Standard Chromium Zoom Levels (percentages)
+ * 25% -> 500%, with 100% as default
+ */
+export const CHROMIUM_ZOOM_LEVELS = [
+  25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500
+];
 
 export class ZoomService {
   private static cachedMap: Record<string, number> | null = null;
 
-  private static getHostname(url: string): string | null {
+  /**
+   * Extract clean origin hostname from URL
+   */
+  public static getHostname(url: string): string | null {
     try {
-      if (!url || url.startsWith('freedom://') || url.startsWith('about:')) return null;
+      if (!url) return null;
+      if (url === 'freedom://newtab' || url.startsWith('freedom://newtab') || url === 'about:blank') {
+        return 'freedom://newtab';
+      }
+      if (url.startsWith('freedom://') || url.startsWith('about:')) {
+        return url;
+      }
       const parsed = new URL(url);
       return parsed.hostname.toLowerCase();
     } catch {
@@ -43,6 +57,9 @@ export class ZoomService {
     }
   }
 
+  /**
+   * Get remembered zoom level for a given website URL (default: 100)
+   */
   public static getZoomForUrl(url: string): number {
     const host = this.getHostname(url);
     if (!host) return 100;
@@ -50,8 +67,11 @@ export class ZoomService {
     return map[host] || 100;
   }
 
+  /**
+   * Save zoom level for a given website URL
+   */
   public static setZoomForUrl(url: string, zoomLevel: number): number {
-    const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(zoomLevel)));
+    const clamped = Math.max(25, Math.min(500, Math.round(zoomLevel)));
     const host = this.getHostname(url);
     if (host) {
       const map = { ...this.getStoredMap() };
@@ -65,18 +85,28 @@ export class ZoomService {
     return clamped;
   }
 
+  /**
+   * Increase zoom to next Chromium-style level
+   */
   public static zoomIn(currentZoom: number, url?: string): number {
-    const next = Math.min(MAX_ZOOM, currentZoom + STEP_ZOOM);
+    const next = CHROMIUM_ZOOM_LEVELS.find((lvl) => lvl > currentZoom) ?? 500;
     if (url) this.setZoomForUrl(url, next);
     return next;
   }
 
+  /**
+   * Decrease zoom to previous Chromium-style level
+   */
   public static zoomOut(currentZoom: number, url?: string): number {
-    const next = Math.max(MIN_ZOOM, currentZoom - STEP_ZOOM);
-    if (url) this.setZoomForUrl(url, next);
-    return next;
+    const reversed = [...CHROMIUM_ZOOM_LEVELS].reverse();
+    const prev = reversed.find((lvl) => lvl < currentZoom) ?? 25;
+    if (url) this.setZoomForUrl(url, prev);
+    return prev;
   }
 
+  /**
+   * Reset zoom back to standard 100%
+   */
   public static resetZoom(url?: string): number {
     if (url) this.setZoomForUrl(url, 100);
     return 100;

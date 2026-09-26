@@ -55,7 +55,7 @@ export default function App() {
         isCrashed: false,
         history: ['freedom://newtab'],
         historyIndex: 0,
-        zoomLevel: 100,
+        zoomLevel: ZoomService.getZoomForUrl('freedom://newtab'),
         security: 'internal',
       },
     ];
@@ -201,7 +201,7 @@ export default function App() {
       isCrashed: false,
       history: [targetUrl],
       historyIndex: 0,
-      zoomLevel: 100,
+      zoomLevel: ZoomService.getZoomForUrl(targetUrl),
       security: targetUrl.startsWith('https://') ? 'secure' : 'internal',
     };
 
@@ -231,7 +231,7 @@ export default function App() {
             isCrashed: false,
             history: ['freedom://newtab'],
             historyIndex: 0,
-            zoomLevel: 100,
+            zoomLevel: ZoomService.getZoomForUrl('freedom://newtab'),
             security: 'internal',
           },
         ]);
@@ -389,6 +389,7 @@ export default function App() {
         prev.map((t) => {
           if (t.id === activeTab.id) {
             const nextHistory = [...t.history.slice(0, t.historyIndex + 1), url];
+            const siteZoom = ZoomService.getZoomForUrl(url);
             return {
               ...t,
               url,
@@ -402,6 +403,7 @@ export default function App() {
               canGoBack: nextHistory.length > 1,
               canGoForward: false,
               lastActive: Date.now(),
+              zoomLevel: siteZoom,
               security: isInternal ? 'internal' : url.startsWith('https://') ? 'secure' : 'insecure',
             };
           }
@@ -576,16 +578,24 @@ export default function App() {
     );
   }, []);
 
+  const handleTabZoomChange = useCallback((tabId: string, zoomLevel: number) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, zoomLevel } : t))
+    );
+  }, []);
+
   // Per-site Zoom synchronization when active tab changes
   useEffect(() => {
-    if (activeTab && !activeTab.url.startsWith('freedom://')) {
+    if (activeTab) {
       const storedZoom = ZoomService.getZoomForUrl(activeTab.url);
       if (storedZoom !== activeTab.zoomLevel) {
         setTabs((prev) =>
           prev.map((t) => (t.id === activeTab.id ? { ...t, zoomLevel: storedZoom } : t))
         );
       }
-      tauriBridge.setWebviewZoom(activeTab.id, (storedZoom || 100) / 100);
+      if (!activeTab.url.startsWith('freedom://')) {
+        tauriBridge.setWebviewZoom(activeTab.id, (storedZoom || 100) / 100);
+      }
     }
   }, [activeTab?.id, activeTab?.url]);
 
@@ -629,6 +639,54 @@ export default function App() {
         });
       });
 
+      // Guest webview keyboard events forwarding
+      const unsubZoomIn = (window as any).electronAPI.on('webview-zoom-in', () => {
+        handleZoomIn();
+      });
+      const unsubZoomOut = (window as any).electronAPI.on('webview-zoom-out', () => {
+        handleZoomOut();
+      });
+      const unsubZoomReset = (window as any).electronAPI.on('webview-zoom-reset', () => {
+        handleResetZoom();
+      });
+      const unsubShortcut = (window as any).electronAPI.on('webview-shortcut', (action: string) => {
+        switch (action) {
+          case 'new-tab':
+            handleNewTab('freedom://newtab');
+            break;
+          case 'close-tab':
+            if (activeTabId) handleCloseTab(activeTabId);
+            break;
+          case 'restore-tab':
+            handleRestoreClosedTab();
+            break;
+          case 'focus-url': {
+            const omnibar = document.getElementById('browser-omnibar-input');
+            omnibar?.focus();
+            (omnibar as HTMLInputElement)?.select?.();
+            break;
+          }
+          case 'find-in-page':
+            setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }));
+            break;
+          case 'open-history':
+            setIsHistoryOpen((prev) => !prev);
+            break;
+          case 'toggle-bookmark':
+            handleToggleBookmark();
+            break;
+          case 'open-downloads':
+            setIsDownloadsOpen((prev) => !prev);
+            break;
+          case 'reload':
+            handleReload();
+            break;
+          case 'hard-reload':
+            if (activeTab) tauriBridge.reloadTab(activeTab.id, true);
+            break;
+        }
+      });
+
       return () => {
         unsubNewWindow?.();
         unsubOpenTab?.();
@@ -636,9 +694,25 @@ export default function App() {
         unsubDlStart?.();
         unsubDlProgress?.();
         unsubDlDone?.();
+        unsubZoomIn?.();
+        unsubZoomOut?.();
+        unsubZoomReset?.();
+        unsubShortcut?.();
       };
     }
-  }, [handleNewTab, settings.defaultSearchEngine]);
+  }, [
+    handleNewTab,
+    handleCloseTab,
+    handleRestoreClosedTab,
+    handleToggleBookmark,
+    handleReload,
+    handleZoomIn,
+    handleZoomOut,
+    handleResetZoom,
+    settings.defaultSearchEngine,
+    activeTabId,
+    activeTab,
+  ]);
 
   // Full suite of Standard Browser Shortcuts (Requirement 8)
   useEffect(() => {
@@ -735,22 +809,36 @@ export default function App() {
         return;
       }
 
-      // Ctrl+0: Reset zoom
-      if (isCtrlOrCmd && (e.key === '0' || e.key === 'NumPad0')) {
+      // Ctrl+0 or Numpad0: Reset zoom
+      if (isCtrlOrCmd && (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0')) {
         e.preventDefault();
         handleResetZoom();
         return;
       }
 
       // Ctrl++ or Ctrl+=: Zoom in
-      if (isCtrlOrCmd && (e.key === '=' || e.key === '+' || e.key === 'Add')) {
+      if (
+        isCtrlOrCmd &&
+        (e.key === '=' ||
+          e.key === '+' ||
+          e.key === 'Add' ||
+          e.code === 'Equal' ||
+          e.code === 'NumpadAdd')
+      ) {
         e.preventDefault();
         handleZoomIn();
         return;
       }
 
-      // Ctrl+-: Zoom out
-      if (isCtrlOrCmd && (e.key === '-' || e.key === 'Subtract')) {
+      // Ctrl+- or Ctrl+_: Zoom out
+      if (
+        isCtrlOrCmd &&
+        (e.key === '-' ||
+          e.key === '_' ||
+          e.key === 'Subtract' ||
+          e.code === 'Minus' ||
+          e.code === 'NumpadSubtract')
+      ) {
         e.preventDefault();
         handleZoomOut();
         return;
@@ -913,7 +1001,7 @@ export default function App() {
         />
       )}
 
-      {/* Top Chrome: Tabs Bar */}
+      {/* Top Chrome: Tabs Bar (with Window Drag Region & Window Controls) */}
       <TabBar
         tabs={tabs}
         activeTabId={activeTabId}
@@ -925,7 +1013,7 @@ export default function App() {
         closedTabsCount={closedTabsCount}
       />
 
-      {/* Navigation & Controls Bar */}
+      {/* Navigation & Controls Bar (Below the Tab Bar) */}
       <Navigation
         currentTab={activeTab}
         onNavigate={handleNavigate}
@@ -983,6 +1071,7 @@ export default function App() {
           isPerformanceMode={isPerformanceMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onFoundInPage={handleFoundInPage}
+          onTabZoomChange={handleTabZoomChange}
         />
 
         {/* Find In Page Overlay */}

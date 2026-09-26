@@ -26,6 +26,7 @@ import { BrowserTab } from '../browser/types';
 import { SearchEngineId } from '../settings/types';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
+import { tauriBridge } from '../services/tauriBridge';
 
 interface NavigationProps {
   currentTab: BrowserTab | undefined;
@@ -125,12 +126,17 @@ export const Navigation: React.FC<NavigationProps> = ({
   const activeEngine = SEARCH_ENGINES.find((e) => e.id === defaultSearchEngine) || SEARCH_ENGINES[0];
 
   return (
-    <div
+    <header
       id="browser-nav-toolbar"
-      className={`flex items-center h-11 px-3 space-x-2 border-b border-white/5 select-none relative z-30 ${headerColorClass}`}
+      className={`flex items-center h-11 px-3 space-x-2 border-b border-white/5 select-none relative z-30 ${headerColorClass} app-drag-region`}
+      onDoubleClick={(e) => {
+        if (e.target === e.currentTarget || (e.target as HTMLElement).id === 'browser-nav-toolbar') {
+          tauriBridge.maximizeWindow();
+        }
+      }}
     >
       {/* Navigation History Controls */}
-      <div className="flex items-center space-x-0.5">
+      <div className="flex items-center space-x-0.5 app-no-drag">
         <button
           id="nav-btn-back"
           type="button"
@@ -172,7 +178,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Omni Address & Search Bar */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative app-no-drag">
         <form onSubmit={handleSubmit} className="w-full">
           <div
             className={`flex items-center w-full h-8 px-3 rounded-xl border transition-all duration-150 ${
@@ -297,7 +303,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Right Controls: Find, History, Bookmarks, Task Manager, Downloads, DevTools, Menu */}
-      <div className="flex items-center space-x-1 shrink-0" ref={menuRef}>
+      <div className="flex items-center space-x-1 shrink-0 app-no-drag" ref={menuRef}>
         {/* Find in page toggle button */}
         {onToggleFind && (
           <button
@@ -568,6 +574,6 @@ export const Navigation: React.FC<NavigationProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </header>
   );
 };

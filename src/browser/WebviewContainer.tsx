@@ -5,6 +5,7 @@ import { ErrorPage } from '../pages/ErrorPage';
 import { SearchEngineId, ThemePalette } from '../settings/types';
 import { Moon, ExternalLink, Globe, ShieldCheck } from 'lucide-react';
 import { tauriBridge, isTauriEnvironment, isElectronEnvironment } from '../services/tauriBridge';
+import { ZoomService } from '../services/zoomService';
 
 interface WebviewContainerProps {
   activeTab: BrowserTab | undefined;
@@ -22,6 +23,7 @@ interface WebviewContainerProps {
   isPerformanceMode?: boolean;
   onOpenSettings?: () => void;
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
+  onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
 }
 
 const ElectronWebviewTab: React.FC<{
@@ -33,6 +35,7 @@ const ElectronWebviewTab: React.FC<{
   onTabNavigationChange?: (tabId: string, url: string, canGoBack: boolean, canGoForward: boolean) => void;
   onNewTabRequested?: (url: string) => void;
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
+  onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
 }> = ({
   tab,
   isActive,
@@ -42,6 +45,7 @@ const ElectronWebviewTab: React.FC<{
   onTabNavigationChange,
   onNewTabRequested,
   onFoundInPage,
+  onTabZoomChange,
 }) => {
   const wvRef = useRef<any>(null);
 
@@ -51,11 +55,37 @@ const ElectronWebviewTab: React.FC<{
 
     tauriBridge.registerWebview(tab.id, el);
 
+    const applySiteZoom = (targetUrl: string) => {
+      if (!targetUrl || targetUrl.startsWith('freedom://')) return;
+      const rememberedZoom = ZoomService.getZoomForUrl(targetUrl);
+      const factor = rememberedZoom / 100;
+      try {
+        if (typeof el.setZoomFactor === 'function') {
+          el.setZoomFactor(factor);
+        }
+        if (typeof el.getWebContentsId === 'function' && (window as any).electronAPI?.setZoomFactor) {
+          const wcId = el.getWebContentsId();
+          if (wcId) (window as any).electronAPI.setZoomFactor(wcId, factor);
+        }
+      } catch (err) {
+        console.warn('Failed to apply site zoom:', err);
+      }
+      if (rememberedZoom !== tab.zoomLevel) {
+        onTabZoomChange?.(tab.id, rememberedZoom);
+      }
+    };
+
+    const handleDomReady = () => {
+      const url = el.getURL ? el.getURL() : tab.url;
+      applySiteZoom(url);
+    };
+
     const handleDidNavigate = (e: any) => {
       const url = e.url || (el.getURL ? el.getURL() : tab.url);
       const canBack = typeof el.canGoBack === 'function' ? el.canGoBack() : false;
       const canFwd = typeof el.canGoForward === 'function' ? el.canGoForward() : false;
       onTabNavigationChange?.(tab.id, url, canBack, canFwd);
+      applySiteZoom(url);
     };
 
     const handleTitleUpdated = (e: any) => {
@@ -79,6 +109,7 @@ const ElectronWebviewTab: React.FC<{
         const canBack = typeof el.canGoBack === 'function' ? el.canGoBack() : false;
         const canFwd = typeof el.canGoForward === 'function' ? el.canGoForward() : false;
         onTabNavigationChange?.(tab.id, url, canBack, canFwd);
+        applySiteZoom(url);
       }
     };
 
@@ -97,6 +128,7 @@ const ElectronWebviewTab: React.FC<{
       }
     };
 
+    el.addEventListener('dom-ready', handleDomReady);
     el.addEventListener('did-navigate', handleDidNavigate);
     el.addEventListener('did-navigate-in-page', handleDidNavigate);
     el.addEventListener('page-title-updated', handleTitleUpdated);
@@ -107,7 +139,8 @@ const ElectronWebviewTab: React.FC<{
     el.addEventListener('found-in-page', handleFoundInPage);
 
     // Initial zoom application
-    const factor = (tab.zoomLevel || 100) / 100;
+    const initialZoom = ZoomService.getZoomForUrl(tab.url);
+    const factor = initialZoom / 100;
     try {
       if (typeof el.setZoomFactor === 'function') {
         el.setZoomFactor(factor);
@@ -116,6 +149,7 @@ const ElectronWebviewTab: React.FC<{
 
     return () => {
       tauriBridge.unregisterWebview(tab.id);
+      el.removeEventListener('dom-ready', handleDomReady);
       el.removeEventListener('did-navigate', handleDidNavigate);
       el.removeEventListener('did-navigate-in-page', handleDidNavigate);
       el.removeEventListener('page-title-updated', handleTitleUpdated);
@@ -125,9 +159,9 @@ const ElectronWebviewTab: React.FC<{
       el.removeEventListener('new-window', handleNewWindow);
       el.removeEventListener('found-in-page', handleFoundInPage);
     };
-  }, [tab.id, onTabTitleChange, onTabFaviconChange, onTabLoadingChange, onTabNavigationChange, onNewTabRequested, onFoundInPage, tab.url]);
+  }, [tab.id, onTabTitleChange, onTabFaviconChange, onTabLoadingChange, onTabNavigationChange, onNewTabRequested, onFoundInPage, onTabZoomChange, tab.url]);
 
-  // Sync zoom changes dynamically
+  // Sync zoom changes dynamically when tab.zoomLevel updates
   useEffect(() => {
     const el = wvRef.current;
     if (!el) return;
@@ -135,6 +169,10 @@ const ElectronWebviewTab: React.FC<{
     try {
       if (typeof el.setZoomFactor === 'function') {
         el.setZoomFactor(factor);
+      }
+      if (typeof el.getWebContentsId === 'function' && (window as any).electronAPI?.setZoomFactor) {
+        const wcId = el.getWebContentsId();
+        if (wcId) (window as any).electronAPI.setZoomFactor(wcId, factor);
       }
     } catch {}
   }, [tab.zoomLevel]);
@@ -172,6 +210,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   isPerformanceMode = false,
   onOpenSettings,
   onFoundInPage,
+  onTabZoomChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const isElectron = isElectronEnvironment();
@@ -270,14 +309,23 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
 
   // 3. New Tab Page (internal Freedom document)
   if (activeTab.url === 'freedom://newtab') {
+    const zoomFactor = (activeTab.zoomLevel || 100) / 100;
     return (
-      <NewTabPage
-        onNavigate={onNavigate}
-        defaultSearchEngine={defaultSearchEngine}
-        palette={palette}
-        isPerformanceMode={isPerformanceMode}
-        onOpenSettings={onOpenSettings}
-      />
+      <div
+        id="newtab-zoom-viewport"
+        className="relative w-full h-full overflow-y-auto no-scrollbar"
+        style={{
+          zoom: zoomFactor,
+        }}
+      >
+        <NewTabPage
+          onNavigate={onNavigate}
+          defaultSearchEngine={defaultSearchEngine}
+          palette={palette}
+          isPerformanceMode={isPerformanceMode}
+          onOpenSettings={onOpenSettings}
+        />
+      </div>
     );
   }
 
@@ -301,6 +349,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
             onTabNavigationChange={onTabNavigationChange}
             onNewTabRequested={onNewTabRequested}
             onFoundInPage={onFoundInPage}
+            onTabZoomChange={onTabZoomChange}
           />
         ))}
       </div>

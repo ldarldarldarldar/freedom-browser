@@ -443,13 +443,63 @@ export class TauriBridge {
    */
   public setWebviewZoom(tabId: string, factor: number): void {
     const wv = this.getWebview(tabId);
-    if (wv && typeof wv.setZoomFactor === 'function') {
-      try {
-        wv.setZoomFactor(factor);
-      } catch (e) {
-        console.warn('setZoomFactor failed:', e);
+    if (wv) {
+      if (typeof wv.setZoomFactor === 'function') {
+        try {
+          wv.setZoomFactor(factor);
+        } catch (e) {
+          console.warn('setZoomFactor failed on webview element:', e);
+        }
+      }
+      if (isElectronEnvironment() && (window as any).electronAPI?.setZoomFactor) {
+        try {
+          const wcId = typeof wv.getWebContentsId === 'function' ? wv.getWebContentsId() : null;
+          if (wcId) {
+            (window as any).electronAPI.setZoomFactor(wcId, factor);
+          }
+        } catch (e) {
+          console.warn('setZoomFactor failed via main IPC:', e);
+        }
       }
     }
+  }
+
+  /**
+   * Minimize the frameless application window
+   */
+  public async minimizeWindow(): Promise<void> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.minimizeWindow) {
+      await (window as any).electronAPI.minimizeWindow();
+    }
+  }
+
+  /**
+   * Toggle maximize / restore for the frameless application window
+   */
+  public async maximizeWindow(): Promise<boolean> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.maximizeWindow) {
+      return (await (window as any).electronAPI.maximizeWindow()) ?? false;
+    }
+    return false;
+  }
+
+  /**
+   * Close the application window
+   */
+  public async closeWindow(): Promise<void> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.closeWindow) {
+      await (window as any).electronAPI.closeWindow();
+    }
+  }
+
+  /**
+   * Check if application window is currently maximized
+   */
+  public async isWindowMaximized(): Promise<boolean> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.isWindowMaximized) {
+      return (await (window as any).electronAPI.isWindowMaximized()) ?? false;
+    }
+    return false;
   }
 
   /**

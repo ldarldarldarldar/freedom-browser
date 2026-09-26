@@ -1,6 +1,8 @@
 import React from 'react';
 import { Plus, X, Globe, Moon, Volume2, VolumeX, ShieldCheck, RotateCcw } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
+import { tauriBridge } from '../services/tauriBridge';
+import { WindowControls } from './WindowControls';
 
 interface TabBarProps {
   tabs: BrowserTab[];
@@ -29,11 +31,13 @@ export const TabBar: React.FC<TabBarProps> = ({
   return (
     <div
       id="browser-tab-bar"
-      className={`flex items-center h-10 px-2 select-none border-b border-white/5 relative z-20 ${headerColorClass} overflow-x-auto no-scrollbar`}
+      className={`flex items-center h-10 px-2 select-none border-b border-white/5 relative z-20 ${headerColorClass} overflow-x-auto no-scrollbar app-drag-region`}
       onDoubleClick={(e) => {
-        // Double-clicking empty space creates a new tab
-        if ((e.target as HTMLElement).id === 'browser-tab-bar' || (e.target as HTMLElement).id === 'tab-bar-empty-area') {
-          onNewTab();
+        if (
+          (e.target as HTMLElement).id === 'browser-tab-bar' ||
+          (e.target as HTMLElement).id === 'tab-bar-empty-area'
+        ) {
+          tauriBridge.maximizeWindow();
         }
       }}
     >
@@ -54,7 +58,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                 }
               }}
               title={`${tab.title} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}`}
-              className={`group relative flex items-center h-7.5 px-3 rounded-lg text-xs transition-all duration-150 cursor-pointer min-w-[120px] max-w-[220px] flex-1 border ${
+              className={`group relative flex items-center h-7.5 px-3 rounded-lg text-xs transition-all duration-150 cursor-pointer min-w-[120px] max-w-[220px] flex-1 border app-no-drag ${
                 isActive
                   ? 'bg-neutral-900/90 text-white border-white/10 shadow-sm'
                   : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/5 border-transparent'
@@ -133,7 +137,7 @@ export const TabBar: React.FC<TabBarProps> = ({
           id="btn-new-tab"
           type="button"
           onClick={onNewTab}
-          className="flex items-center justify-center w-7 h-7 ml-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
+          className="flex items-center justify-center w-7 h-7 ml-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all app-no-drag"
           title="New tab (Ctrl+T)"
         >
           <Plus className="w-4 h-4" />
@@ -145,16 +149,19 @@ export const TabBar: React.FC<TabBarProps> = ({
             id="btn-restore-closed-tab"
             type="button"
             onClick={onRestoreClosedTab}
-            className="flex items-center justify-center w-7 h-7 ml-0.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-white/5 active:scale-95 transition-all"
+            className="flex items-center justify-center w-7 h-7 ml-0.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-white/5 active:scale-95 transition-all app-no-drag"
             title={`Restore closed tab (Ctrl+Shift+T) - ${closedTabsCount} available`}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
         )}
 
-        {/* Empty space for double clicking */}
-        <div id="tab-bar-empty-area" className="flex-1 h-full cursor-default" />
+        {/* Empty space for dragging / double clicking */}
+        <div id="tab-bar-empty-area" className="flex-1 h-full cursor-default app-drag-region" />
       </div>
+
+      {/* Top-Right Frameless Window Controls */}
+      <WindowControls />
     </div>
   );
 };

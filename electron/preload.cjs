@@ -23,4 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeApp: () => ipcRenderer.invoke('close_app'),
   pickCustomBackground: () => ipcRenderer.invoke('pick_custom_background'),
   setBrowserMode: (mode) => ipcRenderer.invoke('set_browser_mode', mode),
+  minimizeWindow: () => ipcRenderer.invoke('window_minimize'),
+  maximizeWindow: () => ipcRenderer.invoke('window_maximize'),
+  closeWindow: () => ipcRenderer.invoke('window_close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window_is_maximized'),
+  setZoomFactor: (webContentsId, factor) => ipcRenderer.invoke('set_zoom_factor', { webContentsId, factor }),
 });
