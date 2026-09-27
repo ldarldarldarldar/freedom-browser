@@ -1,27 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Code2, Shield, Zap, Globe } from 'lucide-react';
+import { Search, Code2, Shield, Zap, Globe, Plus, Pencil, X, Settings } from 'lucide-react';
 import { FreedomLogo } from '../components/FreedomLogo';
 import { SearchEngineId, ThemePalette } from '../settings/types';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { FaviconService } from '../services/faviconService';
-
-interface Shortcut {
-  title: string;
-  url: string;
-  category: string;
-}
-
-const QUICK_SHORTCUTS: Shortcut[] = [
-  { title: 'DuckDuckGo', url: 'https://duckduckgo.com', category: 'Privacy Search' },
-  { title: 'GitHub', url: 'https://github.com', category: 'Code Repository' },
-  { title: 'YouTube', url: 'https://youtube.com', category: 'Video Streaming' },
-  { title: 'ChatGPT', url: 'https://chatgpt.com', category: 'AI Assistant' },
-  { title: 'Wikipedia', url: 'https://wikipedia.org', category: 'Encyclopedia' },
-  { title: 'Reddit', url: 'https://reddit.com', category: 'Discussions' },
-  { title: 'Rust Lang', url: 'https://www.rust-lang.org', category: 'Systems Language' },
-  { title: 'Discord Web', url: 'https://discord.com/app', category: 'Communities' },
-];
+import { FavoritesService, NewTabFavorite } from '../services/favoritesService';
 
 interface NewTabPageProps {
   onNavigate: (url: string) => void;
@@ -29,6 +13,7 @@ interface NewTabPageProps {
   palette?: ThemePalette;
   isPerformanceMode?: boolean;
   onOpenSettings?: () => void;
+  showSettingsIcon?: boolean;
 }
 
 export const NewTabPage: React.FC<NewTabPageProps> = ({
@@ -37,17 +22,20 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   palette,
   isPerformanceMode = false,
   onOpenSettings,
+  showSettingsIcon = true,
 }) => {
   const [query, setQuery] = useState('');
   const [time, setTime] = useState<string>('');
   const [date, setDate] = useState<string>('');
-  const [icons] = useState<Record<string, string>>(() => {
-    const loaded: Record<string, string> = {};
-    for (const item of QUICK_SHORTCUTS) {
-      loaded[item.url] = FaviconService.getFaviconSync(item.url);
-    }
-    return loaded;
-  });
+
+  // 0 favorites by default; separate persistent storage from bookmarks
+  const [favorites, setFavorites] = useState<NewTabFavorite[]>(() => FavoritesService.getFavorites());
+
+  // Modal state for adding or editing a favorite
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingFavorite, setEditingFavorite] = useState<NewTabFavorite | null>(null);
+  const [titleInput, setTitleInput] = useState('');
+  const [urlInput, setUrlInput] = useState('');
 
   useEffect(() => {
     const updateTime = () => {
@@ -66,12 +54,46 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
     return () => clearInterval(timer);
   }, [isPerformanceMode]);
 
-
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
     const targetUrl = SearchEngineService.resolveInputToUrl(query, defaultSearchEngine);
     onNavigate(targetUrl);
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingFavorite(null);
+    setTitleInput('');
+    setUrlInput('');
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (fav: NewTabFavorite, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingFavorite(fav);
+    setTitleInput(fav.title);
+    setUrlInput(fav.url);
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    FavoritesService.removeFavorite(id);
+    setFavorites(FavoritesService.getFavorites());
+  };
+
+  const handleSaveFavorite = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urlInput.trim()) return;
+
+    if (editingFavorite) {
+      FavoritesService.updateFavorite(editingFavorite.id, titleInput, urlInput);
+    } else {
+      FavoritesService.addFavorite(titleInput, urlInput);
+    }
+
+    setFavorites(FavoritesService.getFavorites());
+    setIsModalOpen(false);
   };
 
   const activeEngine = SEARCH_ENGINES.find((e) => e.id === defaultSearchEngine) || SEARCH_ENGINES[0];
@@ -82,6 +104,19 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-full px-4 py-8 text-neutral-200 select-none z-10">
+      {/* Settings Shortcut Button on New Tab (conditionally rendered / unmounted if disabled) */}
+      {showSettingsIcon && onOpenSettings && (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="Open Settings"
+          aria-label="Open Settings"
+          className="absolute top-5 right-6 p-2.5 rounded-xl bg-neutral-900/60 hover:bg-neutral-800/80 border border-white/10 hover:border-emerald-500/40 text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95 group z-20"
+        >
+          <Settings className="w-4 h-4 transition-transform duration-200 group-hover:rotate-45 text-neutral-300 group-hover:text-white" />
+        </button>
+      )}
+
       {/* Minimal Digital Clock */}
       <div className="mb-6 text-center">
         <div className="text-5xl md:text-6xl font-extralight tracking-tight text-neutral-100 font-mono">
@@ -158,59 +193,161 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         </div>
       </form>
 
-      {/* Quick Shortcuts Grid with Real Website Favicons */}
+      {/* New Tab Favorites Section */}
       <div className="w-full max-w-xl">
-        <div className="text-[11px] font-mono uppercase tracking-wider text-neutral-500 mb-3 text-center flex items-center justify-center gap-2">
-          <span>Quick Access</span>
+        <div className={`flex items-center justify-between px-1 ${favorites.length > 0 ? 'mb-4' : ''}`}>
+          <span className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
+            Favorites
+          </span>
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="p-1.5 rounded-lg bg-neutral-900/80 hover:bg-neutral-800 border border-white/10 hover:border-emerald-500/40 text-neutral-300 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95 flex items-center justify-center"
+            title="Add favorite"
+            aria-label="Add favorite"
+          >
+            <Plus className="w-3.5 h-3.5 text-emerald-400" />
+          </button>
         </div>
-        <div className="grid grid-cols-4 gap-3">
-          {QUICK_SHORTCUTS.map((shortcut) => {
-            const iconUrl = icons[shortcut.url] || FaviconService.getFaviconSync(shortcut.url);
 
-            return (
-              <button
-                key={shortcut.url}
-                type="button"
-                onClick={() => onNavigate(shortcut.url)}
-                className="group flex flex-col items-center p-3 rounded-xl border border-white/5 transition-all duration-150 relative overflow-hidden"
-                style={{
-                  backgroundColor: cardBg,
-                }}
-              >
-                {/* Real Website Favicon Container */}
+        {favorites.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {favorites.map((fav) => {
+              const iconUrl = FaviconService.getFaviconSync(fav.url);
+              const domain = SearchEngineService.extractDomain(fav.url);
+
+              return (
                 <div
-                  className="w-10 h-10 rounded-xl border border-white/10 flex items-center justify-center mb-2 p-2 shadow-inner group-hover:scale-105 transition-transform"
-                  style={{
-                    backgroundColor: iconBg,
-                  }}
+                  key={fav.id}
+                  onClick={() => onNavigate(fav.url)}
+                  className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-white/5 hover:border-emerald-500/40 transition-all duration-150 cursor-pointer overflow-hidden shadow-sm hover:shadow-lg active:scale-98"
+                  style={{ backgroundColor: cardBg }}
                 >
-                  {iconUrl ? (
-                    <img
-                      src={iconUrl}
-                      alt={shortcut.title}
-                      className="w-6 h-6 object-contain"
-                      loading="lazy"
-                      onError={(e) => {
-                        // If image load fails, replace with monogram
-                        const target = e.currentTarget;
-                        target.src = FaviconService.generateMonogramSvg(shortcut.title);
-                      }}
-                    />
-                  ) : (
-                    <Globe className="w-5 h-5 text-neutral-400" />
-                  )}
+                  {/* Hover Action Buttons: Edit and Remove */}
+                  <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    <button
+                      type="button"
+                      onClick={(e) => handleOpenEditModal(fav, e)}
+                      className="p-1 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-white/10 shadow-sm transition-all"
+                      title="Edit favorite"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteFavorite(fav.id, e)}
+                      className="p-1 rounded-lg bg-neutral-900/90 hover:bg-rose-950/90 text-neutral-400 hover:text-rose-400 border border-white/10 hover:border-rose-500/30 shadow-sm transition-all"
+                      title="Remove favorite"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* Real Website Favicon Container */}
+                  <div
+                    className="w-10 h-10 rounded-xl border border-white/10 flex items-center justify-center mb-2.5 p-2 shadow-inner group-hover:scale-105 transition-transform"
+                    style={{ backgroundColor: iconBg }}
+                  >
+                    {iconUrl ? (
+                      <img
+                        src={iconUrl}
+                        alt=""
+                        className="w-6 h-6 object-contain rounded-sm"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.src = FaviconService.generateMonogramSvg(fav.title);
+                        }}
+                      />
+                    ) : (
+                      <Globe className="w-5 h-5 text-neutral-400" />
+                    )}
+                  </div>
+
+                  {/* Title & Domain */}
+                  <span className="text-xs text-neutral-200 group-hover:text-emerald-300 font-medium truncate max-w-full text-center">
+                    {fav.title}
+                  </span>
+                  <span className="text-[10px] text-neutral-500 font-mono mt-0.5 truncate max-w-full">
+                    {domain}
+                  </span>
                 </div>
-                <span className="text-xs text-neutral-200 group-hover:text-emerald-300 font-medium truncate max-w-full text-center">
-                  {shortcut.title}
-                </span>
-                <span className="text-[9px] text-neutral-500 font-mono mt-0.5 truncate max-w-full">
-                  {shortcut.category}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {/* Add / Edit Favorite Modal */}
+      {isModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md bg-neutral-900 border border-white/15 rounded-2xl p-6 shadow-2xl animate-scale-in text-neutral-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
+              <h3 className="text-base font-semibold text-white">
+                {editingFavorite ? 'Edit Favorite' : 'Add New Favorite'}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFavorite} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                  Site Name (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={titleInput}
+                  onChange={(e) => setTitleInput(e.target.value)}
+                  placeholder="e.g. GitHub"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/70"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                  Web URL
+                </label>
+                <input
+                  type="text"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="e.g. https://github.com or github.com"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/70"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors cursor-pointer"
+                >
+                  {editingFavorite ? 'Save Changes' : 'Add to Favorites'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

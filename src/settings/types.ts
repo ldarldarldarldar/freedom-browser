@@ -101,8 +101,9 @@ export interface BrowserSettings {
   starDensity: StarDensity;
   animationIntensity: AnimationIntensity;
 
-  // Mascot
+  // Mascot & UI Badges
   showFreenMascot: boolean;
+  showNewTabSettingsIcon: boolean;
 
   // Custom Background Image
   customBackgroundImage: string | null;

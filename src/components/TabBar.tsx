@@ -176,24 +176,12 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setContextMenu({ tab, x, y });
                 }}
                 title={`${tab.title} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}`}
-                className={`group relative flex items-center h-8 px-3 rounded-lg text-xs transition-all duration-150 cursor-pointer min-w-[120px] max-w-[220px] flex-1 border app-no-drag ${
+                className={`group relative flex items-center h-8 px-3.5 rounded-full text-xs transition-all duration-150 cursor-pointer min-w-[120px] max-w-[220px] flex-1 overflow-hidden app-no-drag border ${
                   isActive
-                    ? 'bg-neutral-900/90 text-white border-white/10 shadow-sm'
+                    ? 'bg-emerald-950/40 text-white border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.18)] ring-1 ring-emerald-500/20'
                     : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/5 border-transparent'
                 }`}
               >
-                {/* Active Tab Accent Line */}
-                {isActive && (
-                  <div className="absolute top-0 left-2 right-2 h-[2px] bg-emerald-400 rounded-full" />
-                )}
-
-                {/* Subtle Domain Tint Accent at Bottom */}
-                <div
-                  className={`absolute bottom-0 left-2 right-2 h-[1.5px] rounded-full transition-opacity ${
-                    isActive ? 'opacity-80' : 'opacity-30 group-hover:opacity-60'
-                  }`}
-                  style={{ backgroundColor: domainColor }}
-                />
 
                 {/* Favicon or Loading Spinner */}
                 <div className="mr-2 shrink-0 flex items-center">

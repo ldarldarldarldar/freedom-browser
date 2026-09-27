@@ -2,27 +2,27 @@ import { ThemePalette, ThemePresetId } from './types';
 
 export const THEME_PRESETS: Record<Exclude<ThemePresetId, 'custom'>, ThemePalette> = {
   midnight: {
-    accentColor: '#10b981', // emerald-500
-    mainBg: '#06080b',
-    secondaryBg: '#0b0e14',
-    sidebarBg: '#090c10',
-    headerBg: '#090b10',
-    cardBg: 'rgba(17, 24, 39, 0.4)',
-    cardHoverBg: 'rgba(31, 41, 55, 0.8)',
-    textColor: '#f3f4f6',
-    secondaryTextColor: '#9ca3af',
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    inputBg: 'rgba(17, 24, 39, 0.9)',
-    buttonBg: 'rgba(6, 78, 59, 0.8)',
-    buttonHoverBg: 'rgba(6, 95, 70, 0.9)',
-    focusColor: '#10b981',
-    linkColor: '#34d399',
-    selectionColor: '#059669',
-    quickAccessCardBg: 'rgba(17, 24, 39, 0.45)',
-    quickAccessIconBg: 'rgba(31, 41, 55, 0.6)',
-    scrollbarColor: '#374151',
-    particleColor: '#f0f6fc',
-    glowColor: 'rgba(16, 185, 129, 0.25)',
+    accentColor: '#38bdf8', // cool cyan/indigo tone
+    mainBg: '#0b0e17', // deep midnight navy/slate
+    secondaryBg: '#0f141f',
+    sidebarBg: '#0c101a',
+    headerBg: '#0d111b',
+    cardBg: '#161b26', // dark muted blue-gray
+    cardHoverBg: '#1f2636',
+    textColor: '#e2e8f0',
+    secondaryTextColor: '#94a3b8',
+    borderColor: '#1f293d', // subtle cool indigo/cyan tones
+    inputBg: 'rgba(22, 27, 38, 0.9)',
+    buttonBg: 'rgba(31, 41, 61, 0.85)',
+    buttonHoverBg: 'rgba(40, 53, 79, 0.95)',
+    focusColor: '#38bdf8',
+    linkColor: '#60a5fa',
+    selectionColor: '#1e3a5f',
+    quickAccessCardBg: 'rgba(22, 27, 38, 0.75)',
+    quickAccessIconBg: 'rgba(31, 41, 61, 0.8)',
+    scrollbarColor: '#1f293d',
+    particleColor: '#93c5fd',
+    glowColor: 'rgba(56, 189, 248, 0.25)',
     shadowIntensity: 25,
   },
   forest: {
@@ -146,28 +146,28 @@ export const THEME_PRESETS: Record<Exclude<ThemePresetId, 'custom'>, ThemePalett
     shadowIntensity: 25,
   },
   monochrome: {
-    accentColor: '#e5e7eb', // gray-200
-    mainBg: '#09090b',
-    secondaryBg: '#141417',
-    sidebarBg: '#101013',
-    headerBg: '#121215',
-    cardBg: 'rgba(28, 28, 33, 0.5)',
-    cardHoverBg: 'rgba(42, 42, 50, 0.85)',
-    textColor: '#fafafa',
-    secondaryTextColor: '#a1a1aa',
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    inputBg: 'rgba(24, 24, 28, 0.9)',
-    buttonBg: 'rgba(63, 63, 70, 0.8)',
-    buttonHoverBg: 'rgba(82, 82, 91, 0.9)',
-    focusColor: '#e5e7eb',
-    linkColor: '#f4f4f5',
-    selectionColor: '#52525b',
-    quickAccessCardBg: 'rgba(28, 28, 33, 0.5)',
-    quickAccessIconBg: 'rgba(42, 42, 50, 0.75)',
-    scrollbarColor: '#3f3f46',
+    accentColor: '#e0e0e0', // clean neutral gray
+    mainBg: '#000000', // pure black OLED
+    secondaryBg: '#111111', // true neutral dark gray
+    sidebarBg: '#080808',
+    headerBg: '#0c0c0c',
+    cardBg: '#1c1c1c', // neutral charcoal
+    cardHoverBg: '#262626',
+    textColor: '#ffffff',
+    secondaryTextColor: '#a3a3a3',
+    borderColor: '#333333', // clean neutral gray
+    inputBg: '#141414',
+    buttonBg: '#262626',
+    buttonHoverBg: '#333333',
+    focusColor: '#e0e0e0',
+    linkColor: '#ffffff',
+    selectionColor: '#404040',
+    quickAccessCardBg: '#1c1c1c',
+    quickAccessIconBg: '#262626',
+    scrollbarColor: '#333333',
     particleColor: '#ffffff',
-    glowColor: 'rgba(229, 231, 235, 0.2)',
-    shadowIntensity: 20,
+    glowColor: 'rgba(224, 224, 224, 0.15)',
+    shadowIntensity: 15,
   },
   mint: {
     accentColor: '#14b8a6', // teal-500

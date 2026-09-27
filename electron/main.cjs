@@ -180,6 +180,14 @@ function createWindow() {
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
   if (contents.getType() === 'webview') {
+    const baseUA = session.defaultSession.getUserAgent();
+    const desktopUA = baseUA
+      .replace(/\s*Electron\/\S+/g, '')
+      .replace(/\s*freedom-browser\/\S+/g, '')
+      .replace(/\s*Freedom\/\S+/g, '')
+      .trim();
+    contents.setUserAgent(desktopUA);
+
     contents.setWindowOpenHandler(({ url }) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('webview-new-window', { url });
@@ -775,6 +783,25 @@ ipcMain.handle('set_zoom_factor', (event, { webContentsId, factor }) => {
 
 // App lifecycle
 app.whenReady().then(() => {
+  // Pure standard desktop Chromium User-Agent without Electron or custom tokens
+  // Prevents websites (such as Twitch, YouTube, Google) from redirecting to mobile layouts
+  const baseUA = session.defaultSession.getUserAgent();
+  const desktopUA = baseUA
+    .replace(/\s*Electron\/\S+/g, '')
+    .replace(/\s*freedom-browser\/\S+/g, '')
+    .replace(/\s*Freedom\/\S+/g, '')
+    .trim();
+
+  app.userAgentFallback = desktopUA;
+  session.defaultSession.setUserAgent(desktopUA);
+
+  // Guarantee all outgoing HTTP/HTTPS requests advertise desktop Chrome without mobile hints
+  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    details.requestHeaders['User-Agent'] = desktopUA;
+    details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
+    callback({ cancel: false, requestHeaders: details.requestHeaders });
+  });
+
   createWindow();
 
   app.on('activate', () => {

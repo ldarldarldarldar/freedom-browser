@@ -24,6 +24,7 @@ import { BookmarkService } from './services/bookmarkService';
 import { SessionService } from './services/sessionService';
 import { ZoomService } from './services/zoomService';
 import { TabSortService, TabSortMode } from './services/tabSortService';
+import { FaviconService } from './services/faviconService';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
@@ -502,59 +503,17 @@ export default function App() {
   );
 
   const handleBack = useCallback(() => {
-    if (!activeTab || activeTab.historyIndex <= 0) return;
-    const nextIndex = activeTab.historyIndex - 1;
-    const targetUrl = activeTab.history[nextIndex];
-
-    if (!targetUrl.startsWith('freedom://')) {
+    if (!activeTab) return;
+    if (!activeTab.url.startsWith('freedom://')) {
       tauriBridge.goBackNative(activeTab.id);
-    } else {
-      tauriBridge.hideNativeWebviews();
     }
-
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTab.id
-          ? {
-              ...t,
-              url: targetUrl,
-              displayUrl: targetUrl,
-              historyIndex: nextIndex,
-              canGoBack: nextIndex > 0,
-              canGoForward: true,
-              lastActive: Date.now(),
-            }
-          : t
-      )
-    );
   }, [activeTab]);
 
   const handleForward = useCallback(() => {
-    if (!activeTab || activeTab.historyIndex >= activeTab.history.length - 1) return;
-    const nextIndex = activeTab.historyIndex + 1;
-    const targetUrl = activeTab.history[nextIndex];
-
-    if (!targetUrl.startsWith('freedom://')) {
+    if (!activeTab) return;
+    if (!activeTab.url.startsWith('freedom://')) {
       tauriBridge.goForwardNative(activeTab.id);
-    } else {
-      tauriBridge.hideNativeWebviews();
     }
-
-    setTabs((prev) =>
-      prev.map((t) =>
-        t.id === activeTab.id
-          ? {
-              ...t,
-              url: targetUrl,
-              displayUrl: targetUrl,
-              historyIndex: nextIndex,
-              canGoBack: true,
-              canGoForward: nextIndex < t.history.length - 1,
-              lastActive: Date.now(),
-            }
-          : t
-      )
-    );
   }, [activeTab]);
 
   const handleReload = useCallback(() => {
@@ -769,21 +728,37 @@ export default function App() {
 
   // Webview lifecycle synchronization
   const handleTabNavigationChange = useCallback(
-    (tabId: string, url: string, canGoBack: boolean, canGoForward: boolean) => {
+    (
+      tabId: string,
+      data: {
+        url: string;
+        title?: string;
+        favicon?: string;
+        canGoBack: boolean;
+        canGoForward: boolean;
+      }
+    ) => {
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id === tabId) {
+            const url = data.url;
             const isInternal = url.startsWith('freedom://');
+            const title = data.title || t.title || (isInternal ? 'Freedom Tab' : SearchEngineService.extractDomain(url));
+            const favicon = data.favicon || t.favicon || (isInternal ? '' : FaviconService.getFaviconSync(url));
+
             // Record history for external pages
             if (!isInternal && url) {
-              HistoryService.addEntry(t.title, url, t.favicon, false);
+              HistoryService.addEntry(title, url, favicon, false);
             }
+
             return {
               ...t,
               url,
               displayUrl: url,
-              canGoBack,
-              canGoForward,
+              title,
+              favicon,
+              canGoBack: data.canGoBack,
+              canGoForward: data.canGoForward,
               security: isInternal ? 'internal' : url.startsWith('https://') ? 'secure' : 'insecure',
               lastActive: Date.now(),
             };
@@ -1336,6 +1311,7 @@ export default function App() {
           palette={settings.palette}
           isPerformanceMode={isPerformanceMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          showNewTabSettingsIcon={settings.showNewTabSettingsIcon}
           onFoundInPage={handleFoundInPage}
           onTabZoomChange={handleTabZoomChange}
         />

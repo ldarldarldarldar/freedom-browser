@@ -619,6 +619,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </div>
 
+                {/* Show settings icon on New Tab page Toggle */}
+                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-white">
+                      Show settings icon on New Tab page
+                    </div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      Displays the quick settings gear shortcut icon on the New Tab start page.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.showNewTabSettingsIcon)}
+                    onChange={(e) =>
+                      onUpdateSettings({ showNewTabSettingsIcon: e.target.checked })
+                    }
+                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                  />
+                </div>
+
                 {/* Individual Visual Feature Toggles */}
                 <div className="border-t border-white/10 pt-4 space-y-3">
                   <div className="text-xs font-semibold text-white mb-2">
@@ -728,6 +748,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <p className="text-[11px] text-neutral-500 mt-1">
                     Files downloaded by Freedom will be saved here natively.
                   </p>
+                </div>
+
+                {/* New Tab Page Section */}
+                <div className="border-t border-white/10 pt-4">
+                  <h4 className="text-xs font-semibold text-neutral-200 mb-2">
+                    New Tab Page
+                  </h4>
+                  <div className="flex items-center justify-between py-1.5">
+                    <div>
+                      <div className="text-xs text-neutral-200 font-medium">
+                        Show settings icon on New Tab page
+                      </div>
+                      <div className="text-[11px] text-neutral-400">
+                        Display the quick settings gear shortcut icon on the New Tab start page
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings.showNewTabSettingsIcon)}
+                      onChange={(e) =>
+                        onUpdateSettings({ showNewTabSettingsIcon: e.target.checked })
+                      }
+                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                    />
+                  </div>
                 </div>
               </div>
             )}

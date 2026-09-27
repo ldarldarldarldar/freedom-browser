@@ -6,6 +6,8 @@ import { SearchEngineId, ThemePalette } from '../settings/types';
 import { Moon, ExternalLink, Globe, ShieldCheck } from 'lucide-react';
 import { tauriBridge, isTauriEnvironment, isElectronEnvironment } from '../services/tauriBridge';
 import { ZoomService } from '../services/zoomService';
+import { SearchEngineService } from '../services/searchEngineService';
+import { FaviconService } from '../services/faviconService';
 
 interface WebviewContainerProps {
   activeTab: BrowserTab | undefined;
@@ -16,12 +18,22 @@ interface WebviewContainerProps {
   onTabTitleChange?: (tabId: string, title: string) => void;
   onTabFaviconChange?: (tabId: string, favicon: string) => void;
   onTabLoadingChange?: (tabId: string, isLoading: boolean) => void;
-  onTabNavigationChange?: (tabId: string, url: string, canGoBack: boolean, canGoForward: boolean) => void;
+  onTabNavigationChange?: (
+    tabId: string,
+    data: {
+      url: string;
+      title?: string;
+      favicon?: string;
+      canGoBack: boolean;
+      canGoForward: boolean;
+    }
+  ) => void;
   onNewTabRequested?: (url: string) => void;
   defaultSearchEngine: SearchEngineId;
   palette?: ThemePalette;
   isPerformanceMode?: boolean;
   onOpenSettings?: () => void;
+  showNewTabSettingsIcon?: boolean;
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
   onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
 }
@@ -32,7 +44,16 @@ const ElectronWebviewTab: React.FC<{
   onTabTitleChange?: (tabId: string, title: string) => void;
   onTabFaviconChange?: (tabId: string, favicon: string) => void;
   onTabLoadingChange?: (tabId: string, isLoading: boolean) => void;
-  onTabNavigationChange?: (tabId: string, url: string, canGoBack: boolean, canGoForward: boolean) => void;
+  onTabNavigationChange?: (
+    tabId: string,
+    data: {
+      url: string;
+      title?: string;
+      favicon?: string;
+      canGoBack: boolean;
+      canGoForward: boolean;
+    }
+  ) => void;
   onNewTabRequested?: (url: string) => void;
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
   onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
@@ -48,6 +69,28 @@ const ElectronWebviewTab: React.FC<{
   onTabZoomChange,
 }) => {
   const wvRef = useRef<any>(null);
+  const currentTabRef = useRef(tab);
+  currentTabRef.current = tab;
+
+  // Stable callback refs prevent listener thrashing across re-renders
+  const callbacksRef = useRef({
+    onTabTitleChange,
+    onTabFaviconChange,
+    onTabLoadingChange,
+    onTabNavigationChange,
+    onNewTabRequested,
+    onFoundInPage,
+    onTabZoomChange,
+  });
+  callbacksRef.current = {
+    onTabTitleChange,
+    onTabFaviconChange,
+    onTabLoadingChange,
+    onTabNavigationChange,
+    onNewTabRequested,
+    onFoundInPage,
+    onTabZoomChange,
+  };
 
   useEffect(() => {
     const el = wvRef.current;
@@ -70,58 +113,90 @@ const ElectronWebviewTab: React.FC<{
       } catch (err) {
         console.warn('Failed to apply site zoom:', err);
       }
-      if (rememberedZoom !== tab.zoomLevel) {
-        onTabZoomChange?.(tab.id, rememberedZoom);
+      if (rememberedZoom !== currentTabRef.current.zoomLevel) {
+        callbacksRef.current.onTabZoomChange?.(tab.id, rememberedZoom);
+      }
+    };
+
+    // Central synchronizer: queries actual Chromium webContents properties on any navigation event
+    const syncState = (navUrl?: string, navTitle?: string, navFavicons?: string[]) => {
+      try {
+        const rawUrl = navUrl || (typeof el.getURL === 'function' ? el.getURL() : '') || currentTabRef.current.url;
+        if (!rawUrl || rawUrl === 'about:blank') return;
+
+        let rawTitle = navTitle !== undefined ? navTitle : (typeof el.getTitle === 'function' ? el.getTitle() : '');
+        if (!rawTitle || rawTitle === rawUrl) {
+          rawTitle = SearchEngineService.extractDomain(rawUrl);
+        }
+
+        let favicon: string | undefined = undefined;
+        if (navFavicons && navFavicons.length > 0) {
+          favicon = navFavicons[0];
+        } else {
+          favicon = FaviconService.getFaviconSync(rawUrl);
+        }
+
+        const canBack = typeof el.canGoBack === 'function' ? el.canGoBack() : false;
+        const canFwd = typeof el.canGoForward === 'function' ? el.canGoForward() : false;
+
+        callbacksRef.current.onTabNavigationChange?.(tab.id, {
+          url: rawUrl,
+          title: rawTitle,
+          favicon,
+          canGoBack: canBack,
+          canGoForward: canFwd,
+        });
+
+        applySiteZoom(rawUrl);
+      } catch (err) {
+        console.warn('syncState error:', err);
       }
     };
 
     const handleDomReady = () => {
-      const url = el.getURL ? el.getURL() : tab.url;
-      applySiteZoom(url);
+      syncState();
     };
 
     const handleDidNavigate = (e: any) => {
-      const url = e.url || (el.getURL ? el.getURL() : tab.url);
-      const canBack = typeof el.canGoBack === 'function' ? el.canGoBack() : false;
-      const canFwd = typeof el.canGoForward === 'function' ? el.canGoForward() : false;
-      onTabNavigationChange?.(tab.id, url, canBack, canFwd);
-      applySiteZoom(url);
+      syncState(e.url);
+    };
+
+    const handleDidNavigateInPage = (e: any) => {
+      syncState(e.url);
     };
 
     const handleTitleUpdated = (e: any) => {
-      if (e.title) onTabTitleChange?.(tab.id, e.title);
+      if (e.title) {
+        callbacksRef.current.onTabTitleChange?.(tab.id, e.title);
+        syncState(undefined, e.title);
+      }
     };
 
     const handleFaviconUpdated = (e: any) => {
       if (e.favicons && e.favicons.length > 0) {
-        onTabFaviconChange?.(tab.id, e.favicons[0]);
+        callbacksRef.current.onTabFaviconChange?.(tab.id, e.favicons[0]);
+        syncState(undefined, undefined, e.favicons);
       }
     };
 
     const handleStartLoading = () => {
-      onTabLoadingChange?.(tab.id, true);
+      callbacksRef.current.onTabLoadingChange?.(tab.id, true);
     };
 
     const handleStopLoading = () => {
-      onTabLoadingChange?.(tab.id, false);
-      if (typeof el.getURL === 'function') {
-        const url = el.getURL();
-        const canBack = typeof el.canGoBack === 'function' ? el.canGoBack() : false;
-        const canFwd = typeof el.canGoForward === 'function' ? el.canGoForward() : false;
-        onTabNavigationChange?.(tab.id, url, canBack, canFwd);
-        applySiteZoom(url);
-      }
+      callbacksRef.current.onTabLoadingChange?.(tab.id, false);
+      syncState();
     };
 
     const handleNewWindow = (e: any) => {
       if (e.url) {
-        onNewTabRequested?.(e.url);
+        callbacksRef.current.onNewTabRequested?.(e.url);
       }
     };
 
     const handleFoundInPage = (e: any) => {
       if (e.result) {
-        onFoundInPage?.({
+        callbacksRef.current.onFoundInPage?.({
           activeMatchOrdinal: e.result.activeMatchOrdinal || 0,
           numberOfMatches: e.result.matches || 0,
         });
@@ -130,7 +205,7 @@ const ElectronWebviewTab: React.FC<{
 
     el.addEventListener('dom-ready', handleDomReady);
     el.addEventListener('did-navigate', handleDidNavigate);
-    el.addEventListener('did-navigate-in-page', handleDidNavigate);
+    el.addEventListener('did-navigate-in-page', handleDidNavigateInPage);
     el.addEventListener('page-title-updated', handleTitleUpdated);
     el.addEventListener('page-favicon-updated', handleFaviconUpdated);
     el.addEventListener('did-start-loading', handleStartLoading);
@@ -151,7 +226,7 @@ const ElectronWebviewTab: React.FC<{
       tauriBridge.unregisterWebview(tab.id);
       el.removeEventListener('dom-ready', handleDomReady);
       el.removeEventListener('did-navigate', handleDidNavigate);
-      el.removeEventListener('did-navigate-in-page', handleDidNavigate);
+      el.removeEventListener('did-navigate-in-page', handleDidNavigateInPage);
       el.removeEventListener('page-title-updated', handleTitleUpdated);
       el.removeEventListener('page-favicon-updated', handleFaviconUpdated);
       el.removeEventListener('did-start-loading', handleStartLoading);
@@ -159,7 +234,7 @@ const ElectronWebviewTab: React.FC<{
       el.removeEventListener('new-window', handleNewWindow);
       el.removeEventListener('found-in-page', handleFoundInPage);
     };
-  }, [tab.id, onTabTitleChange, onTabFaviconChange, onTabLoadingChange, onTabNavigationChange, onNewTabRequested, onFoundInPage, onTabZoomChange, tab.url]);
+  }, [tab.id]);
 
   // Sync zoom changes dynamically when tab.zoomLevel updates
   useEffect(() => {
@@ -209,6 +284,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   palette,
   isPerformanceMode = false,
   onOpenSettings,
+  showNewTabSettingsIcon = true,
   onFoundInPage,
   onTabZoomChange,
 }) => {
@@ -331,6 +407,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
               palette={palette}
               isPerformanceMode={isPerformanceMode}
               onOpenSettings={onOpenSettings}
+              showSettingsIcon={showNewTabSettingsIcon}
             />
           </div>
         )}
@@ -369,6 +446,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
           palette={palette}
           isPerformanceMode={isPerformanceMode}
           onOpenSettings={onOpenSettings}
+          showSettingsIcon={showNewTabSettingsIcon}
         />
       </div>
     );

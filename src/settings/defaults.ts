@@ -70,9 +70,9 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   themePreset: 'midnight',
   palette: THEME_PRESETS.midnight,
   backgroundColor: 'black',
-  customBackgroundColor: '#06080b',
+  customBackgroundColor: '#0b0e17',
   headerColor: 'black',
-  customHeaderColor: '#0a0d12',
+  customHeaderColor: '#0d111b',
 
   // Individual Visual Feature Toggles
   starAnimationEnabled: true,
@@ -84,8 +84,9 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   starDensity: 'medium',
   animationIntensity: 'subtle',
 
-  // Mascot
+  // Mascot & UI Badges
   showFreenMascot: true,
+  showNewTabSettingsIcon: true,
 
   // Custom Background Image (Stored strictly locally in browser storage)
   customBackgroundImage: null,
