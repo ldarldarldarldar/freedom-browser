@@ -20,7 +20,7 @@
 
 Freedom is an actual desktop application built with a native Rust backend and Tauri 2.x, interfacing with the operating system's native modern browser engine:
 - **Windows 10/11**: Microsoft Edge WebView2 (Chromium engine with system-level optimization).
-- **Linux (Arch, CachyOS, Fedora, Debian/Ubuntu)**: WebKitGTK (Safari/WebKit engine with native GTK3 integration).
+- **Linux (Arch, Fedora, Debian/Ubuntu)**: WebKitGTK (Safari/WebKit engine with native GTK3 integration).
 
 Freedom delivers compatibility with modern web standards:
 - **HTML5 & CSS3**: Flexbox, CSS Grid, animations, modern viewport units.
