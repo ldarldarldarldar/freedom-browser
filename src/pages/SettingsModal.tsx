@@ -143,10 +143,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
       <div
         id="freedom-settings-dialog"
-        className="w-full max-w-3xl bg-neutral-900 border border-emerald-500/30 rounded-xl shadow-2xl overflow-hidden flex flex-col h-[82vh] text-neutral-200"
+        className="w-full max-w-3xl border border-emerald-500/30 rounded-xl shadow-2xl overflow-hidden flex flex-col h-[82vh] text-neutral-200 transition-colors"
+        style={{
+          backgroundColor:
+            settings.applyThemeToBackground && settings.palette?.secondaryBg
+              ? settings.palette.secondaryBg
+              : settings.applyThemeToBackground && settings.palette?.cardBg
+              ? settings.palette.cardBg
+              : '#171717',
+          borderColor: settings.palette?.borderColor || 'rgba(16,185,129,0.3)',
+        }}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-neutral-950 border-b border-white/10">
+        <div
+          className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 transition-colors"
+          style={{
+            backgroundColor:
+              settings.applyThemeToBackground && settings.palette?.headerBg
+                ? settings.palette.headerBg
+                : '#0a0a0a',
+          }}
+        >
           <div className="flex items-center gap-2.5">
             <Settings className="w-5 h-5 text-emerald-400" />
             <h2 className="text-base font-semibold text-white tracking-wide">
@@ -165,7 +182,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Modal Body: Sidebar + Content */}
         <div className="flex flex-1 min-h-0">
           {/* Navigation Sidebar */}
-          <div className="w-56 bg-neutral-950/80 border-r border-white/5 p-3 space-y-1 text-xs">
+          <div
+            className="w-56 border-r border-white/5 p-3 space-y-1 text-xs transition-colors"
+            style={{
+              backgroundColor:
+                settings.applyThemeToBackground && settings.palette?.sidebarBg
+                  ? settings.palette.sidebarBg
+                  : 'rgba(10, 10, 10, 0.8)',
+            }}
+          >
             <button
               type="button"
               onClick={() => setActiveTab('performance')}
@@ -443,6 +468,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
+                {/* Apply Theme to Background Toggle */}
+                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-white">
+                      Apply Theme to Background
+                    </div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      Apply the selected theme color palette to the main application background and interface surfaces.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.applyThemeToBackground)}
+                    onChange={(e) =>
+                      onUpdateSettings({ applyThemeToBackground: e.target.checked })
+                    }
+                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                  />
+                </div>
+
                 {/* Detailed Palette Toggle */}
                 <div className="border-t border-white/10 pt-4">
                   <button
@@ -634,6 +679,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={Boolean(settings.showNewTabSettingsIcon)}
                     onChange={(e) =>
                       onUpdateSettings({ showNewTabSettingsIcon: e.target.checked })
+                    }
+                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                  />
+                </div>
+
+                {/* Show Freedom Icon Toggle */}
+                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-white">
+                      Show Freedom Icon
+                    </div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      Displays the clickable Freedom logo on the New Tab page to open settings.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.showFreedomIcon)}
+                    onChange={(e) =>
+                      onUpdateSettings({ showFreedomIcon: e.target.checked })
                     }
                     className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
                   />

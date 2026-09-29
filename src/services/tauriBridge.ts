@@ -468,6 +468,20 @@ export class TauriBridge {
   }
 
   /**
+   * Stop loading active tab
+   */
+  public stopLoading(tabId: string): void {
+    const wv = this.getWebview(tabId);
+    if (wv && typeof wv.stop === 'function') {
+      try {
+        wv.stop();
+      } catch (e) {
+        console.warn('stop loading failed:', e);
+      }
+    }
+  }
+
+  /**
    * Set Zoom Factor for webview (1.0 = 100%)
    */
   public setWebviewZoom(tabId: string, factor: number): void {

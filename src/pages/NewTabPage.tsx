@@ -14,6 +14,7 @@ interface NewTabPageProps {
   isPerformanceMode?: boolean;
   onOpenSettings?: () => void;
   showSettingsIcon?: boolean;
+  showFreedomIcon?: boolean;
 }
 
 export const NewTabPage: React.FC<NewTabPageProps> = ({
@@ -23,6 +24,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   isPerformanceMode = false,
   onOpenSettings,
   showSettingsIcon = true,
+  showFreedomIcon = true,
 }) => {
   const [query, setQuery] = useState('');
   const [time, setTime] = useState<string>('');
@@ -131,33 +133,35 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       </div>
 
       {/* Freedom Brand Header - clicking logo/icon opens Settings */}
-      <div className="flex flex-col items-center mb-8">
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          title="Open Settings"
-          aria-label="Open Settings"
-          className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-2xl p-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
-        >
-          <FreedomLogo size={64} className="mb-3 transition-transform group-hover:brightness-110" />
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <span>FREEDOM</span>
-          </h1>
-        </button>
-        <p className="text-xs text-neutral-400 mt-1 font-mono flex items-center gap-3">
-          <span className="flex items-center gap-1" style={{ color: accent }}>
-            <Shield className="w-3 h-3" /> Freedom
-          </span>
-          <span>•</span>
-          <span className="flex items-center gap-1" style={{ color: accent }}>
-            <Code2 className="w-3 h-3" /> Programming
-          </span>
-          <span>•</span>
-          <span className="flex items-center gap-1" style={{ color: accent }}>
-            <Zap className="w-3 h-3" /> Speed
-          </span>
-        </p>
-      </div>
+      {showFreedomIcon && (
+        <div className="flex flex-col items-center mb-8">
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            title="Open Settings"
+            aria-label="Open Settings"
+            className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-2xl p-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
+          >
+            <FreedomLogo size={64} className="mb-3 transition-transform group-hover:brightness-110" />
+            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              <span>FREEDOM</span>
+            </h1>
+          </button>
+          <p className="text-xs text-neutral-400 mt-1 font-mono flex items-center gap-3">
+            <span className="flex items-center gap-1" style={{ color: accent }}>
+              <Shield className="w-3 h-3" /> Freedom
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1" style={{ color: accent }}>
+              <Code2 className="w-3 h-3" /> Programming
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1" style={{ color: accent }}>
+              <Zap className="w-3 h-3" /> Speed
+            </span>
+          </p>
+        </div>
+      )}
 
       {/* Central Clean Search Bar */}
       <form onSubmit={handleSearch} className="w-full max-w-xl mb-10">

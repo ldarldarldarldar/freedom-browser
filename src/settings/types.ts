@@ -88,6 +88,7 @@ export interface BrowserSettings {
 
   backgroundColor: BackgroundColorOption;
   customBackgroundColor: string;
+  applyThemeToBackground: boolean;
   headerColor: HeaderColorOption;
   customHeaderColor: string;
 
@@ -104,6 +105,7 @@ export interface BrowserSettings {
   // Mascot & UI Badges
   showFreenMascot: boolean;
   showNewTabSettingsIcon: boolean;
+  showFreedomIcon: boolean;
 
   // Custom Background Image
   customBackgroundImage: string | null;

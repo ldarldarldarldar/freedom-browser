@@ -1,12 +1,34 @@
 @import "tailwindcss";
 
 /* Performance Mode: Completely eliminates CSS transitions, keyframe animations, and expensive backdrop filters to minimize GPU/CPU */
-.performance-mode * {
+.performance-mode *:not(.tab-loading-spinner) {
   transition: none !important;
   animation: none !important;
   backdrop-filter: none !important;
   box-shadow: none !important;
 }
+
+/* Tab Loading Spinner Animation */
+@keyframes tab-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.tab-loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--theme-accent, #10b981);
+  border-top-color: transparent !important;
+  border-radius: 9999px;
+  animation: tab-spin 0.75s linear infinite !important;
+  will-change: transform;
+}
+
 
 /* Low-overhead dark scrollbar */
 ::-webkit-scrollbar {

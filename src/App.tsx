@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { TabBar } from './components/TabBar';
 import { Navigation } from './components/Navigation';
 import { StarCanvas } from './components/StarCanvas';
@@ -25,6 +25,7 @@ import { SessionService } from './services/sessionService';
 import { ZoomService } from './services/zoomService';
 import { TabSortService, TabSortMode } from './services/tabSortService';
 import { FaviconService } from './services/faviconService';
+import { SplitViewService, SplitViewState } from './services/splitViewService';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
@@ -164,6 +165,17 @@ export default function App() {
   // Tab sorting mode state
   const [activeSortMode, setActiveSortMode] = useState<TabSortMode | 'none'>('none');
 
+  // Split View state
+  const [splitViewState, setSplitViewState] = useState<SplitViewState>(() => {
+    const loaded = SplitViewService.loadState();
+    return SplitViewService.validateState(loaded, tabs.map((t) => t.id));
+  });
+
+  // Persist Split View state changes
+  useEffect(() => {
+    SplitViewService.saveState(splitViewState);
+  }, [splitViewState]);
+
   // Find in page state
   const [findState, setFindState] = useState<FindInPageState>({
     isOpen: false,
@@ -234,7 +246,14 @@ export default function App() {
     }
   }, [settings]);
 
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const activeTab = useMemo(() => {
+    if (splitViewState.enabled) {
+      const paneTabId = splitViewState.activePane === 'left' ? splitViewState.leftTabId : splitViewState.rightTabId;
+      const found = tabs.find((t) => t.id === paneTabId);
+      if (found) return found;
+    }
+    return tabs.find((t) => t.id === activeTabId) || tabs[0];
+  }, [tabs, activeTabId, splitViewState]);
 
   // Inactive Tab Suspension (Memory Optimization)
   useEffect(() => {
@@ -246,8 +265,10 @@ export default function App() {
       setTabs((prev) => {
         let hasChanges = false;
         const next = prev.map((t) => {
+          const isTabInSplitView = splitViewState.enabled && (t.id === splitViewState.leftTabId || t.id === splitViewState.rightTabId);
           if (
             t.id !== activeTabId &&
+            !isTabInSplitView &&
             !t.isSuspended &&
             !t.url.startsWith('freedom://') &&
             now - t.lastActive > timeoutMs
@@ -263,10 +284,27 @@ export default function App() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [settings.autoSuspendInactiveTabs, settings.tabSuspensionTimeoutMinutes, activeTabId]);
+  }, [settings.autoSuspendInactiveTabs, settings.tabSuspensionTimeoutMinutes, activeTabId, splitViewState]);
 
   // Tab operations
   const handleSelectTab = useCallback((id: string) => {
+    setSplitViewState((prev) => {
+      if (!prev.enabled) return prev;
+      if (id === prev.leftTabId) {
+        return { ...prev, activePane: 'left' };
+      }
+      if (id === prev.rightTabId) {
+        return { ...prev, activePane: 'right' };
+      }
+      // If user clicks a third tab while Split View is active,
+      // load it into the active pane!
+      return {
+        ...prev,
+        leftTabId: prev.activePane === 'left' ? id : prev.leftTabId,
+        rightTabId: prev.activePane === 'right' ? id : prev.rightTabId,
+      };
+    });
+
     setActiveTabId(id);
     setTabs((prev) =>
       prev.map((t) => (t.id === id ? { ...t, lastActive: Date.now(), isSuspended: false } : t))
@@ -294,6 +332,17 @@ export default function App() {
 
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newId);
+
+    // If Split View is active, route new tab into the active pane
+    setSplitViewState((prev) => {
+      if (!prev.enabled) return prev;
+      return {
+        ...prev,
+        leftTabId: prev.activePane === 'left' ? newId : prev.leftTabId,
+        rightTabId: prev.activePane === 'right' ? newId : prev.rightTabId,
+      };
+    });
+
     logger.log('INFO', 'RENDERER', `Created tab ${newId} with URL ${targetUrl}`);
   }, []);
 
@@ -301,6 +350,22 @@ export default function App() {
     (id: string) => {
       // Destroy native WebKitGTK / WebView2 child webview if active
       tauriBridge.closeNativeTab(id);
+
+      // Handle Split View tab closing safely
+      setSplitViewState((prev) => {
+        if (!prev.enabled) return prev;
+        if (id === prev.leftTabId || id === prev.rightTabId) {
+          const remainingTabId = id === prev.leftTabId ? prev.rightTabId : prev.leftTabId;
+          if (remainingTabId) {
+            setActiveTabId(remainingTabId);
+          }
+          return {
+            ...prev,
+            enabled: false,
+          };
+        }
+        return prev;
+      });
 
       if (tabs.length === 1) {
         // If last tab is closed, reset it to new tab
@@ -440,8 +505,9 @@ export default function App() {
   }, []);
 
   const handleNavigate = useCallback(
-    (url: string) => {
-      if (!activeTab) return;
+    (url: string, targetId?: string) => {
+      const destId = targetId || activeTab?.id;
+      if (!destId) return;
 
       const domain = SearchEngineService.extractDomain(url);
       const isInternal = url.startsWith('freedom://');
@@ -469,12 +535,12 @@ export default function App() {
       if (isInternal) {
         tauriBridge.hideNativeWebviews();
       } else {
-        tauriBridge.navigateNative(activeTab.id, url);
+        tauriBridge.navigateNative(destId, url);
       }
 
       setTabs((prev) =>
         prev.map((t) => {
-          if (t.id === activeTab.id) {
+          if (t.id === destId) {
             const nextHistory = [...t.history.slice(0, t.historyIndex + 1), url];
             const siteZoom = ZoomService.getZoomForUrl(url);
             return {
@@ -497,7 +563,7 @@ export default function App() {
           return t;
         })
       );
-      logger.log('INFO', 'NETWORK', `Navigated to ${url}`);
+      logger.log('INFO', 'NETWORK', `Navigated tab ${destId} to ${url}`);
     },
     [activeTab]
   );
@@ -722,6 +788,137 @@ export default function App() {
         setTabs((prev) => TabSortService.sortByTitle(prev));
         logger.log('INFO', 'RENDERER', 'Tabs sorted alphabetically by title');
       }
+    },
+    [tabs]
+  );
+
+  // Split View Handlers
+  const handleToggleSplitView = useCallback(() => {
+    setSplitViewState((prev) => {
+      if (prev.enabled) {
+        return { ...prev, enabled: false };
+      }
+      const leftId = activeTab?.id || tabs[0]?.id || `tab-${Date.now()}`;
+      let rightId = tabs.find((t) => t.id !== leftId)?.id;
+      if (!rightId) {
+        const newRightTabId = `tab-${Date.now()}`;
+        const newTab: BrowserTab = {
+          id: newRightTabId,
+          title: 'New Tab',
+          url: 'freedom://newtab',
+          displayUrl: 'freedom://newtab',
+          isLoading: false,
+          canGoBack: false,
+          canGoForward: false,
+          isSuspended: false,
+          lastActive: Date.now(),
+          isCrashed: false,
+          history: ['freedom://newtab'],
+          historyIndex: 0,
+          zoomLevel: ZoomService.getZoomForUrl('freedom://newtab'),
+          security: 'internal',
+        };
+        setTabs((tList) => [...tList, newTab]);
+        rightId = newRightTabId;
+      }
+      return {
+        enabled: true,
+        leftTabId: leftId,
+        rightTabId: rightId,
+        activePane: 'right',
+        dividerPosition: prev.dividerPosition || 50,
+      };
+    });
+  }, [activeTab, tabs]);
+
+  const handleOpenInSplitView = useCallback(
+    (targetTabId: string) => {
+      setSplitViewState((prev) => {
+        const leftId =
+          activeTabId === targetTabId
+            ? tabs.find((t) => t.id !== targetTabId)?.id || targetTabId
+            : activeTabId;
+        return {
+          enabled: true,
+          leftTabId: leftId,
+          rightTabId: targetTabId,
+          activePane: 'right',
+          dividerPosition: prev.dividerPosition || 50,
+        };
+      });
+      setActiveTabId(targetTabId);
+    },
+    [activeTabId, tabs]
+  );
+
+  const handleSelectPane = useCallback((pane: 'left' | 'right') => {
+    setSplitViewState((prev) => {
+      const tabId = pane === 'left' ? prev.leftTabId : prev.rightTabId;
+      if (tabId) {
+        setActiveTabId(tabId);
+      }
+      return { ...prev, activePane: pane };
+    });
+  }, []);
+
+  const handleClosePane = useCallback((pane: 'left' | 'right') => {
+    setSplitViewState((prev) => {
+      const remainingTabId = pane === 'left' ? prev.rightTabId : prev.leftTabId;
+      if (remainingTabId) {
+        setActiveTabId(remainingTabId);
+      }
+      return { ...prev, enabled: false };
+    });
+  }, []);
+
+  const handleDividerChange = useCallback((position: number) => {
+    setSplitViewState((prev) => ({ ...prev, dividerPosition: position }));
+  }, []);
+
+  const handlePaneNavigate = useCallback(
+    (tabId: string, url: string) => {
+      handleNavigate(url, tabId);
+    },
+    [handleNavigate]
+  );
+
+  const handlePaneBack = useCallback(
+    (tabId: string) => {
+      const target = tabs.find((t) => t.id === tabId);
+      if (!target) return;
+      if (!target.url.startsWith('freedom://')) {
+        tauriBridge.goBackNative(tabId);
+      }
+    },
+    [tabs]
+  );
+
+  const handlePaneForward = useCallback(
+    (tabId: string) => {
+      const target = tabs.find((t) => t.id === tabId);
+      if (!target) return;
+      if (!target.url.startsWith('freedom://')) {
+        tauriBridge.goForwardNative(tabId);
+      }
+    },
+    [tabs]
+  );
+
+  const handlePaneReload = useCallback(
+    (tabId: string) => {
+      const target = tabs.find((t) => t.id === tabId);
+      if (!target) return;
+      if (!target.url.startsWith('freedom://')) {
+        tauriBridge.reloadNative(tabId);
+      }
+      setTabs((prev) =>
+        prev.map((t) => (t.id === tabId ? { ...t, isLoading: true } : t))
+      );
+      setTimeout(() => {
+        setTabs((prev) =>
+          prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t))
+        );
+      }, 600);
     },
     [tabs]
   );
@@ -1143,8 +1340,11 @@ export default function App() {
 
   // Color theme classes & palette resolution
   const getBackgroundColor = () => {
-    if (settings.palette?.mainBg) {
+    if (settings.applyThemeToBackground && settings.palette?.mainBg) {
       return settings.palette.mainBg;
+    }
+    if (!settings.applyThemeToBackground) {
+      return '#06080b';
     }
     switch (settings.backgroundColor) {
       case 'dark-green':
@@ -1187,7 +1387,9 @@ export default function App() {
       style={{
         backgroundColor: getBackgroundColor(),
         '--theme-accent': settings.palette?.accentColor || '#10b981',
-        '--theme-bg': settings.palette?.mainBg || '#06080b',
+        '--theme-bg': settings.applyThemeToBackground
+          ? (settings.palette?.mainBg || '#06080b')
+          : '#06080b',
         '--theme-header': settings.palette?.headerBg || '#090b10',
         '--theme-surface': settings.palette?.cardBg || '#12161f',
         '--theme-border': settings.palette?.borderColor || '#232b3b',
@@ -1251,6 +1453,8 @@ export default function App() {
         onCloseTabsFromSite={handleCloseTabsFromSite}
         onCloseOtherTabs={handleCloseOtherTabs}
         onCloseTabsToRight={handleCloseTabsToRight}
+        splitViewState={splitViewState}
+        onOpenInSplitView={handleOpenInSplitView}
       />
 
       {/* Navigation & Controls Bar (Below the Tab Bar) */}
@@ -1261,9 +1465,12 @@ export default function App() {
         onForward={handleForward}
         onReload={handleReload}
         onStop={() => {
-          setTabs((prev) =>
-            prev.map((t) => (t.id === activeTab.id ? { ...t, isLoading: false } : t))
-          );
+          if (activeTab) {
+            tauriBridge.stopLoading(activeTab.id);
+            setTabs((prev) =>
+              prev.map((t) => (t.id === activeTab.id ? { ...t, isLoading: false } : t))
+            );
+          }
         }}
         onHome={() => handleNavigate('freedom://newtab')}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -1285,6 +1492,8 @@ export default function App() {
         onZoomOut={handleZoomOut}
         onResetZoom={handleResetZoom}
         onSortTabs={handleSortTabs}
+        isSplitView={splitViewState.enabled}
+        onToggleSplitView={handleToggleSplitView}
       />
 
       {/* Bookmarks Bar */}
@@ -1312,8 +1521,17 @@ export default function App() {
           isPerformanceMode={isPerformanceMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
           showNewTabSettingsIcon={settings.showNewTabSettingsIcon}
+          showFreedomIcon={settings.showFreedomIcon}
           onFoundInPage={handleFoundInPage}
           onTabZoomChange={handleTabZoomChange}
+          splitViewState={splitViewState}
+          onSelectPane={handleSelectPane}
+          onClosePane={handleClosePane}
+          onDividerChange={handleDividerChange}
+          onPaneNavigate={handlePaneNavigate}
+          onPaneBack={handlePaneBack}
+          onPaneForward={handlePaneForward}
+          onPaneReload={handlePaneReload}
         />
 
         {/* Find In Page Overlay */}

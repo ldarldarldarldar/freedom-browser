@@ -26,6 +26,7 @@ import {
   Copy,
   ArrowDownAZ,
   Globe,
+  Columns2,
 } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { SearchEngineId } from '../settings/types';
@@ -61,6 +62,8 @@ interface NavigationProps {
   onZoomOut?: () => void;
   onResetZoom?: () => void;
   onSortTabs?: (mode: TabSortMode) => void;
+  isSplitView?: boolean;
+  onToggleSplitView?: () => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -90,6 +93,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   onZoomOut,
   onResetZoom,
   onSortTabs,
+  isSplitView = false,
+  onToggleSplitView,
 }) => {
   const [inputValue, setInputValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -310,8 +315,25 @@ export const Navigation: React.FC<NavigationProps> = ({
         )}
       </div>
 
-      {/* Right Controls: Find, History, Bookmarks, Task Manager, Downloads, DevTools, Menu */}
+      {/* Right Controls: Split View, Find, History, Bookmarks, Task Manager, Downloads, DevTools, Menu */}
       <div className="flex items-center space-x-1 shrink-0 app-no-drag" ref={menuRef}>
+        {/* Split View Toggle Button */}
+        {onToggleSplitView && (
+          <button
+            id="btn-toggle-split-view"
+            type="button"
+            onClick={onToggleSplitView}
+            className={`w-8 h-8 flex items-center justify-center rounded-lg border active:scale-95 transition-all ${
+              isSplitView
+                ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+                : 'text-neutral-400 hover:text-white hover:bg-white/5 border-transparent hover:border-white/10'
+            }`}
+            title={isSplitView ? 'Exit Split View' : 'Split View (Side-by-Side)'}
+          >
+            <Columns2 className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Find in page toggle button */}
         {onToggleFind && (
           <button
@@ -561,6 +583,23 @@ export const Navigation: React.FC<NavigationProps> = ({
               )}
 
               <div className="my-1 border-t border-white/5" />
+
+              {onToggleSplitView && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onToggleSplitView();
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-white/10 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <Columns2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Split View (Side-by-Side)</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-neutral-500">{isSplitView ? 'ACTIVE' : 'OFF'}</span>
+                </button>
+              )}
 
               <button
                 type="button"

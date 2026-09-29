@@ -1,13 +1,15 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { BrowserTab } from './types';
 import { NewTabPage } from '../pages/NewTabPage';
 import { ErrorPage } from '../pages/ErrorPage';
 import { SearchEngineId, ThemePalette } from '../settings/types';
-import { Moon, ExternalLink, Globe, ShieldCheck } from 'lucide-react';
+import { Moon, ExternalLink, Globe, ShieldCheck, GripVertical } from 'lucide-react';
 import { tauriBridge, isTauriEnvironment, isElectronEnvironment } from '../services/tauriBridge';
 import { ZoomService } from '../services/zoomService';
 import { SearchEngineService } from '../services/searchEngineService';
 import { FaviconService } from '../services/faviconService';
+import { SplitViewState } from '../services/splitViewService';
+import { SplitPaneHeader } from '../components/SplitPaneHeader';
 
 interface WebviewContainerProps {
   activeTab: BrowserTab | undefined;
@@ -34,13 +36,24 @@ interface WebviewContainerProps {
   isPerformanceMode?: boolean;
   onOpenSettings?: () => void;
   showNewTabSettingsIcon?: boolean;
+  showFreedomIcon?: boolean;
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
   onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
+  splitViewState?: SplitViewState;
+  onSelectPane?: (pane: 'left' | 'right') => void;
+  onClosePane?: (pane: 'left' | 'right') => void;
+  onDividerChange?: (position: number) => void;
+  onPaneNavigate?: (tabId: string, url: string) => void;
+  onPaneBack?: (tabId: string) => void;
+  onPaneForward?: (tabId: string) => void;
+  onPaneReload?: (tabId: string) => void;
 }
 
 const ElectronWebviewTab: React.FC<{
   tab: BrowserTab;
   isActive: boolean;
+  style?: React.CSSProperties;
+  onFocused?: (tabId: string) => void;
   onTabTitleChange?: (tabId: string, title: string) => void;
   onTabFaviconChange?: (tabId: string, favicon: string) => void;
   onTabLoadingChange?: (tabId: string, isLoading: boolean) => void;
@@ -60,6 +73,8 @@ const ElectronWebviewTab: React.FC<{
 }> = ({
   tab,
   isActive,
+  style,
+  onFocused,
   onTabTitleChange,
   onTabFaviconChange,
   onTabLoadingChange,
@@ -74,6 +89,7 @@ const ElectronWebviewTab: React.FC<{
 
   // Stable callback refs prevent listener thrashing across re-renders
   const callbacksRef = useRef({
+    onFocused,
     onTabTitleChange,
     onTabFaviconChange,
     onTabLoadingChange,
@@ -83,6 +99,7 @@ const ElectronWebviewTab: React.FC<{
     onTabZoomChange,
   });
   callbacksRef.current = {
+    onFocused,
     onTabTitleChange,
     onTabFaviconChange,
     onTabLoadingChange,
@@ -188,6 +205,11 @@ const ElectronWebviewTab: React.FC<{
       syncState();
     };
 
+    const handleFailLoading = () => {
+      callbacksRef.current.onTabLoadingChange?.(tab.id, false);
+      syncState();
+    };
+
     const handleNewWindow = (e: any) => {
       if (e.url) {
         callbacksRef.current.onNewTabRequested?.(e.url);
@@ -203,6 +225,10 @@ const ElectronWebviewTab: React.FC<{
       }
     };
 
+    const handleFocus = () => {
+      callbacksRef.current.onFocused?.(tab.id);
+    };
+
     el.addEventListener('dom-ready', handleDomReady);
     el.addEventListener('did-navigate', handleDidNavigate);
     el.addEventListener('did-navigate-in-page', handleDidNavigateInPage);
@@ -210,8 +236,13 @@ const ElectronWebviewTab: React.FC<{
     el.addEventListener('page-favicon-updated', handleFaviconUpdated);
     el.addEventListener('did-start-loading', handleStartLoading);
     el.addEventListener('did-stop-loading', handleStopLoading);
+    el.addEventListener('did-fail-load', handleFailLoading);
+    el.addEventListener('crashed', handleFailLoading);
+    el.addEventListener('gpu-crashed', handleFailLoading);
+    el.addEventListener('plugin-crashed', handleFailLoading);
     el.addEventListener('new-window', handleNewWindow);
     el.addEventListener('found-in-page', handleFoundInPage);
+    el.addEventListener('focus', handleFocus);
 
     // Initial zoom application
     const initialZoom = ZoomService.getZoomForUrl(tab.url);
@@ -231,8 +262,13 @@ const ElectronWebviewTab: React.FC<{
       el.removeEventListener('page-favicon-updated', handleFaviconUpdated);
       el.removeEventListener('did-start-loading', handleStartLoading);
       el.removeEventListener('did-stop-loading', handleStopLoading);
+      el.removeEventListener('did-fail-load', handleFailLoading);
+      el.removeEventListener('crashed', handleFailLoading);
+      el.removeEventListener('gpu-crashed', handleFailLoading);
+      el.removeEventListener('plugin-crashed', handleFailLoading);
       el.removeEventListener('new-window', handleNewWindow);
       el.removeEventListener('found-in-page', handleFoundInPage);
+      el.removeEventListener('focus', handleFocus);
     };
   }, [tab.id]);
 
@@ -254,7 +290,7 @@ const ElectronWebviewTab: React.FC<{
 
   return (
     <div
-      style={{ display: isActive ? 'block' : 'none' }}
+      style={style ?? { display: isActive ? 'block' : 'none' }}
       className="w-full h-full relative"
     >
       <webview
@@ -285,12 +321,47 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   isPerformanceMode = false,
   onOpenSettings,
   showNewTabSettingsIcon = true,
+  showFreedomIcon = true,
   onFoundInPage,
   onTabZoomChange,
+  splitViewState,
+  onSelectPane,
+  onClosePane,
+  onDividerChange,
+  onPaneNavigate,
+  onPaneBack,
+  onPaneForward,
+  onPaneReload,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const isElectron = isElectronEnvironment();
   const isTauri = isTauriEnvironment();
+  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
+
+  // Smooth divider dragging with window listeners
+  useEffect(() => {
+    if (!isDraggingDivider) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const rawPos = ((e.clientX - rect.left) / rect.width) * 100;
+      const clamped = Math.max(20, Math.min(80, Math.round(rawPos)));
+      onDividerChange?.(clamped);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingDivider(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingDivider, onDividerChange]);
 
   // Synchronize Tauri child webview bounds if in Tauri environment
   useEffect(() => {
@@ -383,8 +454,20 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
     );
   }
 
-  // 3. Electron Desktop Mode: Native Chromium Webviews with true top-level multi-tab rendering
+  // 3. Electron Desktop Mode: Native Chromium Webviews with true top-level multi-tab & split-view rendering
   if (isElectron) {
+    const isSplit = Boolean(
+      splitViewState?.enabled &&
+      splitViewState.leftTabId &&
+      splitViewState.rightTabId &&
+      tabs.some((t) => t.id === splitViewState.leftTabId) &&
+      tabs.some((t) => t.id === splitViewState.rightTabId)
+    );
+
+    const leftTab = isSplit ? tabs.find((t) => t.id === splitViewState!.leftTabId) : undefined;
+    const rightTab = isSplit ? tabs.find((t) => t.id === splitViewState!.rightTabId) : undefined;
+    const dividerPos = splitViewState?.dividerPosition ?? 50;
+
     const isNewTab = activeTab.url === 'freedom://newtab';
     // Collect all open external tabs that are not suspended
     const externalTabs = tabs.length > 0
@@ -392,8 +475,148 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
       : (!isNewTab ? [activeTab] : []);
 
     return (
-      <div className="relative w-full h-full bg-neutral-950 overflow-hidden">
-        {isNewTab && (
+      <div ref={containerRef} className="relative w-full h-full bg-transparent overflow-hidden select-none">
+        {/* Transparent mouse capture overlay during divider dragging to prevent webviews capturing pointer */}
+        {isDraggingDivider && (
+          <div className="fixed inset-0 z-50 cursor-col-resize select-none bg-transparent" />
+        )}
+
+        {/* 1. SPLIT VIEW MODE HEADERS, DIVIDER & NEW TAB PAGES */}
+        {isSplit && leftTab && rightTab && (
+          <>
+            {/* Left Pane Header */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: `${dividerPos}%`,
+                height: 36,
+              }}
+              className="z-20"
+            >
+              <SplitPaneHeader
+                pane="left"
+                tab={leftTab}
+                isActive={splitViewState!.activePane === 'left'}
+                onSelect={() => onSelectPane?.('left')}
+                onClose={() => onClosePane?.('left')}
+                onBack={(id) => onPaneBack?.(id)}
+                onForward={(id) => onPaneForward?.(id)}
+                onReload={(id) => onPaneReload?.(id)}
+                onNavigate={(id, u) => onPaneNavigate?.(id, u)}
+                defaultSearchEngine={defaultSearchEngine}
+              />
+            </div>
+
+            {/* Right Pane Header */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: `${dividerPos}%`,
+                width: `${100 - dividerPos}%`,
+                height: 36,
+              }}
+              className="z-20"
+            >
+              <SplitPaneHeader
+                pane="right"
+                tab={rightTab}
+                isActive={splitViewState!.activePane === 'right'}
+                onSelect={() => onSelectPane?.('right')}
+                onClose={() => onClosePane?.('right')}
+                onBack={(id) => onPaneBack?.(id)}
+                onForward={(id) => onPaneForward?.(id)}
+                onReload={(id) => onPaneReload?.(id)}
+                onNavigate={(id, u) => onPaneNavigate?.(id, u)}
+                defaultSearchEngine={defaultSearchEngine}
+              />
+            </div>
+
+            {/* Draggable Vertical Divider */}
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsDraggingDivider(true);
+              }}
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: `calc(${dividerPos}% - 4px)`,
+                width: 8,
+                zIndex: 40,
+              }}
+              className="group cursor-col-resize flex items-center justify-center select-none"
+              title="Drag to resize split panes"
+            >
+              <div
+                className={`w-[2px] h-full transition-colors ${
+                  isDraggingDivider
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]'
+                    : 'bg-white/10 group-hover:bg-emerald-500/70'
+                }`}
+              />
+              <div className="absolute w-3.5 h-7 rounded-full bg-neutral-900 border border-white/20 group-hover:border-emerald-500/60 shadow-md flex items-center justify-center pointer-events-none transition-transform group-hover:scale-110">
+                <GripVertical className="w-2.5 h-2.5 text-neutral-400 group-hover:text-emerald-300" />
+              </div>
+            </div>
+
+            {/* Left New Tab Page (if left tab is freedom://newtab) */}
+            {leftTab.url === 'freedom://newtab' && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 36,
+                  bottom: 0,
+                  left: 0,
+                  width: `${dividerPos}%`,
+                }}
+                className="overflow-y-auto no-scrollbar z-10"
+                onClick={() => onSelectPane?.('left')}
+              >
+                <NewTabPage
+                  onNavigate={(u) => onPaneNavigate?.(leftTab.id, u)}
+                  defaultSearchEngine={defaultSearchEngine}
+                  palette={palette}
+                  isPerformanceMode={isPerformanceMode}
+                  onOpenSettings={onOpenSettings}
+                  showSettingsIcon={showNewTabSettingsIcon}
+                  showFreedomIcon={showFreedomIcon}
+                />
+              </div>
+            )}
+
+            {/* Right New Tab Page (if right tab is freedom://newtab) */}
+            {rightTab.url === 'freedom://newtab' && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 36,
+                  bottom: 0,
+                  left: `${dividerPos}%`,
+                  width: `${100 - dividerPos}%`,
+                }}
+                className="overflow-y-auto no-scrollbar z-10"
+                onClick={() => onSelectPane?.('right')}
+              >
+                <NewTabPage
+                  onNavigate={(u) => onPaneNavigate?.(rightTab.id, u)}
+                  defaultSearchEngine={defaultSearchEngine}
+                  palette={palette}
+                  isPerformanceMode={isPerformanceMode}
+                  onOpenSettings={onOpenSettings}
+                  showSettingsIcon={showNewTabSettingsIcon}
+                  showFreedomIcon={showFreedomIcon}
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* 2. SINGLE TAB VIEW: Full New Tab Page */}
+        {!isSplit && isNewTab && (
           <div
             id="newtab-zoom-viewport"
             className="relative w-full h-full overflow-y-auto no-scrollbar z-10"
@@ -408,23 +631,75 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
               isPerformanceMode={isPerformanceMode}
               onOpenSettings={onOpenSettings}
               showSettingsIcon={showNewTabSettingsIcon}
+              showFreedomIcon={showFreedomIcon}
             />
           </div>
         )}
-        {externalTabs.map((t) => (
-          <ElectronWebviewTab
-            key={t.id}
-            tab={t}
-            isActive={!isNewTab && t.id === activeTab.id}
-            onTabTitleChange={onTabTitleChange}
-            onTabFaviconChange={onTabFaviconChange}
-            onTabLoadingChange={onTabLoadingChange}
-            onTabNavigationChange={onTabNavigationChange}
-            onNewTabRequested={onNewTabRequested}
-            onFoundInPage={onFoundInPage}
-            onTabZoomChange={onTabZoomChange}
-          />
-        ))}
+
+        {/* 3. ELECTRON WEBVIEW TABS (Persistently mounted with dynamic layout positioning) */}
+        {externalTabs.map((t) => {
+          let tabStyle: React.CSSProperties;
+          let tabIsActive = false;
+
+          if (isSplit) {
+            if (t.id === leftTab?.id && leftTab.url !== 'freedom://newtab') {
+              tabIsActive = splitViewState!.activePane === 'left';
+              tabStyle = {
+                display: 'block',
+                position: 'absolute',
+                top: 36,
+                bottom: 0,
+                left: 0,
+                width: `${dividerPos}%`,
+                zIndex: tabIsActive ? 2 : 1,
+              };
+            } else if (t.id === rightTab?.id && rightTab.url !== 'freedom://newtab') {
+              tabIsActive = splitViewState!.activePane === 'right';
+              tabStyle = {
+                display: 'block',
+                position: 'absolute',
+                top: 36,
+                bottom: 0,
+                left: `${dividerPos}%`,
+                width: `${100 - dividerPos}%`,
+                zIndex: tabIsActive ? 2 : 1,
+              };
+            } else {
+              tabStyle = { display: 'none' };
+            }
+          } else {
+            // Normal single view
+            const isSingleActive = !isNewTab && t.id === activeTab.id;
+            tabIsActive = isSingleActive;
+            tabStyle = {
+              display: isSingleActive ? 'block' : 'none',
+              position: 'absolute',
+              inset: 0,
+            };
+          }
+
+          return (
+            <ElectronWebviewTab
+              key={t.id}
+              tab={t}
+              isActive={tabIsActive}
+              style={tabStyle}
+              onFocused={(id) => {
+                if (isSplit) {
+                  if (id === leftTab?.id) onSelectPane?.('left');
+                  if (id === rightTab?.id) onSelectPane?.('right');
+                }
+              }}
+              onTabTitleChange={onTabTitleChange}
+              onTabFaviconChange={onTabFaviconChange}
+              onTabLoadingChange={onTabLoadingChange}
+              onTabNavigationChange={onTabNavigationChange}
+              onNewTabRequested={onNewTabRequested}
+              onFoundInPage={onFoundInPage}
+              onTabZoomChange={onTabZoomChange}
+            />
+          );
+        })}
       </div>
     );
   }
@@ -447,6 +722,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
           isPerformanceMode={isPerformanceMode}
           onOpenSettings={onOpenSettings}
           showSettingsIcon={showNewTabSettingsIcon}
+          showFreedomIcon={showFreedomIcon}
         />
       </div>
     );
@@ -458,7 +734,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
       <div
         ref={containerRef}
         id={`native-webview-container-${activeTab.id}`}
-        className="relative w-full h-full bg-neutral-950 overflow-hidden"
+        className="relative w-full h-full bg-transparent overflow-hidden"
       >
         <div className="w-full h-full bg-transparent" />
       </div>
@@ -470,7 +746,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
     <div
       ref={containerRef}
       id={`native-webview-container-${activeTab.id}`}
-      className="relative w-full h-full bg-neutral-950 overflow-hidden flex flex-col items-center justify-center"
+      className="relative w-full h-full bg-transparent overflow-hidden flex flex-col items-center justify-center"
     >
       <div className="flex flex-col items-center justify-center p-8 text-center max-w-lg text-neutral-300">
         <div className="p-4 rounded-2xl bg-neutral-900 border border-emerald-500/30 mb-5 shadow-lg">

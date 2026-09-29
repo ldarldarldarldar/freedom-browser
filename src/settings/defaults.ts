@@ -71,6 +71,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   palette: THEME_PRESETS.midnight,
   backgroundColor: 'black',
   customBackgroundColor: '#0b0e17',
+  applyThemeToBackground: true,
   headerColor: 'black',
   customHeaderColor: '#0d111b',
 
@@ -87,6 +88,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   // Mascot & UI Badges
   showFreenMascot: true,
   showNewTabSettingsIcon: true,
+  showFreedomIcon: true,
 
   // Custom Background Image (Stored strictly locally in browser storage)
   customBackgroundImage: null,

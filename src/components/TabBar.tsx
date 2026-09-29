@@ -14,11 +14,13 @@ import {
   Copy,
   ArrowDownAZ,
   Check,
+  Columns2,
 } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { tauriBridge } from '../services/tauriBridge';
 import { WindowControls } from './WindowControls';
 import { TabSortService, TabSortMode } from '../services/tabSortService';
+import { SplitViewState } from '../services/splitViewService';
 
 interface TabBarProps {
   tabs: BrowserTab[];
@@ -39,6 +41,8 @@ interface TabBarProps {
   onCloseTabsFromSite?: (hostname: string) => void;
   onCloseOtherTabs?: (tabId: string) => void;
   onCloseTabsToRight?: (tabId: string) => void;
+  splitViewState?: SplitViewState;
+  onOpenInSplitView?: (tabId: string) => void;
 }
 
 interface ContextMenuState {
@@ -66,6 +70,8 @@ export const TabBar: React.FC<TabBarProps> = ({
   onCloseTabsFromSite,
   onCloseOtherTabs,
   onCloseTabsToRight,
+  splitViewState,
+  onOpenInSplitView,
 }) => {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [sortMenuPos, setSortMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -139,6 +145,9 @@ export const TabBar: React.FC<TabBarProps> = ({
     >
       <div className="flex items-center flex-1 min-w-0 max-w-full space-x-1">
         {tabs.map((tab, index) => {
+          const isLeftSplit = splitViewState?.enabled && tab.id === splitViewState.leftTabId;
+          const isRightSplit = splitViewState?.enabled && tab.id === splitViewState.rightTabId;
+          const isInSplit = isLeftSplit || isRightSplit;
           const isActive = tab.id === activeTabId;
           const domain = TabSortService.extractHostname(tab.url);
           const prevDomain = index > 0 ? TabSortService.extractHostname(tabs[index - 1].url) : null;
@@ -175,18 +184,31 @@ export const TabBar: React.FC<TabBarProps> = ({
                   const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuHeight - 8));
                   setContextMenu({ tab, x, y });
                 }}
-                title={`${tab.title} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}`}
+                title={`${tab.title} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isLeftSplit ? ' [Split: Left Pane]' : isRightSplit ? ' [Split: Right Pane]' : ''}`}
                 className={`group relative flex items-center h-8 px-3.5 rounded-full text-xs transition-all duration-150 cursor-pointer min-w-[120px] max-w-[220px] flex-1 overflow-hidden app-no-drag border ${
                   isActive
                     ? 'bg-emerald-950/40 text-white border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.18)] ring-1 ring-emerald-500/20'
+                    : isInSplit
+                    ? 'bg-emerald-950/20 text-neutral-200 border-emerald-500/30 hover:bg-emerald-950/30'
                     : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/5 border-transparent'
                 }`}
               >
+                {/* Split Indicator Badge */}
+                {isLeftSplit && (
+                  <span className="mr-1.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0" title="Split View: Left Pane">
+                    L
+                  </span>
+                )}
+                {isRightSplit && (
+                  <span className="mr-1.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0" title="Split View: Right Pane">
+                    R
+                  </span>
+                )}
 
                 {/* Favicon or Loading Spinner */}
                 <div className="mr-2 shrink-0 flex items-center">
                   {tab.isLoading ? (
-                    <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                    <div className="tab-loading-spinner shrink-0" title="Loading..." />
                   ) : tab.isSuspended ? (
                     <Moon className="w-3.5 h-3.5 text-neutral-500" title="Tab Suspended (RAM Freed)" />
                   ) : tab.favicon ? (
@@ -449,6 +471,23 @@ export const TabBar: React.FC<TabBarProps> = ({
                 <Copy className="w-3.5 h-3.5 text-neutral-400" />
                 <span>Duplicate Tab</span>
               </button>
+
+              {onOpenInSplitView && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const targetTab = contextMenu.tab;
+                    setContextMenu(null);
+                    onOpenInSplitView(targetTab.id);
+                  }}
+                  className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 app-no-drag cursor-pointer transition-colors text-emerald-400 hover:text-emerald-300"
+                >
+                  <Columns2 className="w-3.5 h-3.5" />
+                  <span>Open in Split View</span>
+                </button>
+              )}
 
               {!contextMenu.tab.url.startsWith('freedom://') && (
                 <button
