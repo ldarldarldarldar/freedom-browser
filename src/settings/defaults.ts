@@ -46,7 +46,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   newTabBehavior: 'freedom-new-tab',
   downloadsLocation: '~/Downloads',
   askWhereToSaveDownloads: false,
-  language: 'en-US',
+  language: 'en',
   hardwareAcceleration: true,
   smoothScrolling: true,
   restoreTabsAfterRestart: true,

@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, RotateCcw, X, Globe } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { SearchEngineId } from '../settings/types';
 import { SearchEngineService } from '../services/searchEngineService';
+import { useTranslation } from '../i18n';
 
 interface SplitPaneHeaderProps {
   pane: 'left' | 'right';
@@ -29,6 +30,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
   onNavigate,
   defaultSearchEngine,
 }) => {
+  const { t } = useTranslation();
   const [inputValue, setInputValue] = useState(
     tab.url === 'freedom://newtab' ? '' : tab.url
   );
@@ -66,7 +68,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             onBack(tab.id);
           }}
           className="p-1 rounded-md hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-neutral-300 hover:text-white transition-colors"
-          title="Back"
+          title={t('nav.back')}
         >
           <ArrowLeft className="w-3.5 h-3.5" />
         </button>
@@ -78,7 +80,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             onForward(tab.id);
           }}
           className="p-1 rounded-md hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-neutral-300 hover:text-white transition-colors"
-          title="Forward"
+          title={t('nav.forward')}
         >
           <ArrowRight className="w-3.5 h-3.5" />
         </button>
@@ -89,7 +91,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             onReload(tab.id);
           }}
           className="p-1 rounded-md hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
-          title="Reload"
+          title={t('nav.reload')}
         >
           <RotateCcw
             className={`w-3.5 h-3.5 ${
@@ -130,7 +132,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             onSelect();
           }}
           onBlur={() => setIsFocused(false)}
-          placeholder="Search or enter URL..."
+          placeholder={t('split.searchPlaceholder')}
           className="w-full bg-transparent text-xs text-white placeholder-neutral-500 focus:outline-none truncate font-sans"
           spellCheck={false}
           autoComplete="off"
@@ -142,7 +144,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
         {isActive ? (
           <span className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/30">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Active
+            {t('split.active')}
           </span>
         ) : (
           <button
@@ -152,9 +154,9 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
               onSelect();
             }}
             className="text-[10px] font-mono text-neutral-400 hover:text-white px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors"
-            title="Click to activate pane"
+            title={t('split.focusTooltip')}
           >
-            Focus
+            {t('split.focus')}
           </button>
         )}
 
@@ -165,7 +167,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             onClose();
           }}
           className="p-1 rounded-md text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-          title={`Close ${pane} pane`}
+          title={t('split.closePane', { pane: pane === 'left' ? t('split.leftPane') : t('split.rightPane') })}
         >
           <X className="w-3.5 h-3.5" />
         </button>

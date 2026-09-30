@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bookmark, BookmarkFolder } from '../browser/types';
 import { BookmarkService } from '../services/bookmarkService';
+import { useTranslation } from '../i18n';
 import {
   Bookmark as BookmarkIcon,
   X,
@@ -26,6 +27,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
   onClose,
   onNavigate,
 }) => {
+  const { t } = useTranslation();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
@@ -124,7 +126,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-neutral-950/80">
         <div className="flex items-center gap-2.5">
           <BookmarkIcon className="w-4 h-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold text-white tracking-wide">Bookmarks Manager</h2>
+          <h2 className="text-sm font-semibold text-white tracking-wide">{t('bookmarks.title')}</h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
             Ctrl+D
           </span>
@@ -146,7 +148,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search bookmarks..."
+            placeholder={t('bookmarks.searchPlaceholder')}
             className="w-full bg-transparent text-xs text-white placeholder-neutral-500 focus:outline-none"
           />
           {searchQuery && (
@@ -172,7 +174,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                   : 'bg-neutral-800/60 text-neutral-400 hover:text-white'
               }`}
             >
-              All
+              {t('bookmarks.all')}
             </button>
             {folders.map((f) => (
               <div key={f.id} className="relative group/fld flex items-center">
@@ -192,7 +194,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                   <button
                     type="button"
                     onClick={(e) => handleDeleteFolder(f.id, e)}
-                    title="Delete folder"
+                    title={t('bookmarks.deleteFolder')}
                     className="ml-0.5 p-1 rounded hover:bg-neutral-800 text-neutral-500 hover:text-red-400"
                   >
                     <X className="w-2.5 h-2.5" />
@@ -205,7 +207,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
           <button
             type="button"
             onClick={() => setIsCreatingFolder(!isCreatingFolder)}
-            title="Create new folder"
+            title={t('bookmarks.createFolder')}
             className="p-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 text-neutral-400 hover:text-emerald-400 shrink-0 transition-colors"
           >
             <FolderPlus className="w-3.5 h-3.5" />
@@ -219,7 +221,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
               type="text"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
-              placeholder="Folder name..."
+              placeholder={t('bookmarks.folderNamePlaceholder')}
               className="flex-1 px-3 py-1.5 rounded-lg bg-neutral-950 border border-white/15 text-xs text-white focus:outline-none focus:border-emerald-500"
               autoFocus
             />
@@ -227,7 +229,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
               type="submit"
               className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium"
             >
-              Add
+              {t('bookmarks.add')}
             </button>
           </form>
         )}
@@ -237,7 +239,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
       {editingBookmark && (
         <div className="p-4 bg-neutral-950 border-b border-white/10 space-y-3 animate-fade-in text-xs">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-white">Edit Bookmark</span>
+            <span className="font-semibold text-white">{t('bookmarks.editBookmark')}</span>
             <button
               type="button"
               onClick={() => setEditingBookmark(null)}
@@ -248,7 +250,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
           </div>
           <form onSubmit={handleSaveEdit} className="space-y-2">
             <div>
-              <label className="text-[10px] text-neutral-400 uppercase font-mono">Title</label>
+              <label className="text-[10px] text-neutral-400 uppercase font-mono">{t('bookmarks.fieldTitle')}</label>
               <input
                 type="text"
                 value={editTitle}
@@ -258,7 +260,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
               />
             </div>
             <div>
-              <label className="text-[10px] text-neutral-400 uppercase font-mono">URL</label>
+              <label className="text-[10px] text-neutral-400 uppercase font-mono">{t('bookmarks.fieldUrl')}</label>
               <input
                 type="url"
                 value={editUrl}
@@ -268,7 +270,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
               />
             </div>
             <div>
-              <label className="text-[10px] text-neutral-400 uppercase font-mono">Folder</label>
+              <label className="text-[10px] text-neutral-400 uppercase font-mono">{t('bookmarks.fieldFolder')}</label>
               <select
                 value={editFolderId}
                 onChange={(e) => setEditFolderId(e.target.value)}
@@ -287,13 +289,13 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                 onClick={() => setEditingBookmark(null)}
                 className="px-3 py-1.5 rounded-lg bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
               >
-                Cancel
+                {t('bookmarks.cancel')}
               </button>
               <button
                 type="submit"
                 className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium"
               >
-                Save Changes
+                {t('bookmarks.saveChanges')}
               </button>
             </div>
           </form>
@@ -306,9 +308,9 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
           <div className="flex flex-col items-center justify-center h-64 text-center text-neutral-500 space-y-3">
             <BookmarkIcon className="w-10 h-10 stroke-[1.5] text-neutral-600" />
             <div>
-              <p className="text-sm font-medium text-neutral-400">No bookmarks yet</p>
+              <p className="text-sm font-medium text-neutral-400">{t('bookmarks.noBookmarks')}</p>
               <p className="text-xs text-neutral-600 mt-1 max-w-xs">
-                Press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 font-mono text-[10px]">Ctrl+D</kbd> on any web page to bookmark it.
+                {t('bookmarks.shortcutTip')}
               </p>
             </div>
           </div>
@@ -347,7 +349,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                 <button
                   type="button"
                   onClick={(e) => handleStartEdit(bookmark, e)}
-                  title="Edit bookmark"
+                  title={t('bookmarks.editTooltip')}
                   className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-neutral-400 hover:text-white hover:bg-white/10 transition-all"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -355,7 +357,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                 <button
                   type="button"
                   onClick={(e) => handleDeleteBookmark(bookmark.id, e)}
-                  title="Delete bookmark"
+                  title={t('bookmarks.deleteTooltip')}
                   className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-neutral-400 hover:text-red-400 hover:bg-white/10 transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

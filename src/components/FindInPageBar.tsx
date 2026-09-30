@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { ChevronUp, ChevronDown, X, Search } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface FindInPageBarProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
   searchText,
   setSearchText,
 }) => {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
       id="freedom-find-in-page-bar"
       className="absolute top-2 right-4 z-40 flex items-center gap-1.5 px-3 py-1.5 bg-neutral-900/95 backdrop-blur-md border border-emerald-500/30 rounded-xl shadow-2xl text-neutral-200 text-xs animate-fade-in"
       role="search"
-      aria-label="Find in page"
+      aria-label={t('find.placeholder')}
     >
       <Search className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
       <input
@@ -67,7 +69,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
         value={searchText}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        placeholder="Find in page..."
+        placeholder={t('find.placeholder')}
         className="w-40 sm:w-52 bg-transparent text-xs text-white placeholder-neutral-500 focus:outline-none"
         spellCheck={false}
       />
@@ -87,7 +89,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
           type="button"
           onClick={() => onFind(searchText, false, true)}
           disabled={!searchText || numberOfMatches === 0}
-          title="Previous match (Shift+Enter)"
+          title={t('find.previous')}
           className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
         >
           <ChevronUp className="w-3.5 h-3.5" />
@@ -98,7 +100,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
           type="button"
           onClick={() => onFind(searchText, true, true)}
           disabled={!searchText || numberOfMatches === 0}
-          title="Next match (Enter)"
+          title={t('find.next')}
           className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
         >
           <ChevronDown className="w-3.5 h-3.5" />
@@ -108,7 +110,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
         <button
           type="button"
           onClick={onClose}
-          title="Close (Esc)"
+          title={t('find.close')}
           className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
         >
           <X className="w-3.5 h-3.5" />

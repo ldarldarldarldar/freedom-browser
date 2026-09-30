@@ -21,6 +21,7 @@ import { THEME_PRESETS } from '../settings/themePresets';
 import { logger } from '../services/loggerService';
 import { tauriBridge } from '../services/tauriBridge';
 import freenImg from '../assets/freen-mascot.png';
+import { useTranslation, TranslationKey } from '../i18n';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSettings,
   onClearBrowsingData,
 }) => {
+  const { t, language, setLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('performance');
   const [dataCleared, setDataCleared] = useState(false);
   const [viewingLogs, setViewingLogs] = useState(false);
@@ -167,7 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex items-center gap-2.5">
             <Settings className="w-5 h-5 text-emerald-400" />
             <h2 className="text-base font-semibold text-white tracking-wide">
-              Freedom Settings
+              {t('settings.title')}
             </h2>
           </div>
           <button
@@ -201,7 +203,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Zap className="w-4 h-4 text-emerald-400" />
-              <span>Browser Mode & RAM</span>
+              <span>{t('settings.tabPerformance')}</span>
             </button>
 
             <button
@@ -214,7 +216,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Palette className="w-4 h-4 text-emerald-400" />
-              <span>Themes & Appearance</span>
+              <span>{t('settings.tabVisual')}</span>
             </button>
 
             <button
@@ -227,7 +229,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Settings className="w-4 h-4 text-emerald-400" />
-              <span>Main & Engine</span>
+              <span>{t('settings.tabMain')}</span>
             </button>
 
             <button
@@ -240,7 +242,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Shield className="w-4 h-4 text-emerald-400" />
-              <span>Privacy & Security</span>
+              <span>{t('settings.tabPrivacy')}</span>
             </button>
 
             <button
@@ -253,7 +255,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               }`}
             >
               <Activity className="w-4 h-4 text-emerald-400" />
-              <span>Zero-Telemetry</span>
+              <span>{t('settings.tabTelemetry')}</span>
             </button>
           </div>
 
@@ -264,10 +266,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-6 animate-fade-in">
                 <div>
                   <h3 className="text-base font-semibold text-white mb-1">
-                    Browser Performance Mode
+                    {t('settings.perfTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400 leading-relaxed">
-                    Select the operational mode for Freedom Browser. This dynamically adjusts rendering pipelines, memory reclamation, and background tasks.
+                    {t('settings.perfDesc')}
                   </p>
                 </div>
 
@@ -286,27 +288,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center gap-2">
                         <Zap className="w-5 h-5 text-emerald-400" />
                         <span className="font-semibold text-white text-sm">
-                          PERFORMANCE
+                          {t('settings.modePerformance')}
                         </span>
                       </div>
                       {settings.browserMode === 'performance' && (
                         <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500 text-black font-bold">
-                          ACTIVE
+                          {t('settings.activeBadge')}
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] text-neutral-400 leading-relaxed mb-3">
-                      Maximum speed and lowest RAM usage. Disables animated starfield, heavy transitions, and blur. Suspends inactive tabs aggressively.
+                      {t('settings.modePerformanceDesc')}
                     </p>
                     <ul className="text-[10px] font-mono text-neutral-300 space-y-1">
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> Target ~300 MB idle baseline
+                        <Check className="w-3 h-3" /> {t('settings.modePerfItem1')}
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> Zero background canvas loops
+                        <Check className="w-3 h-3" /> {t('settings.modePerfItem2')}
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> Inactive tabs hibernated after 5m
+                        <Check className="w-3 h-3" /> {t('settings.modePerfItem3')}
                       </li>
                     </ul>
                   </div>
@@ -324,27 +326,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-emerald-400" />
                         <span className="font-semibold text-white text-sm">
-                          QUALITY
+                          {t('settings.modeQuality')}
                         </span>
                       </div>
                       {settings.browserMode === 'quality' && (
                         <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500 text-black font-bold">
-                          ACTIVE
+                          {t('settings.activeBadge')}
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] text-neutral-400 leading-relaxed mb-3">
-                      Visually polished experience with GPU-accelerated starscape, smooth transitions, custom background image, and optimized memory management.
+                      {t('settings.modeQualityDesc')}
                     </p>
                     <ul className="text-[10px] font-mono text-neutral-300 space-y-1">
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> Animated moving starscape
+                        <Check className="w-3 h-3" /> {t('settings.modeQualityItem1')}
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> Custom local wallpaper support
+                        <Check className="w-3 h-3" /> {t('settings.modeQualityItem2')}
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> Smooth UI animations & blurs
+                        <Check className="w-3 h-3" /> {t('settings.modeQualityItem3')}
                       </li>
                     </ul>
                   </div>
@@ -420,29 +422,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-6 animate-fade-in">
                 <div>
                   <h3 className="text-base font-semibold text-white mb-1">
-                    Themes & Color Customization
+                    {t('settings.themesTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400">
-                    Choose from 8 curated theme presets or fine-tune individual interface elements.
+                    {t('settings.themesDesc')}
                   </p>
                 </div>
 
-                {/* 8 Curated Theme Presets */}
+                {/* 10 Curated Theme Presets */}
                 <div>
                   <div className="text-xs font-semibold text-neutral-200 mb-2.5">
-                    Theme Presets
+                    {t('settings.themePresets')}
                   </div>
-                  <div className="grid grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
                     {(Object.keys(THEME_PRESETS) as ThemePresetId[]).map((presetKey) => {
                       const p = THEME_PRESETS[presetKey as keyof typeof THEME_PRESETS];
                       const isSelected = settings.themePreset === presetKey;
+                      const themeName =
+                        presetKey === 'midnight'
+                          ? t('settings.theme.midnight')
+                          : presetKey === 'forest'
+                          ? t('settings.theme.forest')
+                          : presetKey === 'ocean'
+                          ? t('settings.theme.ocean')
+                          : presetKey === 'violet'
+                          ? t('settings.theme.violet')
+                          : presetKey === 'crimson'
+                          ? t('settings.theme.crimson')
+                          : presetKey === 'amber'
+                          ? t('settings.theme.amber')
+                          : presetKey === 'monochrome'
+                          ? t('settings.theme.monochrome')
+                          : presetKey === 'mint'
+                          ? t('settings.theme.mint')
+                          : presetKey === 'midnight-amber'
+                          ? t('settings.theme.midnightAmber')
+                          : presetKey === 'arctic-blue'
+                          ? t('settings.theme.arcticBlue')
+                          : presetKey;
 
                       return (
                         <button
                           key={presetKey}
                           type="button"
                           onClick={() => handlePresetSelect(presetKey)}
-                          className={`flex flex-col p-2.5 rounded-xl border text-left text-xs transition-all relative overflow-hidden ${
+                          className={`flex flex-col p-2.5 rounded-xl border text-left text-xs transition-all relative overflow-hidden cursor-pointer ${
                             isSelected
                               ? 'border-emerald-400 bg-neutral-900/90 shadow-md ring-1 ring-emerald-400/40'
                               : 'border-white/10 bg-neutral-950/60 hover:border-white/20'
@@ -450,11 +474,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         >
                           <div className="flex items-center gap-1.5 mb-2">
                             <span
-                              className="w-3.5 h-3.5 rounded-full border border-white/20"
+                              className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
                               style={{ backgroundColor: p.accentColor }}
                             />
-                            <span className="font-semibold text-white capitalize">
-                              {presetKey}
+                            <span className="font-semibold text-white truncate" title={themeName}>
+                              {themeName}
                             </span>
                           </div>
                           <div className="flex gap-1 h-3 rounded overflow-hidden">
@@ -472,10 +496,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
                   <div>
                     <div className="text-xs font-semibold text-white">
-                      Apply Theme to Background
+                      {t('settings.applyThemeToBg')}
                     </div>
                     <div className="text-[11px] text-neutral-400 mt-0.5">
-                      Apply the selected theme color palette to the main application background and interface surfaces.
+                      {t('settings.applyThemeToBgDesc')}
                     </div>
                   </div>
                   <input
@@ -537,10 +561,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="border-t border-white/10 pt-4 space-y-4">
                   <div>
                     <div className="text-xs font-semibold text-white mb-0.5">
-                      Custom Background Image
+                      {t('settings.customBgImage')}
                     </div>
                     <div className="text-[11px] text-neutral-400">
-                      Stored strictly on your local device. Automatically optimized to prevent RAM bloating.
+                      {t('settings.customBgImageDesc')}
                     </div>
                   </div>
 
@@ -556,19 +580,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-white flex items-center gap-1.5 transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-white flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{settings.customBackgroundImage ? 'Replace Image' : 'Select Local Image'}</span>
+                      <span>{settings.customBackgroundImage ? t('settings.uploadImage') : t('settings.uploadImage')}</span>
                     </button>
 
                     {settings.customBackgroundImage && (
                       <button
                         type="button"
                         onClick={() => onUpdateSettings({ customBackgroundImage: null })}
-                        className="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/30 text-xs font-medium text-red-300 transition-colors"
+                        className="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/30 text-xs font-medium text-red-300 transition-colors cursor-pointer"
                       >
-                        Remove Background
+                        {t('settings.removeImage')}
                       </button>
                     )}
                   </div>
@@ -664,72 +688,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </div>
 
-                {/* Show settings icon on New Tab page Toggle */}
-                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-semibold text-white">
-                      Show settings icon on New Tab page
-                    </div>
-                    <div className="text-[11px] text-neutral-400 mt-0.5">
-                      Displays the quick settings gear shortcut icon on the New Tab start page.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings.showNewTabSettingsIcon)}
-                    onChange={(e) =>
-                      onUpdateSettings({ showNewTabSettingsIcon: e.target.checked })
-                    }
-                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
-                  />
-                </div>
-
-                {/* Show Freedom Icon Toggle */}
-                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-semibold text-white">
-                      Show Freedom Icon
-                    </div>
-                    <div className="text-[11px] text-neutral-400 mt-0.5">
-                      Displays the clickable Freedom logo on the New Tab page to open settings.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings.showFreedomIcon)}
-                    onChange={(e) =>
-                      onUpdateSettings({ showFreedomIcon: e.target.checked })
-                    }
-                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
-                  />
-                </div>
-
                 {/* Individual Visual Feature Toggles */}
                 <div className="border-t border-white/10 pt-4 space-y-3">
                   <div className="text-xs font-semibold text-white mb-2">
-                    Individual Visual Effect Toggles
+                    {t('settings.visualTogglesTitle')}
                   </div>
 
                   {[
                     {
                       key: 'starAnimationEnabled',
-                      label: 'Animated Star Background',
-                      desc: 'Subtle moving particle stars on Black Space theme',
+                      label: t('settings.toggleStars'),
+                      desc: t('settings.toggleStarsDesc'),
                     },
                     {
                       key: 'uiAnimationsEnabled',
-                      label: 'UI Transitions & Animations',
-                      desc: 'Smooth CSS transitions on hover, tab switching, and dialogs',
+                      label: t('settings.toggleTransitions'),
+                      desc: t('settings.toggleTransitionsDesc'),
                     },
                     {
                       key: 'blurEffectsEnabled',
-                      label: 'Backdrop Blur & Glassmorphism',
-                      desc: 'Translucent background blurs behind modal dialogs and address bar',
+                      label: t('settings.toggleBlur'),
+                      desc: t('settings.toggleBlurDesc'),
                     },
                     {
                       key: 'glowEffectsEnabled',
-                      label: 'Neon Accent Glows',
-                      desc: 'Subtle neon box-shadow glows on focused inputs and active tabs',
+                      label: t('settings.toggleGlow'),
+                      desc: t('settings.toggleGlowDesc'),
                     },
                   ].map(({ key, label, desc }) => (
                     <div key={key} className="flex items-center justify-between py-1">
@@ -760,16 +744,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-6 animate-fade-in">
                 <div>
                   <h3 className="text-base font-semibold text-white mb-1">
-                    Main Settings
+                    {t('settings.mainTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400">
-                    Search engine, startup behaviors, and download destinations.
+                    {t('settings.mainDesc')}
                   </p>
+                </div>
+
+                {/* Interface Language Selection */}
+                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 space-y-2">
+                  <div>
+                    <label className="text-xs font-semibold text-white block">
+                      {t('settings.language')}
+                    </label>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      {t('settings.languageDesc')}
+                    </div>
+                  </div>
+                  <select
+                    value={language}
+                    onChange={(e) => {
+                      const newLang = e.target.value as 'en' | 'ru';
+                      setLanguage(newLang);
+                      onUpdateSettings({ language: newLang });
+                    }}
+                    className="w-full max-w-xs bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    <option value="en">{t('settings.langEnglish')}</option>
+                    <option value="ru">{t('settings.langRussian')}</option>
+                  </select>
                 </div>
 
                 <div>
                   <label className="text-xs font-semibold text-neutral-200 block mb-1.5">
-                    Default Search Engine
+                    {t('settings.defaultSearchEngine')}
                   </label>
                   <select
                     value={settings.defaultSearchEngine}
@@ -778,7 +786,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         defaultSearchEngine: e.target.value as BrowserSettings['defaultSearchEngine'],
                       })
                     }
-                    className="w-full max-w-xs bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    className="w-full max-w-xs bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     {SEARCH_ENGINES.map((engine) => (
                       <option key={engine.id} value={engine.id}>
@@ -790,7 +798,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div>
                   <label className="text-xs font-semibold text-neutral-200 block mb-1.5">
-                    Downloads Directory
+                    {t('settings.downloadsDirectory')}
                   </label>
                   <div className="flex items-center gap-2 max-w-md">
                     <input
@@ -804,40 +812,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => tauriBridge.openDownloadFolder(settings.downloadsLocation)}
-                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 hover:text-white transition-colors shrink-0"
-                      title="Open in System File Manager"
+                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer"
+                      title={t('settings.openInFileManager')}
                     >
-                      Open
+                      {t('settings.open')}
                     </button>
                   </div>
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    Files downloaded by Freedom will be saved here natively.
+                    {t('settings.downloadsDirectoryDesc')}
                   </p>
-                </div>
-
-                {/* New Tab Page Section */}
-                <div className="border-t border-white/10 pt-4">
-                  <h4 className="text-xs font-semibold text-neutral-200 mb-2">
-                    New Tab Page
-                  </h4>
-                  <div className="flex items-center justify-between py-1.5">
-                    <div>
-                      <div className="text-xs text-neutral-200 font-medium">
-                        Show settings icon on New Tab page
-                      </div>
-                      <div className="text-[11px] text-neutral-400">
-                        Display the quick settings gear shortcut icon on the New Tab start page
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(settings.showNewTabSettingsIcon)}
-                      onChange={(e) =>
-                        onUpdateSettings({ showNewTabSettingsIcon: e.target.checked })
-                      }
-                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
-                    />
-                  </div>
                 </div>
               </div>
             )}
@@ -847,19 +830,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-6 animate-fade-in">
                 <div>
                   <h3 className="text-base font-semibold text-white mb-1">
-                    Privacy & Sandboxing
+                    {t('settings.privacyTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400">
-                    Standard strict isolation with zero tracking.
+                    {t('settings.privacyDesc')}
                   </p>
                 </div>
 
                 <div className="space-y-3">
                   {[
-                    { key: 'doNotTrack', label: 'Send Do Not Track header' },
-                    { key: 'blockThirdPartyCookies', label: 'Block third-party tracking cookies' },
-                    { key: 'popupsBlocked', label: 'Block unsolicited popup windows' },
-                    { key: 'clearBrowsingDataOnExit', label: 'Clear all session cookies on browser exit' },
+                    { key: 'doNotTrack', label: t('settings.doNotTrack') },
+                    { key: 'blockThirdPartyCookies', label: t('settings.blockThirdParty') },
+                    { key: 'popupsBlocked', label: t('settings.blockPopups') },
+                    { key: 'clearBrowsingDataOnExit', label: t('settings.clearOnExit') },
                   ].map(({ key, label }) => (
                     <div key={key} className="flex items-center justify-between py-1.5">
                       <span className="text-xs text-neutral-200 font-medium">{label}</span>
@@ -883,9 +866,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       setDataCleared(true);
                       setTimeout(() => setDataCleared(false), 2500);
                     }}
-                    className="px-4 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/30 text-xs text-red-300 font-medium transition-colors"
+                    className="px-4 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/30 text-xs text-red-300 font-medium transition-colors cursor-pointer"
                   >
-                    {dataCleared ? 'Cleared Successfully!' : 'Clear All Browsing Data & Local Storage'}
+                    {dataCleared ? t('settings.clearedSuccess') : t('settings.clearAllData')}
                   </button>
                 </div>
               </div>
@@ -896,10 +879,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-6 animate-fade-in">
                 <div>
                   <h3 className="text-base font-semibold text-white mb-1">
-                    Zero-Telemetry Guarantee
+                    {t('settings.telemetryTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400 leading-relaxed">
-                    Freedom Browser strictly contains 0 analytics SDKs, 0 tracking beacons, and 0 remote reporting endpoints.
+                    {t('settings.telemetryDesc')}
                   </p>
                 </div>
 
@@ -907,10 +890,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs font-semibold text-white">
-                        Local Diagnostic Logs
+                        {t('settings.diagnosticLogs')}
                       </div>
                       <div className="text-[11px] text-neutral-400 mt-1 max-w-md">
-                        Stored strictly locally on your filesystem. Never transmitted externally.
+                        {t('settings.diagnosticLogsDesc')}
                       </div>
                     </div>
                     <button
@@ -920,7 +903,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onUpdateSettings({ localDiagnosticLogs: nextVal });
                         logger.setLoggingEnabled(nextVal);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer ${
                         settings.localDiagnosticLogs
                           ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
                           : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
@@ -935,14 +918,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="space-y-3 pt-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-neutral-300">
-                        Local Diagnostic Events ({logs.length})
+                        {t('settings.diagnosticEvents', { count: logs.length })}
                       </span>
                       <button
                         type="button"
                         onClick={() => logger.clearLogs()}
-                        className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] text-neutral-300"
+                        className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] text-neutral-300 cursor-pointer"
                       >
-                        Clear Events
+                        {t('settings.clearEvents')}
                       </button>
                     </div>
 
@@ -955,7 +938,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </div>
                         ))
                       ) : (
-                        <div className="text-neutral-500 italic">No events recorded.</div>
+                        <div className="text-neutral-500 italic">{t('settings.noEvents')}</div>
                       )}
                     </div>
                   </div>

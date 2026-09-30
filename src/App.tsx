@@ -26,6 +26,7 @@ import { ZoomService } from './services/zoomService';
 import { TabSortService, TabSortMode } from './services/tabSortService';
 import { FaviconService } from './services/faviconService';
 import { SplitViewService, SplitViewState } from './services/splitViewService';
+import { I18nProvider } from './i18n';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
@@ -511,6 +512,7 @@ export default function App() {
 
       const domain = SearchEngineService.extractDomain(url);
       const isInternal = url.startsWith('freedom://');
+      const isNewTab = url === 'freedom://newtab';
 
       if (url === 'freedom://settings') {
         tauriBridge.hideNativeWebviews();
@@ -532,6 +534,17 @@ export default function App() {
         return;
       }
 
+      // If tab is already on New Tab page, clicking Home keeps title as 'New Tab' without redundant reload
+      const currentTab = tabs.find((t) => t.id === destId);
+      if (isNewTab && currentTab && currentTab.url === 'freedom://newtab') {
+        if (currentTab.title !== 'New Tab') {
+          setTabs((prev) =>
+            prev.map((t) => (t.id === destId ? { ...t, title: 'New Tab', displayUrl: 'freedom://newtab' } : t))
+          );
+        }
+        return;
+      }
+
       if (isInternal) {
         tauriBridge.hideNativeWebviews();
       } else {
@@ -547,7 +560,7 @@ export default function App() {
               ...t,
               url,
               displayUrl: url,
-              title: isInternal ? 'Freedom Tab' : domain,
+              title: isNewTab ? 'New Tab' : isInternal ? 'Freedom Tab' : domain,
               isLoading: !isInternal,
               isSuspended: false,
               isCrashed: false,
@@ -565,7 +578,7 @@ export default function App() {
       );
       logger.log('INFO', 'NETWORK', `Navigated tab ${destId} to ${url}`);
     },
-    [activeTab]
+    [activeTab, tabs]
   );
 
   const handleBack = useCallback(() => {
@@ -940,7 +953,10 @@ export default function App() {
           if (t.id === tabId) {
             const url = data.url;
             const isInternal = url.startsWith('freedom://');
-            const title = data.title || t.title || (isInternal ? 'Freedom Tab' : SearchEngineService.extractDomain(url));
+            const isNewTab = url === 'freedom://newtab';
+            const title = isNewTab
+              ? 'New Tab'
+              : data.title || t.title || (isInternal ? 'Freedom Tab' : SearchEngineService.extractDomain(url));
             const favicon = data.favicon || t.favicon || (isInternal ? '' : FaviconService.getFaviconSync(url));
 
             // Record history for external pages
@@ -971,8 +987,9 @@ export default function App() {
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id === tabId) {
-          HistoryService.updateEntryTitleAndFavicon(t.url, title, undefined);
-          return { ...t, title };
+          const finalTitle = t.url === 'freedom://newtab' ? 'New Tab' : title;
+          HistoryService.updateEntryTitleAndFavicon(t.url, finalTitle, undefined);
+          return { ...t, title: finalTitle };
         }
         return t;
       })
@@ -1379,8 +1396,14 @@ export default function App() {
   };
 
   return (
-    <div
-      id="freedom-browser-app"
+    <I18nProvider
+      currentLanguage={settings.language}
+      onLanguageChange={(newLang) =>
+        setSettings((prev) => ({ ...prev, language: newLang }))
+      }
+    >
+      <div
+        id="freedom-browser-app"
       className={`relative flex flex-col h-screen w-screen overflow-hidden text-white font-sans select-none ${
         isPerformanceMode || !settings.uiAnimationsEnabled ? 'performance-mode' : ''
       }`}
@@ -1639,5 +1662,6 @@ export default function App() {
       {/* Freedom Mascot: Freen in bottom-right corner */}
       <FreenMascot enabled={settings.showFreenMascot} />
     </div>
+    </I18nProvider>
   );
 }

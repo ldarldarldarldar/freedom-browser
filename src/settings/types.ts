@@ -25,6 +25,8 @@ export type ThemePresetId =
   | 'amber'
   | 'monochrome'
   | 'mint'
+  | 'midnight-amber'
+  | 'arctic-blue'
   | 'custom';
 
 export interface ThemePalette {
@@ -104,8 +106,8 @@ export interface BrowserSettings {
 
   // Mascot & UI Badges
   showFreenMascot: boolean;
-  showNewTabSettingsIcon: boolean;
-  showFreedomIcon: boolean;
+  showNewTabSettingsIcon?: boolean;
+  showFreedomIcon?: boolean;
 
   // Custom Background Image
   customBackgroundImage: string | null;

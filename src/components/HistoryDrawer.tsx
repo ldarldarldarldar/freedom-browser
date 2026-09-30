@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HistoryItem } from '../browser/types';
 import { HistoryService, HistoryGroup } from '../services/historyService';
+import { useTranslation } from '../i18n';
 import {
   History as HistoryIcon,
   X,
@@ -23,6 +24,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   onClose,
   onNavigate,
 }) => {
+  const { t } = useTranslation();
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -86,7 +88,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-neutral-950/80">
         <div className="flex items-center gap-2.5">
           <HistoryIcon className="w-4 h-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold text-white tracking-wide">Browsing History</h2>
+          <h2 className="text-sm font-semibold text-white tracking-wide">{t('history.title')}</h2>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
             Ctrl+H
           </span>
@@ -108,7 +110,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search history..."
+            placeholder={t('history.searchPlaceholder')}
             className="w-full bg-transparent text-xs text-white placeholder-neutral-500 focus:outline-none"
             autoFocus
           />
@@ -126,7 +128,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
         {/* Clear Actions */}
         <div className="flex items-center justify-between pt-1 text-xs">
           <span className="text-[11px] text-neutral-400 font-mono">
-            {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+            {filtered.length} {filtered.length === 1 ? t('history.entry') : t('history.entries')}
           </span>
           {history.length > 0 && (
             <div className="flex items-center gap-2">
@@ -136,7 +138,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                 className="text-[11px] text-neutral-400 hover:text-red-400 flex items-center gap-1 transition-colors"
               >
                 <Trash2 className="w-3 h-3" />
-                <span>Clear...</span>
+                <span>{t('history.clear')}</span>
               </button>
             </div>
           )}
@@ -145,28 +147,28 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
         {/* Clear Options Confirmation Dropdown */}
         {showClearConfirm && (
           <div className="p-3 rounded-xl bg-neutral-950 border border-red-500/20 space-y-2 animate-fade-in text-xs">
-            <p className="text-[11px] text-neutral-300 font-medium">Select history range to clear:</p>
+            <p className="text-[11px] text-neutral-300 font-medium">{t('history.selectRange')}</p>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={handleClearRecent}
                 className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] transition-colors"
               >
-                Last hour
+                {t('history.lastHour')}
               </button>
               <button
                 type="button"
                 onClick={handleClearToday}
                 className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] transition-colors"
               >
-                Today
+                {t('history.today')}
               </button>
               <button
                 type="button"
                 onClick={handleClearAll}
                 className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 border border-red-500/30 text-red-300 text-[11px] font-medium transition-colors"
               >
-                All History
+                {t('history.allHistory')}
               </button>
             </div>
           </div>
@@ -180,12 +182,12 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
             <Clock className="w-10 h-10 stroke-[1.5] text-neutral-600" />
             <div>
               <p className="text-sm font-medium text-neutral-400">
-                {searchQuery ? 'No matching history found' : 'No browsing history yet'}
+                {searchQuery ? t('history.noMatches') : t('history.noHistory')}
               </p>
               <p className="text-xs text-neutral-600 mt-1 max-w-xs">
                 {searchQuery
-                  ? 'Try searching with another keyword or URL.'
-                  : 'Pages you visit during normal browsing will be recorded here.'}
+                  ? t('history.noMatchesTip')
+                  : t('history.noHistoryTip')}
               </p>
             </div>
           </div>
@@ -235,7 +237,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleDeleteItem(item.id, e)}
-                        title="Delete from history"
+                        title={t('history.deleteEntry')}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-neutral-400 hover:text-red-400 hover:bg-white/10 transition-all"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

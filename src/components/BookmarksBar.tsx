@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bookmark } from '../browser/types';
 import { Globe, Folder } from 'lucide-react';
+import { useTranslation } from '../i18n';
 
 interface BookmarksBarProps {
   bookmarks: Bookmark[];
@@ -13,6 +14,7 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
   onNavigate,
   onOpenBookmarksManager,
 }) => {
+  const { t } = useTranslation();
   const barBookmarks = bookmarks.filter((b) => b.folderId === 'bar' || !b.folderId);
   const otherBookmarks = bookmarks.filter((b) => b.folderId === 'other');
 
@@ -53,11 +55,11 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
         <button
           type="button"
           onClick={onOpenBookmarksManager}
-          title="Other Bookmarks"
+          title={t('bookmarks.otherBookmarks')}
           className="flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white ml-auto shrink-0 transition-colors"
         >
           <Folder className="w-3 h-3 text-emerald-400" />
-          <span className="text-[11px]">Other Bookmarks ({otherBookmarks.length})</span>
+          <span className="text-[11px]">{t('bookmarks.otherBookmarks')} ({otherBookmarks.length})</span>
         </button>
       )}
     </div>

@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { DownloadItem } from '../browser/types';
+import { useTranslation } from '../i18n';
 
 interface DownloadDrawerProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
   onOpenFolder,
   onRemoveItem,
 }) => {
+  const { t } = useTranslation();
   if (!isOpen) return null;
 
   const formatSize = (bytes: number) => {
@@ -103,11 +105,11 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
             <Download className="w-3.5 h-3.5" />
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-white tracking-wide">Downloads</h3>
+            <h3 className="text-xs font-semibold text-white tracking-wide">{t('downloads.title')}</h3>
             <span className="text-[10px] text-neutral-400">
-              {downloads.filter((d) => d.state === 'completed').length} completed
+              {t('downloads.completedCount', { count: downloads.filter((d) => d.state === 'completed').length })}
               {downloads.filter((d) => d.state === 'progressing').length > 0 &&
-                ` • ${downloads.filter((d) => d.state === 'progressing').length} active`}
+                ` • ${t('downloads.activeCount', { count: downloads.filter((d) => d.state === 'progressing').length })}`}
             </span>
           </div>
         </div>
@@ -116,7 +118,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
             type="button"
             onClick={onOpenFolder}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="Open System Downloads Folder"
+            title={t('downloads.openSystemFolder')}
           >
             <FolderOpen className="w-4 h-4" />
           </button>
@@ -124,7 +126,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="Close"
+            title={t('downloads.close')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -138,8 +140,8 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
             <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-neutral-800/40 border border-white/5 flex items-center justify-center">
               <Download className="w-5 h-5 text-neutral-500 opacity-60" />
             </div>
-            <p className="font-medium text-neutral-300 mb-0.5">No Downloads Yet</p>
-            <p className="text-[11px] text-neutral-500">Files you download will appear here.</p>
+            <p className="font-medium text-neutral-300 mb-0.5">{t('downloads.noDownloads')}</p>
+            <p className="text-[11px] text-neutral-500">{t('downloads.noDownloadsTip')}</p>
           </div>
         ) : (
           downloads.map((item) => {
@@ -182,7 +184,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
 
                         {item.state === 'completed' && (
                           <span className="text-emerald-400 font-medium flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3 inline" /> Completed
+                            <CheckCircle className="w-3 h-3 inline" /> {t('downloads.statusCompleted')}
                           </span>
                         )}
 
@@ -193,12 +195,12 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                         )}
 
                         {item.state === 'cancelled' && (
-                          <span className="text-neutral-500">Cancelled</span>
+                          <span className="text-neutral-500">{t('downloads.statusCancelled')}</span>
                         )}
 
                         {item.state === 'interrupted' && (
                           <span className="text-red-400 flex items-center gap-0.5">
-                            <AlertCircle className="w-3 h-3 inline" /> Failed
+                            <AlertCircle className="w-3 h-3 inline" /> {t('downloads.statusFailed')}
                           </span>
                         )}
                       </div>
@@ -213,7 +215,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                             type="button"
                             onClick={() => onOpenFile(item)}
                             className="p-1.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                            title="Open file"
+                            title={t('downloads.openFile')}
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </button>
@@ -222,7 +224,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                               type="button"
                               onClick={() => onShowInFolder(item)}
                               className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
-                              title="Show in folder"
+                              title={t('downloads.showInFolder')}
                             >
                               <Folder className="w-3.5 h-3.5" />
                             </button>
@@ -235,7 +237,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                           type="button"
                           onClick={() => onCancelDownload(item.id)}
                           className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Cancel download"
+                          title={t('downloads.cancelDownload')}
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -247,7 +249,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                           type="button"
                           onClick={() => onRemoveItem(item.id)}
                           className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-white/10 transition-all"
-                          title="Remove from list (keeps file on disk)"
+                          title={t('downloads.removeFromList')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -279,7 +281,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
             className="text-neutral-400 hover:text-white flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-white/5 transition-colors"
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            <span>Open folder</span>
+            <span>{t('downloads.openFolder')}</span>
           </button>
 
           <button
@@ -288,7 +290,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
             className="text-neutral-400 hover:text-red-400 flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
           >
             <Trash2 className="w-3 h-3" />
-            <span>Clear list</span>
+            <span>{t('downloads.clearList')}</span>
           </button>
         </div>
       )}

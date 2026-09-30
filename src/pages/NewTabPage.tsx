@@ -6,6 +6,7 @@ import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { FaviconService } from '../services/faviconService';
 import { FavoritesService, NewTabFavorite } from '../services/favoritesService';
+import { useTranslation } from '../i18n';
 
 interface NewTabPageProps {
   onNavigate: (url: string) => void;
@@ -23,9 +24,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   palette,
   isPerformanceMode = false,
   onOpenSettings,
-  showSettingsIcon = true,
-  showFreedomIcon = true,
 }) => {
+  const { t, language } = useTranslation();
   const [query, setQuery] = useState('');
   const [time, setTime] = useState<string>('');
   const [date, setDate] = useState<string>('');
@@ -46,7 +46,11 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
       );
       setDate(
-        now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+        now.toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        })
       );
     };
     updateTime();
@@ -54,7 +58,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
     const timerInterval = isPerformanceMode ? 30000 : 1000;
     const timer = setInterval(updateTime, timerInterval);
     return () => clearInterval(timer);
-  }, [isPerformanceMode]);
+  }, [isPerformanceMode, language]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,13 +110,13 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
 
   return (
     <div className="relative flex flex-col items-center justify-center min-h-full px-4 py-8 text-neutral-200 select-none z-10">
-      {/* Settings Shortcut Button on New Tab (conditionally rendered / unmounted if disabled) */}
-      {showSettingsIcon && onOpenSettings && (
+      {/* Settings Shortcut Button on New Tab (permanently visible and functional in the top-right corner) */}
+      {onOpenSettings && (
         <button
           type="button"
           onClick={onOpenSettings}
-          title="Open Settings"
-          aria-label="Open Settings"
+          title={t('newtab.openSettings')}
+          aria-label={t('newtab.openSettings')}
           className="absolute top-5 right-6 p-2.5 rounded-xl bg-neutral-900/60 hover:bg-neutral-800/80 border border-white/10 hover:border-emerald-500/40 text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95 group z-20"
         >
           <Settings className="w-4 h-4 transition-transform duration-200 group-hover:rotate-45 text-neutral-300 group-hover:text-white" />
@@ -133,35 +137,33 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       </div>
 
       {/* Freedom Brand Header - clicking logo/icon opens Settings */}
-      {showFreedomIcon && (
-        <div className="flex flex-col items-center mb-8">
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            title="Open Settings"
-            aria-label="Open Settings"
-            className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-2xl p-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
-          >
-            <FreedomLogo size={64} className="mb-3 transition-transform group-hover:brightness-110" />
-            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              <span>FREEDOM</span>
-            </h1>
-          </button>
-          <p className="text-xs text-neutral-400 mt-1 font-mono flex items-center gap-3">
-            <span className="flex items-center gap-1" style={{ color: accent }}>
-              <Shield className="w-3 h-3" /> Freedom
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1" style={{ color: accent }}>
-              <Code2 className="w-3 h-3" /> Programming
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1" style={{ color: accent }}>
-              <Zap className="w-3 h-3" /> Speed
-            </span>
-          </p>
-        </div>
-      )}
+      <div className="flex flex-col items-center mb-8">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title={t('newtab.openSettings')}
+          aria-label={t('newtab.openSettings')}
+          className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-2xl p-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
+        >
+          <FreedomLogo size={64} className="mb-3 transition-transform group-hover:brightness-110" />
+          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <span>FREEDOM</span>
+          </h1>
+        </button>
+        <p className="text-xs text-neutral-400 mt-1 font-mono flex items-center gap-3">
+          <span className="flex items-center gap-1" style={{ color: accent }}>
+            <Shield className="w-3 h-3" /> {t('newtab.brandFreedom')}
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1" style={{ color: accent }}>
+            <Code2 className="w-3 h-3" /> {t('newtab.brandProgramming')}
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1" style={{ color: accent }}>
+            <Zap className="w-3 h-3" /> {t('newtab.brandSpeed')}
+          </span>
+        </p>
+      </div>
 
       {/* Central Clean Search Bar */}
       <form onSubmit={handleSearch} className="w-full max-w-xl mb-10">
@@ -177,7 +179,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search the web or type a URL (${activeEngine.name})...`}
+            placeholder={t('newtab.searchPlaceholder', { engine: activeEngine.name })}
             className="w-full bg-transparent text-sm text-white placeholder-neutral-500 focus:outline-none"
             autoFocus
             spellCheck={false}
@@ -192,7 +194,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
               color: accent,
             }}
           >
-            Enter
+            {t('newtab.enter')}
           </button>
         </div>
       </form>
@@ -201,14 +203,14 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       <div className="w-full max-w-xl">
         <div className={`flex items-center justify-between px-1 ${favorites.length > 0 ? 'mb-4' : ''}`}>
           <span className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
-            Favorites
+            {t('newtab.favorites')}
           </span>
           <button
             type="button"
             onClick={handleOpenAddModal}
             className="p-1.5 rounded-lg bg-neutral-900/80 hover:bg-neutral-800 border border-white/10 hover:border-emerald-500/40 text-neutral-300 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95 flex items-center justify-center"
-            title="Add favorite"
-            aria-label="Add favorite"
+            title={t('newtab.addFavorite')}
+            aria-label={t('newtab.addFavorite')}
           >
             <Plus className="w-3.5 h-3.5 text-emerald-400" />
           </button>
@@ -233,7 +235,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                       type="button"
                       onClick={(e) => handleOpenEditModal(fav, e)}
                       className="p-1 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-white/10 shadow-sm transition-all"
-                      title="Edit favorite"
+                      title={t('newtab.editTooltip')}
                     >
                       <Pencil className="w-3 h-3" />
                     </button>
@@ -241,7 +243,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                       type="button"
                       onClick={(e) => handleDeleteFavorite(fav.id, e)}
                       className="p-1 rounded-lg bg-neutral-900/90 hover:bg-rose-950/90 text-neutral-400 hover:text-rose-400 border border-white/10 hover:border-rose-500/30 shadow-sm transition-all"
-                      title="Remove favorite"
+                      title={t('newtab.removeTooltip')}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -293,7 +295,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           >
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
               <h3 className="text-base font-semibold text-white">
-                {editingFavorite ? 'Edit Favorite' : 'Add New Favorite'}
+                {editingFavorite ? t('newtab.editFavorite') : t('newtab.addNewFavorite')}
               </h3>
               <button
                 type="button"
@@ -307,13 +309,13 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             <form onSubmit={handleSaveFavorite} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                  Site Name (Optional)
+                  {t('newtab.siteName')}
                 </label>
                 <input
                   type="text"
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
-                  placeholder="e.g. GitHub"
+                  placeholder={t('newtab.siteNamePlaceholder')}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/70"
                   autoFocus
                 />
@@ -321,13 +323,13 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                  Web URL
+                  {t('newtab.webUrl')}
                 </label>
                 <input
                   type="text"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="e.g. https://github.com or github.com"
+                  placeholder={t('newtab.webUrlPlaceholder')}
                   required
                   className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/70"
                 />
@@ -339,13 +341,13 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 rounded-xl text-xs font-medium text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {t('newtab.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 rounded-xl text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors cursor-pointer"
                 >
-                  {editingFavorite ? 'Save Changes' : 'Add to Favorites'}
+                  {editingFavorite ? t('newtab.saveChanges') : t('newtab.addToFavorites')}
                 </button>
               </div>
             </form>

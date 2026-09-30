@@ -34,6 +34,7 @@ import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { tauriBridge } from '../services/tauriBridge';
 import { TabSortMode } from '../services/tabSortService';
+import { useTranslation } from '../i18n';
 
 interface NavigationProps {
   currentTab: BrowserTab | undefined;
@@ -96,6 +97,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   isSplitView = false,
   onToggleSplitView,
 }) => {
+  const { t } = useTranslation();
   const [inputValue, setInputValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -156,7 +158,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           onClick={onBack}
           disabled={!currentTab?.canGoBack}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:border-transparent active:scale-95 transition-all"
-          title="Back (Alt+Left)"
+          title={t('nav.back')}
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -166,7 +168,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           onClick={onForward}
           disabled={!currentTab?.canGoForward}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:border-transparent active:scale-95 transition-all"
-          title="Forward (Alt+Right)"
+          title={t('nav.forward')}
         >
           <ArrowRight className="w-4 h-4" />
         </button>
@@ -175,7 +177,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           type="button"
           onClick={currentTab?.isLoading ? onStop : onReload}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
-          title={currentTab?.isLoading ? 'Stop loading (Esc)' : 'Reload page (Ctrl+R)'}
+          title={currentTab?.isLoading ? t('nav.stop') : t('nav.reload')}
         >
           {currentTab?.isLoading ? <X className="w-4 h-4 text-emerald-400" /> : <RotateCcw className="w-4 h-4" />}
         </button>
@@ -184,7 +186,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           type="button"
           onClick={onHome}
           className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
-          title="Open New Tab (Home)"
+          title={t('nav.home')}
         >
           <Home className="w-4 h-4" />
         </button>
@@ -205,7 +207,13 @@ export const Navigation: React.FC<NavigationProps> = ({
               type="button"
               onClick={() => setShowSecurityDetails(!showSecurityDetails)}
               className="mr-2 flex items-center gap-1 text-xs text-neutral-400 hover:text-white transition-colors"
-              title={isSecure ? 'Connection is secure' : 'Not secure'}
+              title={
+                currentTab?.url.startsWith('freedom://')
+                  ? t('nav.securityInternal')
+                  : isSecure
+                  ? t('nav.securitySecure')
+                  : t('nav.securityInsecure')
+              }
             >
               {currentTab?.url.startsWith('freedom://') ? (
                 <Shield className="w-3.5 h-3.5 text-emerald-400" />
@@ -225,7 +233,11 @@ export const Navigation: React.FC<NavigationProps> = ({
               onChange={(e) => setInputValue(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={`Search with ${activeEngine.name} or enter URL...`}
+              placeholder={
+                activeEngine?.name
+                  ? t('nav.searchPlaceholder', { engine: activeEngine.name })
+                  : t('nav.searchPlaceholderEmpty')
+              }
               className="w-full bg-transparent text-xs text-neutral-200 focus:outline-none placeholder-neutral-500"
               spellCheck={false}
               autoComplete="off"
@@ -236,7 +248,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               <button
                 type="button"
                 onClick={onResetZoom}
-                title={`Current Zoom: ${zoomLevel}%. Click to reset to 100% (Ctrl+0)`}
+                title={t('nav.zoomBadge', { zoom: zoomLevel })}
                 className="px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400 bg-neutral-800 hover:bg-neutral-700 transition-colors shrink-0"
               >
                 {zoomLevel}%
@@ -249,7 +261,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 type="button"
                 onClick={() => setInputValue('')}
                 className="p-0.5 text-neutral-500 hover:text-neutral-200 transition-colors"
-                title="Clear address"
+                title={t('nav.clearAddress')}
               >
                 <X className="w-3 h-3" />
               </button>
@@ -260,7 +272,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               <button
                 type="button"
                 onClick={onToggleBookmark}
-                title={isBookmarked ? 'Edit/Remove bookmark (Ctrl+D)' : 'Bookmark this tab (Ctrl+D)'}
+                title={isBookmarked ? t('nav.editBookmarkTab') : t('nav.bookmarkTab')}
                 className={`p-1 rounded-md transition-colors shrink-0 ${
                   isBookmarked
                     ? 'text-emerald-400 hover:text-emerald-300'
@@ -289,26 +301,26 @@ export const Navigation: React.FC<NavigationProps> = ({
           <div className="absolute top-10 left-0 w-80 p-3 rounded-xl bg-neutral-900 border border-emerald-500/30 shadow-2xl z-50 text-xs text-neutral-200">
             <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/10">
               <Shield className="w-4 h-4 text-emerald-400" />
-              <span className="font-semibold">Privacy & Security Guard</span>
+              <span className="font-semibold">{t('nav.guardTitle')}</span>
             </div>
             <div className="space-y-1.5 text-[11px] text-neutral-300">
               <p className="flex justify-between">
-                <span>Encryption:</span>
+                <span>{t('nav.encryption')}</span>
                 <span className="text-emerald-400 font-mono">
-                  {isSecure ? 'TLS 1.3 / Verified' : 'Unencrypted'}
+                  {isSecure ? t('nav.tlsVerified') : t('nav.unencrypted')}
                 </span>
               </p>
               <p className="flex justify-between">
-                <span>Telemetry:</span>
-                <span className="text-emerald-400 font-mono">0% (Strictly Disabled)</span>
+                <span>{t('nav.telemetry')}</span>
+                <span className="text-emerald-400 font-mono">{t('nav.strictlyDisabled')}</span>
               </p>
               <p className="flex justify-between">
-                <span>Third-Party Cookies:</span>
-                <span className="text-emerald-400 font-mono">Blocked</span>
+                <span>{t('nav.cookies')}</span>
+                <span className="text-emerald-400 font-mono">{t('nav.blocked')}</span>
               </p>
               <p className="flex justify-between">
-                <span>Sandbox:</span>
-                <span className="text-emerald-400 font-mono">Process-Isolated</span>
+                <span>{t('nav.sandbox')}</span>
+                <span className="text-emerald-400 font-mono">{t('nav.isolated')}</span>
               </p>
             </div>
           </div>
@@ -328,7 +340,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
                 : 'text-neutral-400 hover:text-white hover:bg-white/5 border-transparent hover:border-white/10'
             }`}
-            title={isSplitView ? 'Exit Split View' : 'Split View (Side-by-Side)'}
+            title={isSplitView ? t('nav.exitSplitView') : t('nav.splitView')}
           >
             <Columns2 className="w-4 h-4" />
           </button>
@@ -341,7 +353,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             type="button"
             onClick={onToggleFind}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
-            title="Find in page (Ctrl+F)"
+            title={t('nav.findInPage')}
           >
             <Search className="w-4 h-4" />
           </button>
@@ -354,7 +366,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             type="button"
             onClick={onOpenBookmarks}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
-            title="Bookmarks Manager"
+            title={t('nav.bookmarks')}
           >
             <BookmarkIcon className="w-4 h-4" />
           </button>
@@ -367,7 +379,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             type="button"
             onClick={onOpenHistory}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
-            title="Browsing History (Ctrl+H)"
+            title={t('nav.historyTooltip')}
           >
             <HistoryIcon className="w-4 h-4" />
           </button>
@@ -379,10 +391,10 @@ export const Navigation: React.FC<NavigationProps> = ({
           type="button"
           onClick={onOpenTaskManager}
           className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs text-neutral-300 hover:text-white hover:bg-white/5 border border-white/5 hover:border-white/10 active:scale-95 transition-all"
-          title="Open Freedom Task Manager (Shift+Esc)"
+          title={t('nav.taskManagerTooltip')}
         >
           <Activity className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="hidden lg:inline text-[11px] font-medium">Task Manager</span>
+          <span className="hidden lg:inline text-[11px] font-medium">{t('nav.taskManagerShort')}</span>
         </button>
 
         {/* Downloads Button */}
@@ -391,7 +403,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           type="button"
           onClick={onOpenDownloads}
           className="relative w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
-          title="Downloads (Ctrl+J)"
+          title={t('nav.downloadsTooltip')}
         >
           <Download className="w-4 h-4" />
           {downloadsCount > 0 && (
@@ -411,7 +423,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               ? 'text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 shadow-sm'
               : 'text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
           }`}
-          title="Developer Tools / Inspector (F12 or Ctrl+Shift+I)"
+          title={t('nav.devToolsTooltip')}
         >
           <Terminal className="w-4 h-4" />
         </button>
@@ -423,7 +435,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             type="button"
             onClick={() => setShowMenu(!showMenu)}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 active:scale-95 transition-all"
-            title="Customize and control Freedom"
+            title={t('nav.mainMenu')}
           >
             <Menu className="w-4 h-4" />
           </button>
@@ -438,7 +450,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 }}
                 className="w-full px-3 py-2 text-left hover:bg-white/10 flex items-center justify-between"
               >
-                <span>New Tab</span>
+                <span>{t('nav.newTab')}</span>
                 <span className="text-[10px] font-mono text-neutral-500">Ctrl+T</span>
               </button>
 
@@ -454,7 +466,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <HistoryIcon className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>History</span>
+                    <span>{t('nav.history')}</span>
                   </div>
                   <span className="text-[10px] font-mono text-neutral-500">Ctrl+H</span>
                 </button>
@@ -472,7 +484,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <BookmarkIcon className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Bookmarks Manager</span>
+                    <span>{t('nav.bookmarksManager')}</span>
                   </div>
                   <span className="text-[10px] font-mono text-neutral-500">Ctrl+D</span>
                 </button>
@@ -490,7 +502,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Search className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Find in Page</span>
+                    <span>{t('nav.findInPage')}</span>
                   </div>
                   <span className="text-[10px] font-mono text-neutral-500">Ctrl+F</span>
                 </button>
@@ -499,12 +511,12 @@ export const Navigation: React.FC<NavigationProps> = ({
               {/* Zoom Controls inside Menu */}
               <div className="my-1 border-t border-white/5" />
               <div className="px-3 py-1.5 flex items-center justify-between">
-                <span className="text-neutral-300">Zoom</span>
+                <span className="text-neutral-300">{t('nav.zoom')}</span>
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={onZoomOut}
-                    title="Zoom Out (Ctrl+-)"
+                    title={t('nav.zoomOut')}
                     className="p-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
                   >
                     <ZoomOut className="w-3 h-3" />
@@ -512,7 +524,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                   <button
                     type="button"
                     onClick={onResetZoom}
-                    title="Reset to 100% (Ctrl+0)"
+                    title={t('nav.resetZoom')}
                     className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 font-mono text-[11px] text-emerald-400 min-w-10 text-center transition-colors"
                   >
                     {zoomLevel}%
@@ -520,7 +532,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                   <button
                     type="button"
                     onClick={onZoomIn}
-                    title="Zoom In (Ctrl++)"
+                    title={t('nav.zoomIn')}
                     className="p-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
                   >
                     <ZoomIn className="w-3 h-3" />
@@ -533,7 +545,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <>
                   <div className="my-1 border-t border-white/5" />
                   <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-                    Sort Tabs
+                    {t('sort.title')}
                   </div>
                   <button
                     type="button"
@@ -544,7 +556,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
                   >
                     <Globe className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Group by Site</span>
+                    <span>{t('sort.groupBySite')}</span>
                   </button>
                   <button
                     type="button"
@@ -555,7 +567,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
                   >
                     <Cpu className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Sort by RAM Usage</span>
+                    <span>{t('sort.byRam')}</span>
                   </button>
                   <button
                     type="button"
@@ -566,7 +578,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
                   >
                     <Copy className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Group Duplicates</span>
+                    <span>{t('sort.groupDuplicates')}</span>
                   </button>
                   <button
                     type="button"
@@ -577,7 +589,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-200 hover:text-white"
                   >
                     <ArrowDownAZ className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Sort by Title (A-Z)</span>
+                    <span>{t('sort.byTitle')}</span>
                   </button>
                 </>
               )}
@@ -595,9 +607,9 @@ export const Navigation: React.FC<NavigationProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Columns2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Split View (Side-by-Side)</span>
+                    <span>{t('nav.splitView')}</span>
                   </div>
-                  <span className="text-[10px] font-mono text-neutral-500">{isSplitView ? 'ACTIVE' : 'OFF'}</span>
+                  <span className="text-[10px] font-mono text-neutral-500">{isSplitView ? t('nav.splitViewActive') : t('nav.splitViewOff')}</span>
                 </button>
               )}
 
@@ -611,7 +623,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Task Manager</span>
+                  <span>{t('nav.taskManager')}</span>
                 </div>
                 <span className="text-[10px] font-mono text-neutral-500">Shift+Esc</span>
               </button>
@@ -626,7 +638,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <Download className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Downloads</span>
+                  <span>{t('nav.downloads')}</span>
                 </div>
                 <span className="text-[10px] font-mono text-neutral-500">Ctrl+J</span>
               </button>
@@ -641,7 +653,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <Terminal className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Developer Tools</span>
+                  <span>{t('nav.devTools')}</span>
                 </div>
                 <span className="text-[10px] font-mono text-neutral-500">F12</span>
               </button>
@@ -657,7 +669,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 className="w-full px-3 py-2 text-left hover:bg-white/10 flex items-center gap-2"
               >
                 <SettingsIcon className="w-3.5 h-3.5 text-neutral-400" />
-                <span>Settings</span>
+                <span>{t('nav.settings')}</span>
               </button>
 
               <button
@@ -669,7 +681,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 className="w-full px-3 py-2 text-left hover:bg-white/10 flex items-center gap-2 text-emerald-400"
               >
                 <Zap className="w-3.5 h-3.5" />
-                <span>About Freedom</span>
+                <span>{t('nav.about')}</span>
               </button>
             </div>
           )}

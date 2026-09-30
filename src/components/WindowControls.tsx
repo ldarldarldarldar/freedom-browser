@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Minus, Square, Copy, X } from 'lucide-react';
 import { tauriBridge, isDesktopEnvironment } from '../services/tauriBridge';
+import { useTranslation } from '../i18n';
 
 export const WindowControls: React.FC = () => {
+  const { t } = useTranslation();
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
@@ -47,8 +49,8 @@ export const WindowControls: React.FC = () => {
         id="window-btn-minimize"
         type="button"
         onClick={handleMinimize}
-        title="Minimize window"
-        aria-label="Minimize"
+        title={t('window.minimize')}
+        aria-label={t('window.minimize')}
         className="w-10 h-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer"
       >
         <Minus className="w-3.5 h-3.5" />
@@ -58,8 +60,8 @@ export const WindowControls: React.FC = () => {
         id="window-btn-maximize"
         type="button"
         onClick={handleMaximize}
-        title={isMaximized ? 'Restore window' : 'Maximize window'}
-        aria-label={isMaximized ? 'Restore' : 'Maximize'}
+        title={isMaximized ? t('window.restore') : t('window.maximize')}
+        aria-label={isMaximized ? t('window.restore') : t('window.maximize')}
         className="w-10 h-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer"
       >
         {isMaximized ? (
@@ -73,8 +75,8 @@ export const WindowControls: React.FC = () => {
         id="window-btn-close"
         type="button"
         onClick={handleClose}
-        title="Close Freedom"
-        aria-label="Close"
+        title={t('window.close')}
+        aria-label={t('window.close')}
         className="w-10 h-8 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-[#e81123] active:bg-[#c90f1d] transition-colors cursor-pointer"
       >
         <X className="w-3.5 h-3.5" />

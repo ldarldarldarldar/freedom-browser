@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Shield, Code2, Zap, CheckCircle2, Heart, ExternalLink } from 'lucide-react';
 import { FreedomLogo } from '../components/FreedomLogo';
+import { useTranslation } from '../i18n';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface AboutModalProps {
 }
 
 export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
+  const { t } = useTranslation();
   if (!isOpen) return null;
 
   return (
@@ -21,7 +23,7 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           <div className="flex items-center gap-2">
             <FreedomLogo size={22} />
             <h2 className="text-sm font-semibold text-white tracking-wide">
-              About Freedom Browser
+              {t('about.title')}
             </h2>
           </div>
           <button
@@ -39,13 +41,12 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             <FreedomLogo size={72} className="mb-3" />
             <h1 className="text-xl font-bold text-white tracking-tight">FREEDOM</h1>
             <p className="text-xs text-neutral-400 font-mono mt-0.5">
-              Version 0.5.4-release (x86_64 / aarch64)
+              {t('about.version')}
             </p>
           </div>
 
           <p className="text-xs text-neutral-300 leading-relaxed max-w-md mx-auto">
-            A fast, lightweight, privacy-focused desktop web browser built with Rust,
-            Tauri 2, and native platform engines (WebView2 on Windows, WebKitGTK on Linux).
+            {t('about.description')}
           </p>
 
           {/* Three Core Principles */}
@@ -53,30 +54,30 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
             <div className="p-3 rounded-xl bg-neutral-950/80 border border-emerald-500/20">
               <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs mb-1">
                 <Shield className="w-3.5 h-3.5" />
-                <span>Freedom</span>
+                <span>{t('about.principleFreedom')}</span>
               </div>
               <p className="text-[11px] text-neutral-400 leading-tight">
-                Zero remote telemetry, full user privacy, no tracking cookies.
+                {t('about.principleFreedomDesc')}
               </p>
             </div>
 
             <div className="p-3 rounded-xl bg-neutral-950/80 border border-emerald-500/20">
               <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs mb-1">
                 <Code2 className="w-3.5 h-3.5" />
-                <span>Programming</span>
+                <span>{t('about.principleProgramming')}</span>
               </div>
               <p className="text-[11px] text-neutral-400 leading-tight">
-                Built-in developer console, network inspector, and WebAssembly support.
+                {t('about.principleProgrammingDesc')}
               </p>
             </div>
 
             <div className="p-3 rounded-xl bg-neutral-950/80 border border-emerald-500/20">
               <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs mb-1">
                 <Zap className="w-3.5 h-3.5" />
-                <span>Speed</span>
+                <span>{t('about.principleSpeed')}</span>
               </div>
               <p className="text-[11px] text-neutral-400 leading-tight">
-                Minimal RAM consumption, fast startup, and inactive tab hibernation.
+                {t('about.principleSpeedDesc')}
               </p>
             </div>
           </div>
@@ -84,24 +85,24 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           {/* Architecture badges */}
           <div className="pt-2 flex flex-wrap items-center justify-center gap-2 text-[10px] font-mono text-neutral-400">
             <span className="px-2 py-0.5 rounded bg-neutral-800 border border-white/5">
-              Engine: WebView2 / WebKitGTK
+              {t('about.engine')}
             </span>
             <span className="px-2 py-0.5 rounded bg-neutral-800 border border-white/5">
-              Runtime: Tauri 2.x
+              {t('about.runtime')}
             </span>
             <span className="px-2 py-0.5 rounded bg-neutral-800 border border-white/5">
-              Backend: Rust 2021
+              {t('about.backend')}
             </span>
             <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-              Zero Telemetry Verified
+              {t('about.zeroTelemetry')}
             </span>
           </div>
         </div>
 
         {/* Footer */}
         <div className="px-5 py-3 bg-neutral-950 border-t border-white/10 flex items-center justify-between text-[11px] text-neutral-500">
-          <span>Freedom Browser Project</span>
-          <span>Released under MIT License</span>
+          <span>{t('about.project')}</span>
+          <span>{t('about.license')}</span>
         </div>
       </div>
     </div>
