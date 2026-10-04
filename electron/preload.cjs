@@ -29,4 +29,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isWindowMaximized: () => ipcRenderer.invoke('window_is_maximized'),
   setZoomFactor: (webContentsId, factor) => ipcRenderer.invoke('set_zoom_factor', { webContentsId, factor }),
   getWebviewsMemory: (mappings) => ipcRenderer.invoke('get_webviews_memory', mappings),
+  getUserDataPath: () => ipcRenderer.invoke('get_user_data_path'),
+  chooseUserDataPath: () => ipcRenderer.invoke('choose_user_data_path'),
+  migrateUserDataPath: (options) => ipcRenderer.invoke('migrate_user_data_path', options),
+  relaunchApp: () => ipcRenderer.invoke('relaunch_app'),
+  webviewPreload: (() => {
+    const p = require('path').join(__dirname, 'webview-preload.cjs');
+    return process.platform === 'win32'
+      ? 'file:///' + p.replace(/\\/g, '/')
+      : 'file://' + p;
+  })(),
 });

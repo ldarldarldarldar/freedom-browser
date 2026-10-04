@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Settings,
@@ -46,6 +46,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [viewingLogs, setViewingLogs] = useState(false);
   const [showDetailedColors, setShowDetailedColors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [userDataPath, setUserDataPath] = useState<string>('');
+  const [isMigratingStorage, setIsMigratingStorage] = useState(false);
+  const [storageStatusMsg, setStorageStatusMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab === 'main' && (window as any).electronAPI?.getUserDataPath) {
+      (window as any).electronAPI.getUserDataPath().then((p: string) => {
+        if (p) setUserDataPath(p);
+      });
+    }
+  }, [activeTab]);
+
+  const handleChangeUserDataPath = async () => {
+    if (!(window as any).electronAPI?.chooseUserDataPath) return;
+    const chosen = await (window as any).electronAPI.chooseUserDataPath();
+    if (!chosen || chosen === userDataPath) return;
+
+    const shouldMigrate = window.confirm(
+      language === 'ru'
+        ? `Скопировать текущие данные браузера в новую папку?\n\n${chosen}`
+        : `Copy current browser data to new location?\n\n${chosen}`
+    );
+
+    setIsMigratingStorage(true);
+    setStorageStatusMsg(t('settings.storageMigrate'));
+    try {
+      const res = await (window as any).electronAPI.migrateUserDataPath({
+        targetPath: chosen,
+        migrateExisting: shouldMigrate,
+      });
+      if (res?.success) {
+        setUserDataPath(res.newPath);
+        setStorageStatusMsg(t('settings.storageRestart'));
+      }
+    } catch (err) {
+      console.error('Storage migration failed:', err);
+    } finally {
+      setIsMigratingStorage(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -274,41 +314,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Two Distinct Modes Grid */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Performance Mode Card */}
                   <div
                     onClick={() => handleModeChange('performance')}
-                    className={`cursor-pointer p-4 rounded-xl border transition-all ${
+                    className={`cursor-pointer p-4 rounded-xl border transition-all overflow-hidden flex flex-col justify-between ${
                       settings.browserMode === 'performance'
                         ? 'bg-emerald-950/50 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-400/50'
                         : 'bg-neutral-950/60 border-white/10 hover:border-white/20'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Zap className="w-5 h-5 text-emerald-400" />
-                        <span className="font-semibold text-white text-sm">
-                          {t('settings.modePerformance')}
-                        </span>
+                    <div>
+                      <div className="flex items-center justify-between gap-1.5 mb-2 min-h-[26px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Zap className="w-4.5 h-4.5 text-emerald-400 shrink-0" />
+                          <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate" title={t('settings.modePerformance')}>
+                            {t('settings.modePerformance')}
+                          </span>
+                        </div>
+                        {settings.browserMode === 'performance' ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500 text-black font-bold shrink-0 uppercase tracking-wider">
+                            {t('settings.activeBadge')}
+                          </span>
+                        ) : (
+                          <span className="w-1 h-5" />
+                        )}
                       </div>
-                      {settings.browserMode === 'performance' && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500 text-black font-bold">
-                          {t('settings.activeBadge')}
-                        </span>
-                      )}
+                      <p className="text-[11px] text-neutral-400 leading-relaxed mb-3">
+                        {t('settings.modePerformanceDesc')}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-neutral-400 leading-relaxed mb-3">
-                      {t('settings.modePerformanceDesc')}
-                    </p>
                     <ul className="text-[10px] font-mono text-neutral-300 space-y-1">
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> {t('settings.modePerfItem1')}
+                        <Check className="w-3 h-3 shrink-0" /> <span>{t('settings.modePerfItem1')}</span>
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> {t('settings.modePerfItem2')}
+                        <Check className="w-3 h-3 shrink-0" /> <span>{t('settings.modePerfItem2')}</span>
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> {t('settings.modePerfItem3')}
+                        <Check className="w-3 h-3 shrink-0" /> <span>{t('settings.modePerfItem3')}</span>
                       </li>
                     </ul>
                   </div>
@@ -316,37 +360,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Quality Mode Card */}
                   <div
                     onClick={() => handleModeChange('quality')}
-                    className={`cursor-pointer p-4 rounded-xl border transition-all ${
+                    className={`cursor-pointer p-4 rounded-xl border transition-all overflow-hidden flex flex-col justify-between ${
                       settings.browserMode === 'quality'
                         ? 'bg-emerald-950/50 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-400/50'
                         : 'bg-neutral-950/60 border-white/10 hover:border-white/20'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-emerald-400" />
-                        <span className="font-semibold text-white text-sm">
-                          {t('settings.modeQuality')}
-                        </span>
+                    <div>
+                      <div className="flex items-center justify-between gap-1.5 mb-2 min-h-[26px]">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Sparkles className="w-4.5 h-4.5 text-emerald-400 shrink-0" />
+                          <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate" title={t('settings.modeQuality')}>
+                            {t('settings.modeQuality')}
+                          </span>
+                        </div>
+                        {settings.browserMode === 'quality' ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500 text-black font-bold shrink-0 uppercase tracking-wider">
+                            {t('settings.activeBadge')}
+                          </span>
+                        ) : (
+                          <span className="w-1 h-5" />
+                        )}
                       </div>
-                      {settings.browserMode === 'quality' && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500 text-black font-bold">
-                          {t('settings.activeBadge')}
-                        </span>
-                      )}
+                      <p className="text-[11px] text-neutral-400 leading-relaxed mb-3">
+                        {t('settings.modeQualityDesc')}
+                      </p>
                     </div>
-                    <p className="text-[11px] text-neutral-400 leading-relaxed mb-3">
-                      {t('settings.modeQualityDesc')}
-                    </p>
                     <ul className="text-[10px] font-mono text-neutral-300 space-y-1">
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> {t('settings.modeQualityItem1')}
+                        <Check className="w-3 h-3 shrink-0" /> <span>{t('settings.modePerfItem1')}</span>
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> {t('settings.modeQualityItem2')}
+                        <Check className="w-3 h-3 shrink-0" /> <span>{t('settings.modeQualityItem2')}</span>
                       </li>
                       <li className="flex items-center gap-1.5 text-emerald-400">
-                        <Check className="w-3 h-3" /> {t('settings.modeQualityItem3')}
+                        <Check className="w-3 h-3 shrink-0" /> <span>{t('settings.modeQualityItem3')}</span>
                       </li>
                     </ul>
                   </div>
@@ -354,13 +402,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 {/* Tab Suspension & Memory Reclamation Controls */}
                 <div className="p-4 rounded-xl bg-neutral-950/60 border border-white/10 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       <div className="text-xs font-semibold text-white">
-                        Automatic Inactive Tab Suspension
+                        {t('settings.autoSuspendTitle')}
                       </div>
-                      <div className="text-[11px] text-neutral-400">
-                        Unmounts WebViews of inactive tabs to immediately reclaim 50–150 MB RAM per tab.
+                      <div className="text-[11px] text-neutral-400 leading-relaxed mt-0.5">
+                        {t('settings.autoSuspendDesc')}
                       </div>
                     </div>
                     <input
@@ -369,14 +417,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onChange={(e) =>
                         onUpdateSettings({ autoSuspendInactiveTabs: e.target.checked })
                       }
-                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                     />
                   </div>
 
                   {settings.autoSuspendInactiveTabs && (
                     <div className="pl-4 border-l-2 border-emerald-500/40">
                       <label className="text-xs text-neutral-300 block mb-1.5">
-                        Inactivity Timeout Before Hibernation
+                        {t('settings.autoSuspendTimeout')}
                       </label>
                       <select
                         value={settings.tabSuspensionTimeoutMinutes}
@@ -387,21 +435,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }
                         className="bg-neutral-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
                       >
-                        <option value={3}>3 minutes (Ultra aggressive)</option>
-                        <option value={5}>5 minutes (Performance Mode Default)</option>
-                        <option value={15}>15 minutes (Standard Balanced)</option>
-                        <option value={30}>30 minutes</option>
+                        <option value={3}>{t('settings.timeout3m')}</option>
+                        <option value={5}>{t('settings.timeout5m')}</option>
+                        <option value={15}>{t('settings.timeout15m')}</option>
+                        <option value={30}>{t('settings.timeout30m')}</option>
                       </select>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       <div className="text-xs font-semibold text-white">
-                        Background Tab Throttling
+                        {t('settings.throttlingTitle')}
                       </div>
-                      <div className="text-[11px] text-neutral-400">
-                        Pauses non-visible timers and animations in hidden WebViews.
+                      <div className="text-[11px] text-neutral-400 leading-relaxed mt-0.5">
+                        {t('settings.throttlingDesc')}
                       </div>
                     </div>
                     <input
@@ -410,7 +458,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onChange={(e) =>
                         onUpdateSettings({ backgroundTabThrottling: e.target.checked })
                       }
-                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                     />
                   </div>
                 </div>
@@ -822,6 +870,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {t('settings.downloadsDirectoryDesc')}
                   </p>
                 </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-neutral-200 block mb-1.5">
+                    {t('settings.storageTitle')}
+                  </label>
+                  <div className="flex items-center gap-2 max-w-md">
+                    <input
+                      type="text"
+                      readOnly
+                      value={userDataPath || (language === 'ru' ? 'По умолчанию (папка пользователя)' : 'Default (User Profile Directory)')}
+                      className="flex-1 bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-neutral-300 font-mono focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleChangeUserDataPath}
+                      disabled={isMigratingStorage}
+                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      {t('settings.storageChange')}
+                    </button>
+                  </div>
+                  {storageStatusMsg && (
+                    <div className="text-[11px] text-emerald-400 mt-1 font-mono">
+                      {storageStatusMsg}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-neutral-500 mt-1">
+                    {t('settings.storageDesc')}
+                  </p>
+                </div>
               </div>
             )}
 
@@ -887,12 +965,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="p-4 rounded-xl bg-neutral-950/80 border border-white/10 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       <div className="text-xs font-semibold text-white">
                         {t('settings.diagnosticLogs')}
                       </div>
-                      <div className="text-[11px] text-neutral-400 mt-1 max-w-md">
+                      <div className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
                         {t('settings.diagnosticLogsDesc')}
                       </div>
                     </div>
@@ -903,13 +981,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onUpdateSettings({ localDiagnosticLogs: nextVal });
                         logger.setLoggingEnabled(nextVal);
                       }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer ${
+                      className={`shrink-0 whitespace-nowrap min-w-[72px] text-center px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer ${
                         settings.localDiagnosticLogs
                           ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
                           : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
                       }`}
                     >
-                      [{settings.localDiagnosticLogs ? ' ON ' : ' OFF '}]
+                      [{settings.localDiagnosticLogs ? 'ON' : 'OFF'}]
                     </button>
                   </div>
                 </div>

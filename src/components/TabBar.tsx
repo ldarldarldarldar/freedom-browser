@@ -215,6 +215,8 @@ export const TabBar: React.FC<TabBarProps> = ({
                     <div className="tab-loading-spinner shrink-0" title={t('tab.loading')} />
                   ) : tab.isSuspended ? (
                     <Moon className="w-3.5 h-3.5 text-neutral-500" title={t('tab.suspendedTooltip')} />
+                  ) : tab.url.startsWith('freedom://') ? (
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   ) : tab.favicon ? (
                     <img
                       src={tab.favicon}
@@ -224,8 +226,6 @@ export const TabBar: React.FC<TabBarProps> = ({
                         (e.target as HTMLElement).style.display = 'none';
                       }}
                     />
-                  ) : tab.url.startsWith('freedom://') ? (
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   ) : (
                     <Globe className="w-3.5 h-3.5 text-neutral-400" />
                   )}

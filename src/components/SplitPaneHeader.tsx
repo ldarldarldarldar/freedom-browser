@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, RotateCcw, X, Globe } from 'lucide-react';
+import { ArrowLeft, ArrowRight, RotateCcw, X, Globe, ShieldCheck } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { SearchEngineId } from '../settings/types';
 import { SearchEngineService } from '../services/searchEngineService';
@@ -110,7 +110,9 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
         }`}
       >
         <div className="mr-1.5 shrink-0 flex items-center">
-          {tab.favicon ? (
+          {tab.url.startsWith('freedom://') ? (
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+          ) : tab.favicon ? (
             <img
               src={tab.favicon}
               alt=""

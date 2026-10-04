@@ -537,9 +537,11 @@ export default function App() {
       // If tab is already on New Tab page, clicking Home keeps title as 'New Tab' without redundant reload
       const currentTab = tabs.find((t) => t.id === destId);
       if (isNewTab && currentTab && currentTab.url === 'freedom://newtab') {
-        if (currentTab.title !== 'New Tab') {
+        if (currentTab.title !== 'New Tab' || currentTab.favicon) {
           setTabs((prev) =>
-            prev.map((t) => (t.id === destId ? { ...t, title: 'New Tab', displayUrl: 'freedom://newtab' } : t))
+            prev.map((t) =>
+              t.id === destId ? { ...t, title: 'New Tab', displayUrl: 'freedom://newtab', favicon: undefined } : t
+            )
           );
         }
         return;
@@ -561,6 +563,7 @@ export default function App() {
               url,
               displayUrl: url,
               title: isNewTab ? 'New Tab' : isInternal ? 'Freedom Tab' : domain,
+              favicon: isInternal ? undefined : t.favicon,
               isLoading: !isInternal,
               isSuspended: false,
               isCrashed: false,
@@ -957,7 +960,9 @@ export default function App() {
             const title = isNewTab
               ? 'New Tab'
               : data.title || t.title || (isInternal ? 'Freedom Tab' : SearchEngineService.extractDomain(url));
-            const favicon = data.favicon || t.favicon || (isInternal ? '' : FaviconService.getFaviconSync(url));
+            const favicon = isInternal
+              ? undefined
+              : (data.favicon || t.favicon || FaviconService.getFaviconSync(url));
 
             // Record history for external pages
             if (!isInternal && url) {
@@ -987,8 +992,10 @@ export default function App() {
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id === tabId) {
-          const finalTitle = t.url === 'freedom://newtab' ? 'New Tab' : title;
-          HistoryService.updateEntryTitleAndFavicon(t.url, finalTitle, undefined);
+          const finalTitle = t.url === 'freedom://newtab' ? 'New Tab' : t.url.startsWith('freedom://') ? 'Freedom Tab' : title;
+          if (!t.url.startsWith('freedom://')) {
+            HistoryService.updateEntryTitleAndFavicon(t.url, finalTitle, undefined);
+          }
           return { ...t, title: finalTitle };
         }
         return t;
@@ -1000,6 +1007,9 @@ export default function App() {
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id === tabId) {
+          if (t.url.startsWith('freedom://')) {
+            return { ...t, favicon: undefined };
+          }
           HistoryService.updateEntryTitleAndFavicon(t.url, undefined, favicon);
           return { ...t, favicon };
         }

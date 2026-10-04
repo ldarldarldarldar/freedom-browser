@@ -3,6 +3,31 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 
+// User Data Storage Path Configuration
+// Separates application binaries (e.g. Program Files\Freedom Browser) from user data (profiles, history, bookmarks, cookies).
+// Defaults to user-writable %APPDATA%\Freedom Browser\User Data on Windows or ~/.config/freedom-browser/User Data on Linux.
+const storageConfigFile = path.join(app.getPath('appData'), 'Freedom Browser', 'storage-config.json');
+let activeUserDataDir = path.join(app.getPath('appData'), 'Freedom Browser', 'User Data');
+
+try {
+  if (fs.existsSync(storageConfigFile)) {
+    const raw = fs.readFileSync(storageConfigFile, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.userDataPath && typeof parsed.userDataPath === 'string') {
+      activeUserDataDir = parsed.userDataPath;
+    }
+  }
+} catch (err) {
+  console.warn('Failed to parse storage-config.json, using default user data path:', err);
+}
+
+try {
+  fs.mkdirSync(activeUserDataDir, { recursive: true });
+  app.setPath('userData', activeUserDataDir);
+} catch (err) {
+  console.warn('Failed to set custom userData path, falling back:', err);
+}
+
 // 1. Performance & Memory Optimization Command-Line Switches
 // Applied before app ready to strip telemetry, background daemons, and reduce process bloat
 app.commandLine.appendSwitch('disable-breakpad'); // Disables crash reporter threads & telemetry
@@ -193,6 +218,32 @@ app.on('web-contents-created', (event, contents) => {
         mainWindow.webContents.send('webview-new-window', { url });
       }
       return { action: 'deny' };
+    });
+
+    // WebAuthn Passkey & Security Key Protection:
+    // Prevents passive/conditional passkey queries without user interaction from triggering unprompted Windows Security modals
+    const webauthnGuard = `
+      (function() {
+        if (window.__freedom_webauthn_safe) return;
+        window.__freedom_webauthn_safe = true;
+        try {
+          if (window.PublicKeyCredential && typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function') {
+            window.PublicKeyCredential.isConditionalMediationAvailable = async function() { return false; };
+          }
+          if (navigator.credentials && typeof navigator.credentials.get === 'function') {
+            const _origGet = navigator.credentials.get.bind(navigator.credentials);
+            navigator.credentials.get = function(options) {
+              if (options && options.mediation === 'conditional' && (!navigator.userActivation || !navigator.userActivation.isActive)) {
+                return Promise.reject(new DOMException('Conditional mediation is not supported in this context.', 'NotSupportedError'));
+              }
+              return _origGet(options);
+            };
+          }
+        } catch (e) {}
+      })();
+    `;
+    contents.on('dom-ready', () => {
+      contents.executeJavaScript(webauthnGuard).catch(() => {});
     });
 
     // Intercept keyboard shortcuts inside webview before page can swallow them
@@ -779,6 +830,62 @@ ipcMain.handle('set_zoom_factor', (event, { webContentsId, factor }) => {
     console.warn('Failed to set zoom factor:', err);
   }
   return false;
+});
+
+// User Data Storage Location & Migration Handlers
+ipcMain.handle('get_user_data_path', () => {
+  return app.getPath('userData');
+});
+
+ipcMain.handle('choose_user_data_path', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Freedom Browser User Data Directory',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
+ipcMain.handle('migrate_user_data_path', async (event, { targetPath, migrateExisting }) => {
+  try {
+    if (!targetPath || typeof targetPath !== 'string') {
+      return { success: false, error: 'Invalid directory path' };
+    }
+    const currentPath = app.getPath('userData');
+    if (path.resolve(currentPath) === path.resolve(targetPath)) {
+      return { success: true, newPath: currentPath };
+    }
+
+    // Ensure target exists
+    fs.mkdirSync(targetPath, { recursive: true });
+
+    // Optionally copy existing data to new path
+    if (migrateExisting && fs.existsSync(currentPath)) {
+      fs.cpSync(currentPath, targetPath, { recursive: true, errorOnExist: false });
+    }
+
+    // Persist configuration
+    const configDir = path.dirname(storageConfigFile);
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(
+      storageConfigFile,
+      JSON.stringify({ userDataPath: targetPath, updatedAt: Date.now() }, null, 2),
+      'utf8'
+    );
+
+    return { success: true, newPath: targetPath };
+  } catch (err) {
+    console.error('Failed to migrate user data path:', err);
+    return { success: false, error: String(err) };
+  }
+});
+
+ipcMain.handle('relaunch_app', () => {
+  app.relaunch();
+  app.exit(0);
 });
 
 // App lifecycle

@@ -227,6 +227,15 @@ export const TRANSLATIONS = {
     'settings.modeQualityItem2': 'Translucent backdrop filters & glow',
     'settings.modeQualityItem3': 'Hibernates inactive tabs after 15m',
     'settings.activeBadge': 'ACTIVE',
+    'settings.autoSuspendTitle': 'Automatic Inactive Tab Suspension',
+    'settings.autoSuspendDesc': 'Unmounts WebViews of inactive tabs to immediately reclaim 50–150 MB RAM per tab.',
+    'settings.autoSuspendTimeout': 'Inactivity Timeout Before Hibernation',
+    'settings.timeout3m': '3 minutes (Ultra aggressive)',
+    'settings.timeout5m': '5 minutes (Performance Mode Default)',
+    'settings.timeout15m': '15 minutes (Standard Balanced)',
+    'settings.timeout30m': '30 minutes',
+    'settings.throttlingTitle': 'Background Tab Throttling',
+    'settings.throttlingDesc': 'Pauses non-visible timers and animations in hidden WebViews.',
 
     // Settings: Appearance & Themes
     'settings.themesTitle': 'Themes & Color Customization',
@@ -260,7 +269,7 @@ export const TRANSLATIONS = {
 
     // Settings: Main
     'settings.mainTitle': 'Main Settings',
-    'settings.mainDesc': 'Language selection, search engine, and download destinations.',
+    'settings.mainDesc': 'Language selection, search engine, user data storage, and download destinations.',
     'settings.language': 'Language',
     'settings.languageDesc': 'Choose interface language (applies immediately).',
     'settings.langEnglish': 'English',
@@ -268,6 +277,11 @@ export const TRANSLATIONS = {
     'settings.defaultSearchEngine': 'Default Search Engine',
     'settings.downloadsDirectory': 'Downloads Directory',
     'settings.downloadsDirectoryDesc': 'Files downloaded by Freedom will be saved here natively.',
+    'settings.storageTitle': 'User Data Storage Location',
+    'settings.storageDesc': 'Freedom stores profiles, bookmarks, history, cookies, and local data in this user-writable directory.',
+    'settings.storageChange': 'Change Location...',
+    'settings.storageMigrate': 'Migrating browser data, please wait...',
+    'settings.storageRestart': 'Data location updated. Relaunch Freedom Browser to apply.',
     'settings.open': 'Open',
     'settings.openInFileManager': 'Open in System File Manager',
 
@@ -324,7 +338,7 @@ export const TRANSLATIONS = {
 
     // About Modal
     'about.title': 'About Freedom Browser',
-    'about.version': 'Version 0.5.4.1-release (x86_64 / aarch64)',
+    'about.version': 'Version 0.5.4.2-release (x86_64 / aarch64)',
     'about.description': 'A fast, lightweight, privacy-focused desktop web browser built with Rust, Tauri 2, and native platform engines (WebView2 on Windows, WebKitGTK on Linux).',
     'about.principleFreedom': 'Freedom',
     'about.principleFreedomDesc': 'Zero remote telemetry, full user privacy, no tracking cookies.',
@@ -573,6 +587,15 @@ export const TRANSLATIONS = {
     'settings.modeQualityItem2': 'Полупрозрачные фильтры и неоновое свечение',
     'settings.modeQualityItem3': 'Гибернация неактивных вкладок через 15 мин',
     'settings.activeBadge': 'АКТИВЕН',
+    'settings.autoSuspendTitle': 'Автоматическая гибернация вкладок',
+    'settings.autoSuspendDesc': 'Выгружает неактивные фоновые вкладки из памяти, освобождая 50–150 МБ RAM на вкладку.',
+    'settings.autoSuspendTimeout': 'Время неактивности до перехода в спящий режим',
+    'settings.timeout3m': '3 минуты (Ультра-агрессивно)',
+    'settings.timeout5m': '5 минут (По умолчанию для Режима Скорости)',
+    'settings.timeout15m': '15 минут (Сбалансировано)',
+    'settings.timeout30m': '30 минут',
+    'settings.throttlingTitle': 'Ограничение фоновых процессов вкладок',
+    'settings.throttlingDesc': 'Приостанавливает невидимые таймеры и анимации в скрытых вкладках.',
 
     // Settings: Appearance & Themes
     'settings.themesTitle': 'Темы и оформление',
@@ -606,7 +629,7 @@ export const TRANSLATIONS = {
 
     // Settings: Main
     'settings.mainTitle': 'Основные настройки',
-    'settings.mainDesc': 'Выбор языка, поисковая система и папка для сохранения файлов.',
+    'settings.mainDesc': 'Выбор языка, поисковая система, хранилище данных и папка загрузок.',
     'settings.language': 'Язык интерфейса',
     'settings.languageDesc': 'Выберите язык интерфейса (переключается мгновенно).',
     'settings.langEnglish': 'English',
@@ -614,6 +637,11 @@ export const TRANSLATIONS = {
     'settings.defaultSearchEngine': 'Поисковая система по умолчанию',
     'settings.downloadsDirectory': 'Папка для загрузок',
     'settings.downloadsDirectoryDesc': 'Файлы, скачанные через Freedom, будут сохраняться сюда.',
+    'settings.storageTitle': 'Расположение данных пользователя',
+    'settings.storageDesc': 'Freedom хранит профили, закладки, историю, cookie и локальные данные в этой папке с правами пользователя.',
+    'settings.storageChange': 'Изменить папку...',
+    'settings.storageMigrate': 'Перенос данных браузера, пожалуйста, подождите...',
+    'settings.storageRestart': 'Папка данных обновлена. Перезапустите Freedom Browser для применения.',
     'settings.open': 'Открыть',
     'settings.openInFileManager': 'Открыть в системном проводнике',
 
@@ -628,7 +656,7 @@ export const TRANSLATIONS = {
     'settings.clearedSuccess': 'Успешно очищено!',
 
     // Settings: Zero-Telemetry
-    'settings.telemetryTitle': 'Гарантия отсутствия телеметрии (0%)',
+    'settings.telemetryTitle': 'Гарантия отсутствия телеметрии',
     'settings.telemetryDesc': 'Freedom Browser строго содержит 0 аналитических SDK, 0 трекеров и 0 серверов сбора данных.',
     'settings.diagnosticLogs': 'Локальный журнал диагностики',
     'settings.diagnosticLogsDesc': 'Хранится исключительно на вашем диске и никогда не передаётся вовне.',
@@ -670,7 +698,7 @@ export const TRANSLATIONS = {
 
     // About Modal
     'about.title': 'О браузере Freedom',
-    'about.version': 'Версия 0.5.4.1-release (x86_64 / aarch64)',
+    'about.version': 'Версия 0.5.4.2-release (x86_64 / aarch64)',
     'about.description': 'Быстрый, лёгкий и приватный настольный веб-браузер на базе Rust, Tauri 2 и нативных системных движков (WebView2 на Windows, WebKitGTK на Linux).',
     'about.principleFreedom': 'Свобода',
     'about.principleFreedomDesc': 'Ноль телеметрии, полная конфиденциальность, никаких отслеживающих cookie.',

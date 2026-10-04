@@ -147,7 +147,10 @@ const ElectronWebviewTab: React.FC<{
         }
 
         let favicon: string | undefined = undefined;
-        if (navFavicons && navFavicons.length > 0) {
+        if (rawUrl.startsWith('freedom://')) {
+          favicon = undefined;
+          if (rawUrl === 'freedom://newtab') rawTitle = 'New Tab';
+        } else if (navFavicons && navFavicons.length > 0) {
           favicon = navFavicons[0];
         } else {
           favicon = FaviconService.getFaviconSync(rawUrl);
@@ -300,6 +303,7 @@ const ElectronWebviewTab: React.FC<{
         className="w-full h-full border-none outline-none bg-neutral-950"
         allowpopups="true"
         webpreferences="contextIsolation=yes"
+        preload={(window as any).electronAPI?.webviewPreload || undefined}
       />
     </div>
   );

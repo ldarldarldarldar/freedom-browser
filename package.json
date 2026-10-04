@@ -1,7 +1,7 @@
 {
   "name": "freedom-browser",
   "private": true,
-  "version": "0.5.4-1",
+  "version": "0.5.4-2",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
@@ -16,6 +16,7 @@
     "electron:start": "electron .",
     "build:appimage": "npm run build && electron-builder --linux AppImage",
     "build:win": "npm run build && electron-builder --win portable zip",
+    "build:win:installer": "npm run build && electron-builder --win nsis",
     "build:dist": "npm run build && electron-builder --linux AppImage && electron-builder --win portable zip",
     "tauri": "tauri",
     "build:linux": "bash scripts/build-linux.sh"
@@ -65,6 +66,7 @@
     },
     "win": {
       "target": [
+        "nsis",
         "portable",
         "zip"
       ],
@@ -72,10 +74,13 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Freedom Browser"
+      "shortcutName": "Freedom Browser",
+      "uninstallDisplayName": "Freedom Browser",
+      "deleteAppDataOnUninstall": false
     }
   }
 }
