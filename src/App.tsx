@@ -233,10 +233,29 @@ export default function App() {
       const nativeDir = await tauriBridge.getDefaultDownloadDir();
       if (nativeDir && (settings.downloadsLocation === '~/Downloads' || !settings.downloadsLocation)) {
         setSettings((prev) => ({ ...prev, downloadsLocation: nativeDir }));
+        tauriBridge.setDownloadDir(nativeDir);
+      } else if (settings.downloadsLocation) {
+        tauriBridge.setDownloadDir(settings.downloadsLocation);
       }
     };
     initDefaultDir();
+    if (settings.language) {
+      tauriBridge.setLanguage(settings.language);
+    }
   }, []);
+
+  // Synchronize dynamic settings changes with native backend
+  useEffect(() => {
+    if (settings.downloadsLocation) {
+      tauriBridge.setDownloadDir(settings.downloadsLocation);
+    }
+  }, [settings.downloadsLocation]);
+
+  useEffect(() => {
+    if (settings.language) {
+      tauriBridge.setLanguage(settings.language);
+    }
+  }, [settings.language]);
 
   // Persist Settings
   useEffect(() => {

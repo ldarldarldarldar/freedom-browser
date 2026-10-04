@@ -80,6 +80,7 @@ export const StarCanvas: React.FC<StarCanvasProps> = ({
     // Pause animation completely when window is hidden or minimized
     const handleVisibilityChange = () => {
       isVisible = !document.hidden;
+      cancelAnimationFrame(animationFrameId);
       if (isVisible) {
         lastTime = performance.now();
         render();

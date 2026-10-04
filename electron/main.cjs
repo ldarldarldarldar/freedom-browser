@@ -48,6 +48,47 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128'); // Keep V8
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 let mainWindow = null;
 const activeDownloads = new Map();
+let activeDownloadsLocation = '';
+let currentAppLanguage = 'en';
+
+const MENU_STRINGS = {
+  en: {
+    openLink: 'Open Link',
+    openLinkNewTab: 'Open Link in New Tab',
+    openLinkBgTab: 'Open Link in Background Tab',
+    copyLinkAddress: 'Copy Link Address',
+    openImageNewTab: 'Open Image in New Tab',
+    saveImageAs: 'Save Image As...',
+    copyImageAddress: 'Copy Image Address',
+    copy: 'Copy',
+    searchWebFor: 'Search Web for "%s"',
+    cut: 'Cut',
+    paste: 'Paste',
+    selectAll: 'Select All',
+    back: 'Back',
+    forward: 'Forward',
+    reload: 'Reload',
+    inspectElement: 'Inspect Element',
+  },
+  ru: {
+    openLink: 'Открыть ссылку',
+    openLinkNewTab: 'Открыть ссылку в новой вкладке',
+    openLinkBgTab: 'Открыть ссылку в фоновой вкладке',
+    copyLinkAddress: 'Копировать адрес ссылки',
+    openImageNewTab: 'Открыть изображение в новой вкладке',
+    saveImageAs: 'Сохранить изображение как...',
+    copyImageAddress: 'Копировать адрес изображения',
+    copy: 'Копировать',
+    searchWebFor: 'Искать в Интернете "%s"',
+    cut: 'Вырезать',
+    paste: 'Вставить',
+    selectAll: 'Выбрать все',
+    back: 'Назад',
+    forward: 'Вперед',
+    reload: 'Перезагрузить',
+    inspectElement: 'Исследовать элемент',
+  },
+};
 
 // Helper: Generate safe non-colliding filepath in destination directory
 function getUniqueFilePath(dir, originalFilename) {
@@ -123,7 +164,13 @@ function createWindow() {
 
   // Downloads handling: Real downloads to disk with true progress & metrics
   session.defaultSession.on('will-download', (event, item, webContents) => {
-    const downloadDir = app.getPath('downloads');
+    let downloadDir = activeDownloadsLocation;
+    if (downloadDir && downloadDir.startsWith('~/')) {
+      downloadDir = path.join(os.homedir(), downloadDir.slice(2));
+    }
+    if (!downloadDir || !fs.existsSync(downloadDir)) {
+      downloadDir = app.getPath('downloads');
+    }
     if (!fs.existsSync(downloadDir)) {
       try {
         fs.mkdirSync(downloadDir, { recursive: true });
@@ -344,15 +391,16 @@ app.on('web-contents-created', (event, contents) => {
     contents.on('context-menu', (event, params) => {
       event.preventDefault();
       const menu = new Menu();
+      const i18n = MENU_STRINGS[currentAppLanguage] || MENU_STRINGS.en;
 
       // 1. Link Actions
       if (params.linkURL) {
         menu.append(new MenuItem({
-          label: 'Open Link',
+          label: i18n.openLink,
           click: () => { contents.loadURL(params.linkURL); },
         }));
         menu.append(new MenuItem({
-          label: 'Open Link in New Tab',
+          label: i18n.openLinkNewTab,
           click: () => {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: true });
@@ -360,7 +408,7 @@ app.on('web-contents-created', (event, contents) => {
           },
         }));
         menu.append(new MenuItem({
-          label: 'Open Link in Background Tab',
+          label: i18n.openLinkBgTab,
           click: () => {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: false });
@@ -368,7 +416,7 @@ app.on('web-contents-created', (event, contents) => {
           },
         }));
         menu.append(new MenuItem({
-          label: 'Copy Link Address',
+          label: i18n.copyLinkAddress,
           click: () => { clipboard.writeText(params.linkURL); },
         }));
         menu.append(new MenuItem({ type: 'separator' }));
@@ -377,7 +425,7 @@ app.on('web-contents-created', (event, contents) => {
       // 2. Image Actions
       if (params.mediaType === 'image' && params.srcURL) {
         menu.append(new MenuItem({
-          label: 'Open Image in New Tab',
+          label: i18n.openImageNewTab,
           click: () => {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('webview-open-tab', { url: params.srcURL, active: true });
@@ -385,11 +433,11 @@ app.on('web-contents-created', (event, contents) => {
           },
         }));
         menu.append(new MenuItem({
-          label: 'Save Image As...',
+          label: i18n.saveImageAs,
           click: () => { contents.downloadURL(params.srcURL); },
         }));
         menu.append(new MenuItem({
-          label: 'Copy Image Address',
+          label: i18n.copyImageAddress,
           click: () => { clipboard.writeText(params.srcURL); },
         }));
         menu.append(new MenuItem({ type: 'separator' }));
@@ -399,12 +447,12 @@ app.on('web-contents-created', (event, contents) => {
       if (params.selectionText && params.selectionText.trim().length > 0) {
         const text = params.selectionText.trim();
         menu.append(new MenuItem({
-          label: 'Copy',
+          label: i18n.copy,
           role: 'copy',
         }));
         const truncated = text.length > 25 ? text.substring(0, 25) + '...' : text;
         menu.append(new MenuItem({
-          label: `Search Web for "${truncated}"`,
+          label: i18n.searchWebFor.replace('%s', truncated),
           click: () => {
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('webview-search-text', { text });
@@ -416,28 +464,40 @@ app.on('web-contents-created', (event, contents) => {
 
       // 4. Editable Inputs
       if (params.isEditable) {
-        menu.append(new MenuItem({ label: 'Cut', role: 'cut', enabled: params.editFlags.canCut }));
-        menu.append(new MenuItem({ label: 'Copy', role: 'copy', enabled: params.editFlags.canCopy }));
-        menu.append(new MenuItem({ label: 'Paste', role: 'paste', enabled: params.editFlags.canPaste }));
-        menu.append(new MenuItem({ label: 'Select All', role: 'selectAll' }));
+        menu.append(new MenuItem({ label: i18n.cut, role: 'cut', enabled: params.editFlags.canCut }));
+        menu.append(new MenuItem({ label: i18n.copy, role: 'copy', enabled: params.editFlags.canCopy }));
+        menu.append(new MenuItem({ label: i18n.paste, role: 'paste', enabled: params.editFlags.canPaste }));
+        menu.append(new MenuItem({ label: i18n.selectAll, role: 'selectAll' }));
         menu.append(new MenuItem({ type: 'separator' }));
       }
 
       // 5. Page Navigation Actions
       menu.append(new MenuItem({
-        label: 'Back',
+        label: i18n.back,
         enabled: contents.canGoBack(),
         click: () => { contents.goBack(); },
       }));
       menu.append(new MenuItem({
-        label: 'Forward',
+        label: i18n.forward,
         enabled: contents.canGoForward(),
         click: () => { contents.goForward(); },
       }));
       menu.append(new MenuItem({
-        label: 'Reload',
+        label: i18n.reload,
         accelerator: 'CmdOrCtrl+R',
         click: () => { contents.reload(); },
+      }));
+
+      // 6. Developer Tools / Inspect Element
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({
+        label: i18n.inspectElement,
+        click: () => {
+          contents.inspectElement(params.x, params.y);
+          if (!contents.isDevToolsOpened?.()) {
+            contents.openDevTools({ mode: 'detach' });
+          }
+        },
       }));
 
       menu.popup({ window: mainWindow });
@@ -704,9 +764,9 @@ ipcMain.handle('open_devtools', () => {
 
 // Downloads IPC: Native cross-platform downloads management
 ipcMain.handle('open_download_folder', async (event, customFolder) => {
-  let target = app.getPath('downloads');
-  if (customFolder && typeof customFolder === 'string' && customFolder.trim() !== '') {
-    let resolved = customFolder.trim();
+  let target = customFolder || activeDownloadsLocation || app.getPath('downloads');
+  if (target && typeof target === 'string' && target.trim() !== '') {
+    let resolved = target.trim();
     if (resolved.startsWith('~/')) {
       resolved = path.join(os.homedir(), resolved.slice(2));
     }
@@ -764,6 +824,31 @@ ipcMain.handle('verify_download_items', async (event, items) => {
 
 ipcMain.handle('get_default_download_dir', () => {
   return app.getPath('downloads');
+});
+
+ipcMain.handle('set_language', (event, lang) => {
+  currentAppLanguage = lang === 'ru' ? 'ru' : 'en';
+  return true;
+});
+
+ipcMain.handle('set_downloads_dir', (event, dirPath) => {
+  if (dirPath && typeof dirPath === 'string') {
+    activeDownloadsLocation = dirPath.trim();
+  }
+  return true;
+});
+
+ipcMain.handle('choose_download_dir', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: currentAppLanguage === 'ru' ? 'Выберите папку для загрузок' : 'Select Downloads Directory',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+  activeDownloadsLocation = result.filePaths[0];
+  return activeDownloadsLocation;
 });
 
 ipcMain.handle('start_download', (event, { url }) => {

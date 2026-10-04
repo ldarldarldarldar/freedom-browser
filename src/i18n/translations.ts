@@ -277,6 +277,7 @@ export const TRANSLATIONS = {
     'settings.defaultSearchEngine': 'Default Search Engine',
     'settings.downloadsDirectory': 'Downloads Directory',
     'settings.downloadsDirectoryDesc': 'Files downloaded by Freedom will be saved here natively.',
+    'settings.downloadsBrowse': 'Browse...',
     'settings.storageTitle': 'User Data Storage Location',
     'settings.storageDesc': 'Freedom stores profiles, bookmarks, history, cookies, and local data in this user-writable directory.',
     'settings.storageChange': 'Change Location...',
@@ -338,7 +339,7 @@ export const TRANSLATIONS = {
 
     // About Modal
     'about.title': 'About Freedom Browser',
-    'about.version': 'Version 0.5.4.2-release (x86_64 / aarch64)',
+    'about.version': 'Version 0.5.4.2.75-release (x86_64 / aarch64)',
     'about.description': 'A fast, lightweight, privacy-focused desktop web browser built with Rust, Tauri 2, and native platform engines (WebView2 on Windows, WebKitGTK on Linux).',
     'about.principleFreedom': 'Freedom',
     'about.principleFreedomDesc': 'Zero remote telemetry, full user privacy, no tracking cookies.',
@@ -637,6 +638,7 @@ export const TRANSLATIONS = {
     'settings.defaultSearchEngine': 'Поисковая система по умолчанию',
     'settings.downloadsDirectory': 'Папка для загрузок',
     'settings.downloadsDirectoryDesc': 'Файлы, скачанные через Freedom, будут сохраняться сюда.',
+    'settings.downloadsBrowse': 'Обзор...',
     'settings.storageTitle': 'Расположение данных пользователя',
     'settings.storageDesc': 'Freedom хранит профили, закладки, историю, cookie и локальные данные в этой папке с правами пользователя.',
     'settings.storageChange': 'Изменить папку...',
@@ -698,7 +700,7 @@ export const TRANSLATIONS = {
 
     // About Modal
     'about.title': 'О браузере Freedom',
-    'about.version': 'Версия 0.5.4.2-release (x86_64 / aarch64)',
+    'about.version': 'Версия 0.5.4.2.75-release (x86_64 / aarch64)',
     'about.description': 'Быстрый, лёгкий и приватный настольный веб-браузер на базе Rust, Tauri 2 и нативных системных движков (WebView2 на Windows, WebKitGTK на Linux).',
     'about.principleFreedom': 'Свобода',
     'about.principleFreedomDesc': 'Ноль телеметрии, полная конфиденциальность, никаких отслеживающих cookie.',

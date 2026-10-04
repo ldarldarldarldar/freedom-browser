@@ -35,7 +35,11 @@ declare global {
       getSystemMetrics: () => Promise<any>;
       terminateProcess: (pid: number) => Promise<boolean>;
       openDevTools: () => Promise<boolean>;
-      openDownloadFolder: (folder?: string) => Promise<boolean>;
+      openDownloadFolder?: (folder?: string) => Promise<boolean>;
+      getDefaultDownloadDir?: () => Promise<string>;
+      setDownloadsDir?: (dir: string) => Promise<boolean>;
+      chooseDownloadDir?: () => Promise<string | null>;
+      setLanguage?: (lang: string) => Promise<boolean>;
       startDownload: (options: { url: string; suggestedFilename?: string }) => Promise<boolean>;
       setTitle: (title: string) => Promise<void>;
       closeApp: () => Promise<void>;

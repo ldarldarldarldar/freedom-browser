@@ -431,6 +431,36 @@ export class TauriBridge {
     }
     return '~/Downloads';
   }
+
+  /**
+   * Choose downloads folder via native directory dialog
+   */
+  public async chooseDownloadDir(): Promise<string | null> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.chooseDownloadDir) {
+      return (await (window as any).electronAPI.chooseDownloadDir()) ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Set user downloads folder in native layer
+   */
+  public async setDownloadDir(dirPath: string): Promise<boolean> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.setDownloadsDir) {
+      return (await (window as any).electronAPI.setDownloadsDir(dirPath)) ?? false;
+    }
+    return false;
+  }
+
+  /**
+   * Set UI language in native layer (for context menu localization)
+   */
+  public async setLanguage(language: string): Promise<boolean> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.setLanguage) {
+      return (await (window as any).electronAPI.setLanguage(language)) ?? false;
+    }
+    return false;
+  }
   /**
    * Find in Page for active webview
    */

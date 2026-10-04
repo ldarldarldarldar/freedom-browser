@@ -87,6 +87,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleBrowseDownloads = async () => {
+    try {
+      const chosen = await tauriBridge.chooseDownloadDir();
+      if (chosen) {
+        onUpdateSettings({ downloadsLocation: chosen });
+        await tauriBridge.setDownloadDir(chosen);
+      }
+    } catch (err) {
+      console.warn('Failed to choose download dir:', err);
+    }
+  };
+
   if (!isOpen) return null;
 
   const logs = logger.getLogs();
@@ -852,11 +864,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <input
                       type="text"
                       value={settings.downloadsLocation}
-                      onChange={(e) =>
-                        onUpdateSettings({ downloadsLocation: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        onUpdateSettings({ downloadsLocation: val });
+                        tauriBridge.setDownloadDir(val);
+                      }}
                       className="flex-1 bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
                     />
+                    <button
+                      type="button"
+                      onClick={handleBrowseDownloads}
+                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer"
+                    >
+                      {t('settings.downloadsBrowse')}
+                    </button>
                     <button
                       type="button"
                       onClick={() => tauriBridge.openDownloadFolder(settings.downloadsLocation)}
