@@ -3,13 +3,15 @@ import { BrowserTab } from './types';
 import { NewTabPage } from '../pages/NewTabPage';
 import { ErrorPage } from '../pages/ErrorPage';
 import { SearchEngineId, ThemePalette } from '../settings/types';
-import { Moon, ExternalLink, Globe, ShieldCheck, GripVertical } from 'lucide-react';
+import { Moon, ExternalLink, Globe, ShieldCheck, GripVertical, GripHorizontal } from 'lucide-react';
 import { tauriBridge, isTauriEnvironment, isElectronEnvironment } from '../services/tauriBridge';
 import { ZoomService } from '../services/zoomService';
 import { SearchEngineService } from '../services/searchEngineService';
 import { FaviconService } from '../services/faviconService';
-import { SplitViewState } from '../services/splitViewService';
+import { SplitViewState, SplitViewService, SplitLayoutType } from '../services/splitViewService';
 import { SplitPaneHeader } from '../components/SplitPaneHeader';
+import { SplitViewControlBar } from '../components/SplitViewControlBar';
+import { FRCMemoryDiagnosticsPage } from '../pages/FRCMemoryDiagnosticsPage';
 
 interface WebviewContainerProps {
   activeTab: BrowserTab | undefined;
@@ -17,6 +19,8 @@ interface WebviewContainerProps {
   onNavigate: (url: string) => void;
   onReload: () => void;
   onWakeTab: (tabId: string) => void;
+  onHibernateTab?: (tabId: string) => void;
+  onTerminateTab?: (tabId: string) => void;
   onTabTitleChange?: (tabId: string, title: string) => void;
   onTabFaviconChange?: (tabId: string, favicon: string) => void;
   onTabLoadingChange?: (tabId: string, isLoading: boolean) => void;
@@ -40,13 +44,19 @@ interface WebviewContainerProps {
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
   onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
   splitViewState?: SplitViewState;
-  onSelectPane?: (pane: 'left' | 'right') => void;
-  onClosePane?: (pane: 'left' | 'right') => void;
-  onDividerChange?: (position: number) => void;
+  onSelectPane?: (paneId: string) => void;
+  onClosePane?: (paneId: string) => void;
+  onDividerChange?: (positions: number[]) => void;
   onPaneNavigate?: (tabId: string, url: string) => void;
   onPaneBack?: (tabId: string) => void;
   onPaneForward?: (tabId: string) => void;
   onPaneReload?: (tabId: string) => void;
+  onSwitchPaneTab?: (paneId: string, targetTabId: string) => void;
+  onNewTabInPane?: (paneId: string) => void;
+  onSelectLayout?: (layout: SplitLayoutType) => void;
+  onAddPane?: () => void;
+  onResetDividers?: () => void;
+  onExitSplitView?: () => void;
 }
 
 const ElectronWebviewTab: React.FC<{
@@ -315,6 +325,8 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   onNavigate,
   onReload,
   onWakeTab,
+  onHibernateTab,
+  onTerminateTab,
   onTabTitleChange,
   onTabFaviconChange,
   onTabLoadingChange,
@@ -336,27 +348,51 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   onPaneBack,
   onPaneForward,
   onPaneReload,
+  onSwitchPaneTab,
+  onNewTabInPane,
+  onSelectLayout,
+  onAddPane,
+  onResetDividers,
+  onExitSplitView,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const splitWorkspaceRef = useRef<HTMLDivElement>(null);
   const isElectron = isElectronEnvironment();
   const isTauri = isTauriEnvironment();
-  const [isDraggingDivider, setIsDraggingDivider] = useState(false);
+  const [activeDraggingDividerIndex, setActiveDraggingDividerIndex] = useState<number | null>(null);
+  const [dragOrientation, setDragOrientation] = useState<'vertical' | 'horizontal'>('vertical');
 
-  // Smooth divider dragging with window listeners
+  // Multi-divider dragging with window listeners
   useEffect(() => {
-    if (!isDraggingDivider) return;
+    if (activeDraggingDividerIndex === null) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      if (rect.width <= 0) return;
-      const rawPos = ((e.clientX - rect.left) / rect.width) * 100;
-      const clamped = Math.max(20, Math.min(80, Math.round(rawPos)));
-      onDividerChange?.(clamped);
+      if (!splitWorkspaceRef.current) return;
+      const rect = splitWorkspaceRef.current.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const layout = splitViewState?.layout || '2-vertical';
+      const prevPositions = splitViewState?.dividerPositions || [50];
+
+      let percent = 50;
+      if (dragOrientation === 'vertical') {
+        percent = ((e.clientX - rect.left) / rect.width) * 100;
+      } else {
+        percent = ((e.clientY - rect.top) / rect.height) * 100;
+      }
+
+      const nextPositions = SplitViewService.updateDividerPosition(
+        layout,
+        prevPositions,
+        activeDraggingDividerIndex,
+        percent
+      );
+
+      onDividerChange?.(nextPositions);
     };
 
     const handleMouseUp = () => {
-      setIsDraggingDivider(false);
+      setActiveDraggingDividerIndex(null);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -365,7 +401,13 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDraggingDivider, onDividerChange]);
+  }, [
+    activeDraggingDividerIndex,
+    dragOrientation,
+    splitViewState?.layout,
+    splitViewState?.dividerPositions,
+    onDividerChange,
+  ]);
 
   // Synchronize Tauri child webview bounds if in Tauri environment
   useEffect(() => {
@@ -417,8 +459,24 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
     );
   }
 
+  // 0. Dedicated Process Diagnostics internal page (freedom://memory)
+  if (activeTab.url === 'freedom://memory') {
+    return (
+      <div className="relative w-full h-full overflow-hidden z-10">
+        <FRCMemoryDiagnosticsPage
+          tabs={tabs}
+          activeTabId={activeTab.id}
+          onNavigate={onNavigate}
+          onHibernateTab={onHibernateTab}
+          onWakeTab={onWakeTab}
+          onTerminateTab={onTerminateTab}
+        />
+      </div>
+    );
+  }
+
   // 1. Tab is suspended / hibernated (Process memory optimization)
-  if (activeTab.isSuspended) {
+  if (activeTab.isSuspended || activeTab.lifecycleState === 'hibernated') {
     return (
       <div
         onClick={() => onWakeTab(activeTab.id)}
@@ -428,16 +486,16 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
           <Moon className="w-10 h-10 text-emerald-400 animate-pulse" />
         </div>
         <h3 className="text-lg font-semibold text-white mb-1">
-          Tab Memory Hibernated
+          {activeTab.title || 'Tab Memory Hibernated'}
         </h3>
         <p className="text-xs text-neutral-400 max-w-sm mb-4 leading-relaxed">
-          This tab was suspended by Freedom&apos;s memory optimizer to reclaim RAM.
-          Its state and URL ({activeTab.url}) are preserved.
+          This tab was hibernated by Freedom RAM Control to reclaim process memory (~0 MB).
+          Its navigation history, form state, and URL ({activeTab.url}) are preserved.
         </p>
         <button
           type="button"
           onClick={() => onWakeTab(activeTab.id)}
-          className="px-4 py-2 rounded-xl bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-xs font-medium transition-colors"
+          className="px-4 py-2 rounded-xl bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-xs font-medium transition-colors cursor-pointer"
         >
           Click Anywhere to Restore Tab
         </button>
@@ -458,252 +516,267 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
     );
   }
 
-  // 3. Electron Desktop Mode: Native Chromium Webviews with true top-level multi-tab & split-view rendering
+  // 3. Electron Desktop Mode: Native Chromium Webviews with true multi-tab & multi-pane workspace rendering
   if (isElectron) {
     const isSplit = Boolean(
       splitViewState?.enabled &&
-      splitViewState.leftTabId &&
-      splitViewState.rightTabId &&
-      tabs.some((t) => t.id === splitViewState.leftTabId) &&
-      tabs.some((t) => t.id === splitViewState.rightTabId)
+      splitViewState.panes.length >= 2 &&
+      splitViewState.panes.every((p) => tabs.some((t) => t.id === p.tabId))
     );
 
-    const leftTab = isSplit ? tabs.find((t) => t.id === splitViewState!.leftTabId) : undefined;
-    const rightTab = isSplit ? tabs.find((t) => t.id === splitViewState!.rightTabId) : undefined;
-    const dividerPos = splitViewState?.dividerPosition ?? 50;
+    const layoutBoxesAndDividers = isSplit
+      ? SplitViewService.calculateLayout(
+          splitViewState!.layout,
+          splitViewState!.panes.length,
+          splitViewState!.dividerPositions
+        )
+      : { boxes: [], dividers: [] };
+
+    const { boxes, dividers } = layoutBoxesAndDividers;
 
     const isNewTab = activeTab.url === 'freedom://newtab';
-    // Collect all open external tabs that are not suspended
+    const isMemoryPage = activeTab.url === 'freedom://memory';
+    // Collect all open external tabs that are not suspended or hibernated
     const externalTabs = tabs.length > 0
-      ? tabs.filter((t) => !t.url.startsWith('freedom://') && !t.isSuspended)
-      : (!isNewTab ? [activeTab] : []);
+      ? tabs.filter((t) => !t.url.startsWith('freedom://') && !t.isSuspended && t.lifecycleState !== 'hibernated')
+      : (!isNewTab && !isMemoryPage ? [activeTab] : []);
 
     return (
-      <div ref={containerRef} className="relative w-full h-full bg-transparent overflow-hidden select-none">
-        {/* Transparent mouse capture overlay during divider dragging to prevent webviews capturing pointer */}
-        {isDraggingDivider && (
-          <div className="fixed inset-0 z-50 cursor-col-resize select-none bg-transparent" />
+      <div ref={containerRef} className="relative w-full h-full bg-transparent overflow-hidden select-none flex flex-col">
+        {/* Split View Control Bar */}
+        {isSplit && (
+          <SplitViewControlBar
+            splitViewState={splitViewState!}
+            onSelectLayout={(lay) => onSelectLayout?.(lay)}
+            onAddPane={() => onAddPane?.()}
+            onResetDividers={() => onResetDividers?.()}
+            onExitSplitView={() => onExitSplitView?.()}
+          />
         )}
 
-        {/* 1. SPLIT VIEW MODE HEADERS, DIVIDER & NEW TAB PAGES */}
-        {isSplit && leftTab && rightTab && (
-          <>
-            {/* Left Pane Header */}
+        {/* Viewport Area */}
+        <div ref={splitWorkspaceRef} className="relative flex-1 w-full h-full overflow-hidden">
+          {/* Transparent mouse capture overlay during divider dragging to prevent webviews capturing pointer */}
+          {activeDraggingDividerIndex !== null && (
             <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: `${dividerPos}%`,
-                height: 36,
-              }}
-              className="z-20"
-            >
-              <SplitPaneHeader
-                pane="left"
-                tab={leftTab}
-                isActive={splitViewState!.activePane === 'left'}
-                onSelect={() => onSelectPane?.('left')}
-                onClose={() => onClosePane?.('left')}
-                onBack={(id) => onPaneBack?.(id)}
-                onForward={(id) => onPaneForward?.(id)}
-                onReload={(id) => onPaneReload?.(id)}
-                onNavigate={(id, u) => onPaneNavigate?.(id, u)}
-                defaultSearchEngine={defaultSearchEngine}
-              />
-            </div>
-
-            {/* Right Pane Header */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: `${dividerPos}%`,
-                width: `${100 - dividerPos}%`,
-                height: 36,
-              }}
-              className="z-20"
-            >
-              <SplitPaneHeader
-                pane="right"
-                tab={rightTab}
-                isActive={splitViewState!.activePane === 'right'}
-                onSelect={() => onSelectPane?.('right')}
-                onClose={() => onClosePane?.('right')}
-                onBack={(id) => onPaneBack?.(id)}
-                onForward={(id) => onPaneForward?.(id)}
-                onReload={(id) => onPaneReload?.(id)}
-                onNavigate={(id, u) => onPaneNavigate?.(id, u)}
-                defaultSearchEngine={defaultSearchEngine}
-              />
-            </div>
-
-            {/* Draggable Vertical Divider */}
-            <div
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setIsDraggingDivider(true);
-              }}
-              style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: `calc(${dividerPos}% - 4px)`,
-                width: 8,
-                zIndex: 40,
-              }}
-              className="group cursor-col-resize flex items-center justify-center select-none"
-              title="Drag to resize split panes"
-            >
-              <div
-                className={`w-[2px] h-full transition-colors ${
-                  isDraggingDivider
-                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]'
-                    : 'bg-white/10 group-hover:bg-emerald-500/70'
-                }`}
-              />
-              <div className="absolute w-3.5 h-7 rounded-full bg-neutral-900 border border-white/20 group-hover:border-emerald-500/60 shadow-md flex items-center justify-center pointer-events-none transition-transform group-hover:scale-110">
-                <GripVertical className="w-2.5 h-2.5 text-neutral-400 group-hover:text-emerald-300" />
-              </div>
-            </div>
-
-            {/* Left New Tab Page (if left tab is freedom://newtab) */}
-            {leftTab.url === 'freedom://newtab' && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 36,
-                  bottom: 0,
-                  left: 0,
-                  width: `${dividerPos}%`,
-                }}
-                className="overflow-y-auto no-scrollbar z-10"
-                onClick={() => onSelectPane?.('left')}
-              >
-                <NewTabPage
-                  onNavigate={(u) => onPaneNavigate?.(leftTab.id, u)}
-                  defaultSearchEngine={defaultSearchEngine}
-                  palette={palette}
-                  isPerformanceMode={isPerformanceMode}
-                  onOpenSettings={onOpenSettings}
-                  showSettingsIcon={showNewTabSettingsIcon}
-                  showFreedomIcon={showFreedomIcon}
-                />
-              </div>
-            )}
-
-            {/* Right New Tab Page (if right tab is freedom://newtab) */}
-            {rightTab.url === 'freedom://newtab' && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 36,
-                  bottom: 0,
-                  left: `${dividerPos}%`,
-                  width: `${100 - dividerPos}%`,
-                }}
-                className="overflow-y-auto no-scrollbar z-10"
-                onClick={() => onSelectPane?.('right')}
-              >
-                <NewTabPage
-                  onNavigate={(u) => onPaneNavigate?.(rightTab.id, u)}
-                  defaultSearchEngine={defaultSearchEngine}
-                  palette={palette}
-                  isPerformanceMode={isPerformanceMode}
-                  onOpenSettings={onOpenSettings}
-                  showSettingsIcon={showNewTabSettingsIcon}
-                  showFreedomIcon={showFreedomIcon}
-                />
-              </div>
-            )}
-          </>
-        )}
-
-        {/* 2. SINGLE TAB VIEW: Full New Tab Page */}
-        {!isSplit && isNewTab && (
-          <div
-            id="newtab-zoom-viewport"
-            className="relative w-full h-full overflow-y-auto no-scrollbar z-10"
-            style={{
-              zoom: (activeTab.zoomLevel || 100) / 100,
-            }}
-          >
-            <NewTabPage
-              onNavigate={onNavigate}
-              defaultSearchEngine={defaultSearchEngine}
-              palette={palette}
-              isPerformanceMode={isPerformanceMode}
-              onOpenSettings={onOpenSettings}
-              showSettingsIcon={showNewTabSettingsIcon}
-              showFreedomIcon={showFreedomIcon}
+              className={`fixed inset-0 z-50 select-none bg-transparent ${
+                dragOrientation === 'vertical' ? 'cursor-col-resize' : 'cursor-row-resize'
+              }`}
             />
-          </div>
-        )}
+          )}
 
-        {/* 3. ELECTRON WEBVIEW TABS (Persistently mounted with dynamic layout positioning) */}
-        {externalTabs.map((t) => {
-          let tabStyle: React.CSSProperties;
-          let tabIsActive = false;
+          {/* 1. SPLIT VIEW MODE: PANES HEADERS, DIVIDERS & NEW TAB PAGES */}
+          {isSplit && (
+            <>
+              {/* Pane Headers & New Tab Pages for each pane */}
+              {splitViewState!.panes.map((pane, idx) => {
+                const box = boxes[idx];
+                const paneTab = tabs.find((t) => t.id === pane.tabId);
+                if (!box || !paneTab) return null;
+                const isThisPaneActive = splitViewState!.activePaneId === pane.id;
 
-          if (isSplit) {
-            if (t.id === leftTab?.id && leftTab.url !== 'freedom://newtab') {
-              tabIsActive = splitViewState!.activePane === 'left';
-              tabStyle = {
-                display: 'block',
-                position: 'absolute',
-                top: 36,
-                bottom: 0,
-                left: 0,
-                width: `${dividerPos}%`,
-                zIndex: tabIsActive ? 2 : 1,
-              };
-            } else if (t.id === rightTab?.id && rightTab.url !== 'freedom://newtab') {
-              tabIsActive = splitViewState!.activePane === 'right';
-              tabStyle = {
-                display: 'block',
-                position: 'absolute',
-                top: 36,
-                bottom: 0,
-                left: `${dividerPos}%`,
-                width: `${100 - dividerPos}%`,
-                zIndex: tabIsActive ? 2 : 1,
-              };
-            } else {
-              tabStyle = { display: 'none' };
-            }
-          } else {
-            // Normal single view
-            const isSingleActive = !isNewTab && t.id === activeTab.id;
-            tabIsActive = isSingleActive;
-            tabStyle = {
-              display: isSingleActive ? 'block' : 'none',
-              position: 'absolute',
-              inset: 0,
-            };
-          }
+                return (
+                  <React.Fragment key={pane.id}>
+                    {/* Pane Header */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: box.top,
+                        left: box.left,
+                        width: box.width,
+                        height: 36,
+                      }}
+                      className="z-20"
+                    >
+                      <SplitPaneHeader
+                        paneIndex={idx + 1}
+                        paneId={pane.id}
+                        tab={paneTab}
+                        allTabs={tabs}
+                        allPanes={splitViewState!.panes}
+                        isActive={isThisPaneActive}
+                        canClose={splitViewState!.panes.length > 1}
+                        onSelect={() => onSelectPane?.(pane.id)}
+                        onClose={() => onClosePane?.(pane.id)}
+                        onBack={(id) => onPaneBack?.(id)}
+                        onForward={(id) => onPaneForward?.(id)}
+                        onReload={(id) => onPaneReload?.(id)}
+                        onNavigate={(id, u) => onPaneNavigate?.(id, u)}
+                        onSwitchTab={(pId, tId) => onSwitchPaneTab?.(pId, tId)}
+                        onNewTabInPane={(pId) => onNewTabInPane?.(pId)}
+                        defaultSearchEngine={defaultSearchEngine}
+                      />
+                    </div>
 
-          return (
-            <ElectronWebviewTab
-              key={t.id}
-              tab={t}
-              isActive={tabIsActive}
-              style={tabStyle}
-              onFocused={(id) => {
-                if (isSplit) {
-                  if (id === leftTab?.id) onSelectPane?.('left');
-                  if (id === rightTab?.id) onSelectPane?.('right');
+                    {/* New Tab Page (if tab is freedom://newtab) */}
+                    {paneTab.url === 'freedom://newtab' && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: `calc(${box.top} + 36px)`,
+                          left: box.left,
+                          width: box.width,
+                          height: `calc(${box.height} - 36px)`,
+                        }}
+                        className="overflow-y-auto no-scrollbar z-10"
+                        onClick={() => onSelectPane?.(pane.id)}
+                      >
+                        <NewTabPage
+                          onNavigate={(u) => onPaneNavigate?.(paneTab.id, u)}
+                          defaultSearchEngine={defaultSearchEngine}
+                          palette={palette}
+                          isPerformanceMode={isPerformanceMode}
+                          onOpenSettings={onOpenSettings}
+                          showSettingsIcon={showNewTabSettingsIcon}
+                          showFreedomIcon={showFreedomIcon}
+                        />
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+
+              {/* Draggable Multi-Dividers */}
+              {dividers.map((d) => (
+                <div
+                  key={d.id}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setActiveDraggingDividerIndex(d.index);
+                    setDragOrientation(d.orientation);
+                  }}
+                  style={d.style}
+                  className={`group select-none flex items-center justify-center ${
+                    d.orientation === 'vertical' ? 'cursor-col-resize' : 'cursor-row-resize'
+                  }`}
+                  title={
+                    d.orientation === 'vertical'
+                      ? 'Drag horizontally to resize'
+                      : 'Drag vertically to resize'
+                  }
+                >
+                  <div
+                    className={`${
+                      d.orientation === 'vertical' ? 'w-[2px] h-full' : 'h-[2px] w-full'
+                    } transition-colors ${
+                      activeDraggingDividerIndex === d.index
+                        ? 'bg-emerald-400'
+                        : 'bg-white/10 group-hover:bg-white/30'
+                    }`}
+                  />
+                  <div
+                    className={`absolute ${
+                      d.orientation === 'vertical' ? 'w-3.5 h-7' : 'w-7 h-3.5'
+                    } rounded-full bg-neutral-900/90 border border-white/20 group-hover:border-white/40 shadow-md flex items-center justify-center pointer-events-none transition-transform group-hover:scale-105`}
+                  >
+                    {d.orientation === 'vertical' ? (
+                      <GripVertical className="w-2.5 h-2.5 text-neutral-400 group-hover:text-neutral-200" />
+                    ) : (
+                      <GripHorizontal className="w-2.5 h-2.5 text-neutral-400 group-hover:text-neutral-200" />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* 2. SINGLE TAB VIEW: Full New Tab Page */}
+          {!isSplit && isNewTab && (
+            <div
+              id="newtab-zoom-viewport"
+              className="relative w-full h-full overflow-y-auto no-scrollbar z-10"
+              style={{
+                zoom: (activeTab.zoomLevel || 100) / 100,
+              }}
+            >
+              <NewTabPage
+                onNavigate={onNavigate}
+                defaultSearchEngine={defaultSearchEngine}
+                palette={palette}
+                isPerformanceMode={isPerformanceMode}
+                onOpenSettings={onOpenSettings}
+                showSettingsIcon={showNewTabSettingsIcon}
+                showFreedomIcon={showFreedomIcon}
+              />
+            </div>
+          )}
+
+          {/* 2b. SINGLE TAB VIEW: Process Diagnostics Page (freedom://memory) */}
+          {!isSplit && isMemoryPage && (
+            <div className="relative w-full h-full overflow-hidden z-10">
+              <FRCMemoryDiagnosticsPage
+                tabs={tabs}
+                activeTabId={activeTab.id}
+                onNavigate={onNavigate}
+                onHibernateTab={onHibernateTab}
+                onWakeTab={onWakeTab}
+                onTerminateTab={onTerminateTab}
+              />
+            </div>
+          )}
+
+          {/* 3. ELECTRON WEBVIEW TABS (Persistently mounted with dynamic layout positioning) */}
+          {externalTabs.map((t) => {
+            let tabStyle: React.CSSProperties;
+            let tabIsActive = false;
+
+            if (isSplit) {
+              const paneIndex = splitViewState!.panes.findIndex((p) => p.tabId === t.id);
+              if (paneIndex !== -1 && t.url !== 'freedom://newtab') {
+                const box = boxes[paneIndex];
+                if (box) {
+                  const isThisPaneActive =
+                    splitViewState!.activePaneId === splitViewState!.panes[paneIndex].id;
+                  tabIsActive = isThisPaneActive;
+                  tabStyle = {
+                    display: 'block',
+                    position: 'absolute',
+                    top: `calc(${box.top} + 36px)`,
+                    left: box.left,
+                    width: box.width,
+                    height: `calc(${box.height} - 36px)`,
+                    zIndex: isThisPaneActive ? 2 : 1,
+                  };
+                } else {
+                  tabStyle = { display: 'none' };
                 }
-              }}
-              onTabTitleChange={onTabTitleChange}
-              onTabFaviconChange={onTabFaviconChange}
-              onTabLoadingChange={onTabLoadingChange}
-              onTabNavigationChange={onTabNavigationChange}
-              onNewTabRequested={onNewTabRequested}
-              onFoundInPage={onFoundInPage}
-              onTabZoomChange={onTabZoomChange}
-            />
-          );
-        })}
+              } else {
+                tabStyle = { display: 'none' };
+              }
+            } else {
+              // Normal single view
+              const isSingleActive = !isNewTab && t.id === activeTab.id;
+              tabIsActive = isSingleActive;
+              tabStyle = {
+                display: isSingleActive ? 'block' : 'none',
+                position: 'absolute',
+                inset: 0,
+              };
+            }
+
+            return (
+              <ElectronWebviewTab
+                key={t.id}
+                tab={t}
+                isActive={tabIsActive}
+                style={tabStyle}
+                onFocused={(id) => {
+                  if (isSplit) {
+                    const foundPane = splitViewState!.panes.find((p) => p.tabId === id);
+                    if (foundPane) onSelectPane?.(foundPane.id);
+                  }
+                }}
+                onTabTitleChange={onTabTitleChange}
+                onTabFaviconChange={onTabFaviconChange}
+                onTabLoadingChange={onTabLoadingChange}
+                onTabNavigationChange={onTabNavigationChange}
+                onNewTabRequested={onNewTabRequested}
+                onFoundInPage={onFoundInPage}
+                onTabZoomChange={onTabZoomChange}
+              />
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -753,13 +826,13 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
       className="relative w-full h-full bg-transparent overflow-hidden flex flex-col items-center justify-center"
     >
       <div className="flex flex-col items-center justify-center p-8 text-center max-w-lg text-neutral-300">
-        <div className="p-4 rounded-2xl bg-neutral-900 border border-emerald-500/30 mb-5 shadow-lg">
+        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 mb-5 shadow-lg">
           <Globe className="w-10 h-10 text-emerald-400" />
         </div>
         <h2 className="text-lg font-bold text-white mb-2 tracking-tight">
           Native WebView Surface
         </h2>
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-800 text-emerald-400 font-mono text-xs mb-4">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] border border-white/10 text-emerald-400 font-mono text-xs mb-4">
           <ShieldCheck className="w-3.5 h-3.5" />
           <span>Top-Level Context: {activeTab.url}</span>
         </div>
@@ -773,7 +846,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
             href={activeTab.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-xs font-semibold transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-medium transition-colors"
           >
             <ExternalLink className="w-4 h-4" />
             <span>Open in Window</span>
@@ -781,7 +854,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
           <button
             type="button"
             onClick={onReload}
-            className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium transition-colors"
+            className="px-4 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/10 border border-white/[0.06] text-neutral-200 text-xs font-medium transition-colors"
           >
             Reload Tab
           </button>

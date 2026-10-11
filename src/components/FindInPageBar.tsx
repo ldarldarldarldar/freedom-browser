@@ -58,7 +58,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
   return (
     <div
       id="freedom-find-in-page-bar"
-      className="absolute top-2 right-4 z-40 flex items-center gap-1.5 px-3 py-1.5 bg-neutral-900/95 backdrop-blur-md border border-emerald-500/30 rounded-xl shadow-2xl text-neutral-200 text-xs animate-fade-in"
+      className="absolute top-3 right-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-[#12141c]/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] text-neutral-200 text-xs animate-fade-in"
       role="search"
       aria-label={t('find.placeholder')}
     >
@@ -75,7 +75,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
       />
 
       {/* Match Count Badge */}
-      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-neutral-400 bg-neutral-800 shrink-0">
+      <span className="px-2 py-0.5 rounded-md text-[10px] font-mono text-neutral-400 bg-white/[0.06] shrink-0 border border-white/[0.04]">
         {searchText.trim().length === 0
           ? '0/0'
           : numberOfMatches > 0
@@ -83,14 +83,14 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
           : '0/0'}
       </span>
 
-      <div className="flex items-center gap-0.5 border-l border-white/10 pl-1 shrink-0">
+      <div className="flex items-center gap-0.5 border-l border-white/[0.08] pl-1.5 shrink-0">
         {/* Previous */}
         <button
           type="button"
           onClick={() => onFind(searchText, false, true)}
           disabled={!searchText || numberOfMatches === 0}
           title={t('find.previous')}
-          className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+          className="p-1 rounded-md hover:bg-white/[0.08] text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
         >
           <ChevronUp className="w-3.5 h-3.5" />
         </button>
@@ -101,7 +101,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
           onClick={() => onFind(searchText, true, true)}
           disabled={!searchText || numberOfMatches === 0}
           title={t('find.next')}
-          className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
+          className="p-1 rounded-md hover:bg-white/[0.08] text-neutral-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-colors"
         >
           <ChevronDown className="w-3.5 h-3.5" />
         </button>
@@ -111,7 +111,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
           type="button"
           onClick={onClose}
           title={t('find.close')}
-          className="p-1 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
+          className="p-1 rounded-md hover:bg-white/[0.08] text-neutral-400 hover:text-white transition-colors"
         >
           <X className="w-3.5 h-3.5" />
         </button>

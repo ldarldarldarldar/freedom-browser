@@ -117,82 +117,75 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           onClick={onOpenSettings}
           title={t('newtab.openSettings')}
           aria-label={t('newtab.openSettings')}
-          className="absolute top-5 right-6 p-2.5 rounded-xl bg-neutral-900/60 hover:bg-neutral-800/80 border border-white/10 hover:border-emerald-500/40 text-neutral-400 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95 group z-20"
+          className="absolute top-5 right-6 p-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-neutral-400 hover:text-white transition-colors cursor-pointer active:scale-95 group z-20"
         >
-          <Settings className="w-4 h-4 transition-transform duration-200 group-hover:rotate-45 text-neutral-300 group-hover:text-white" />
+          <Settings className="w-4 h-4 transition-transform duration-200 group-hover:rotate-45 text-neutral-400 group-hover:text-white" />
         </button>
       )}
 
-      {/* Minimal Digital Clock */}
-      <div className="mb-6 text-center">
-        <div className="text-5xl md:text-6xl font-extralight tracking-tight text-neutral-100 font-mono">
+      {/* Minimal Digital Clock & Date */}
+      <div className="mb-7 text-center">
+        <div className="text-6xl md:text-7xl font-extralight tracking-tight text-white font-mono">
           {time || '00:00'}
         </div>
-        <div
-          className="text-xs tracking-widest uppercase mt-1 font-medium"
-          style={{ color: accent }}
-        >
+        <div className="text-xs tracking-[0.25em] uppercase mt-2 font-mono text-neutral-400 font-medium">
           {date}
         </div>
       </div>
 
-      {/* Freedom Brand Header - clicking logo/icon opens Settings */}
+      {/* Freedom Brand Header */}
       <div className="flex flex-col items-center mb-8">
         <button
           type="button"
           onClick={onOpenSettings}
           title={t('newtab.openSettings')}
           aria-label={t('newtab.openSettings')}
-          className="group flex flex-col items-center focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 rounded-2xl p-2 transition-all cursor-pointer hover:scale-105 active:scale-95"
+          className="group flex flex-col items-center focus:outline-none rounded-2xl p-2 transition-all cursor-pointer hover:scale-102 active:scale-98"
         >
-          <FreedomLogo size={64} className="mb-3 transition-transform group-hover:brightness-110" />
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+          <FreedomLogo size={60} className="mb-2.5 transition-transform group-hover:brightness-110" />
+          <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
             <span>FREEDOM</span>
           </h1>
         </button>
-        <p className="text-xs text-neutral-400 mt-1 font-mono flex items-center gap-3">
-          <span className="flex items-center gap-1" style={{ color: accent }}>
+
+        <div className="inline-flex items-center gap-3 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.06] text-[11px] font-mono text-neutral-400 mt-1">
+          <span className="flex items-center gap-1 text-emerald-400">
             <Shield className="w-3 h-3" /> {t('newtab.brandFreedom')}
           </span>
-          <span>•</span>
-          <span className="flex items-center gap-1" style={{ color: accent }}>
+          <span className="text-neutral-700">•</span>
+          <span className="flex items-center gap-1 text-emerald-400">
             <Code2 className="w-3 h-3" /> {t('newtab.brandProgramming')}
           </span>
-          <span>•</span>
-          <span className="flex items-center gap-1" style={{ color: accent }}>
+          <span className="text-neutral-700">•</span>
+          <span className="flex items-center gap-1 text-emerald-400">
             <Zap className="w-3 h-3" /> {t('newtab.brandSpeed')}
           </span>
-        </p>
+        </div>
       </div>
 
-      {/* Central Clean Search Bar */}
-      <form onSubmit={handleSearch} className="w-full max-w-xl mb-10">
+      {/* Central Command-Style Search Bar */}
+      <form onSubmit={handleSearch} className="w-full max-w-2xl mb-9">
         <div
-          className="relative flex items-center w-full bg-neutral-900/90 hover:bg-neutral-900 border border-white/15 rounded-2xl px-4 py-3 transition-all duration-200 shadow-xl"
+          className="relative flex items-center w-full h-13 bg-white/[0.035] hover:bg-white/[0.055] focus-within:bg-[#0f1118] border border-white/12 focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/15 rounded-2xl px-4 transition-all duration-200 shadow-xl"
           style={{
             borderColor: palette?.borderColor || undefined,
             backgroundColor: palette?.inputBg || undefined,
           }}
         >
-          <Search className="w-4 h-4 text-neutral-400 mr-3 shrink-0" />
+          <Search className="w-4.5 h-4.5 text-neutral-400 mr-3 shrink-0" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('newtab.searchPlaceholder', { engine: activeEngine.name })}
-            className="w-full bg-transparent text-sm text-white placeholder-neutral-500 focus:outline-none"
+            className="w-full bg-transparent text-sm text-white placeholder-neutral-500 focus:outline-none font-normal"
             autoFocus
             spellCheck={false}
           />
+
           <button
             type="submit"
-            className="ml-2 px-3 py-1 rounded-lg text-xs font-medium transition-colors shrink-0"
-            style={{
-              backgroundColor: palette?.buttonBg || 'rgba(6, 78, 59, 0.8)',
-              borderColor: palette?.borderColor || 'rgba(16, 185, 129, 0.3)',
-              borderWidth: 1,
-              color: accent,
-            }}
+            className="ml-2 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white/[0.08] hover:bg-white/[0.12] text-neutral-200 hover:text-white border border-white/[0.08] transition-colors cursor-pointer shrink-0"
           >
             {t('newtab.enter')}
           </button>
@@ -200,15 +193,15 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       </form>
 
       {/* New Tab Favorites Section */}
-      <div className="w-full max-w-xl">
-        <div className={`flex items-center justify-between px-1 ${favorites.length > 0 ? 'mb-4' : ''}`}>
+      <div className="w-full max-w-2xl">
+        <div className={`flex items-center justify-between px-1 ${favorites.length > 0 ? 'mb-3.5' : 'mb-2'}`}>
           <span className="text-xs font-mono uppercase tracking-wider text-neutral-400 font-semibold">
             {t('newtab.favorites')}
           </span>
           <button
             type="button"
             onClick={handleOpenAddModal}
-            className="p-1.5 rounded-lg bg-neutral-900/80 hover:bg-neutral-800 border border-white/10 hover:border-emerald-500/40 text-neutral-300 hover:text-white transition-all cursor-pointer shadow-sm active:scale-95 flex items-center justify-center"
+            className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-neutral-400 hover:text-white transition-all cursor-pointer active:scale-95 flex items-center justify-center"
             title={t('newtab.addFavorite')}
             aria-label={t('newtab.addFavorite')}
           >
@@ -217,7 +210,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         </div>
 
         {favorites.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-3">
             {favorites.map((fav) => {
               const iconUrl = FaviconService.getFaviconSync(fav.url);
               const domain = SearchEngineService.extractDomain(fav.url);
@@ -226,7 +219,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                 <div
                   key={fav.id}
                   onClick={() => onNavigate(fav.url)}
-                  className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-white/5 hover:border-emerald-500/40 transition-all duration-150 cursor-pointer overflow-hidden shadow-sm hover:shadow-lg active:scale-98"
+                  className="group relative flex flex-col items-center p-3.5 rounded-2xl border border-white/[0.06] hover:border-white/15 bg-white/[0.025] hover:bg-white/[0.06] transition-all duration-200 cursor-pointer overflow-hidden shadow-xs hover:shadow-xl active:scale-98"
                   style={{ backgroundColor: cardBg }}
                 >
                   {/* Hover Action Buttons: Edit and Remove */}
@@ -234,43 +227,43 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleOpenEditModal(fav, e)}
-                      className="p-1 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-white/10 shadow-sm transition-all"
+                      className="p-1 rounded-md bg-neutral-900/95 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-white/10 shadow-xs transition-colors"
                       title={t('newtab.editTooltip')}
                     >
-                      <Pencil className="w-3 h-3" />
+                      <Pencil className="w-2.5 h-2.5" />
                     </button>
                     <button
                       type="button"
                       onClick={(e) => handleDeleteFavorite(fav.id, e)}
-                      className="p-1 rounded-lg bg-neutral-900/90 hover:bg-rose-950/90 text-neutral-400 hover:text-rose-400 border border-white/10 hover:border-rose-500/30 shadow-sm transition-all"
+                      className="p-1 rounded-md bg-neutral-900/95 hover:bg-rose-950/80 text-neutral-400 hover:text-rose-400 border border-white/10 hover:border-rose-500/30 shadow-xs transition-colors"
                       title={t('newtab.removeTooltip')}
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-2.5 h-2.5" />
                     </button>
                   </div>
 
-                  {/* Real Website Favicon Container */}
+                  {/* Website Favicon Container */}
                   <div
-                    className="w-10 h-10 rounded-xl border border-white/10 flex items-center justify-center mb-2.5 p-2 shadow-inner group-hover:scale-105 transition-transform"
+                    className="w-11 h-11 rounded-xl border border-white/[0.08] flex items-center justify-center mb-2.5 p-2 shadow-xs group-hover:scale-105 group-hover:border-emerald-500/30 transition-all"
                     style={{ backgroundColor: iconBg }}
                   >
                     {iconUrl ? (
                       <img
                         src={iconUrl}
                         alt=""
-                        className="w-6 h-6 object-contain rounded-sm"
+                        className="w-6 h-6 object-contain rounded-xs"
                         onError={(e) => {
                           const target = e.currentTarget;
                           target.src = FaviconService.generateMonogramSvg(fav.title);
                         }}
                       />
                     ) : (
-                      <Globe className="w-5 h-5 text-neutral-400" />
+                      <Globe className="w-5 h-5 text-neutral-500" />
                     )}
                   </div>
 
                   {/* Title & Domain */}
-                  <span className="text-xs text-neutral-200 group-hover:text-emerald-300 font-medium truncate max-w-full text-center">
+                  <span className="text-xs text-neutral-200 group-hover:text-white font-medium truncate max-w-full text-center tracking-tight">
                     {fav.title}
                   </span>
                   <span className="text-[10px] text-neutral-500 font-mono mt-0.5 truncate max-w-full">
@@ -286,23 +279,23 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       {/* Add / Edit Favorite Modal */}
       {isModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-fade-in"
           onClick={() => setIsModalOpen(false)}
         >
           <div
-            className="w-full max-w-md bg-neutral-900 border border-white/15 rounded-2xl p-6 shadow-2xl animate-scale-in text-neutral-200"
+            className="w-full max-w-sm bg-neutral-900/98 backdrop-blur-2xl border border-white/10 rounded-2xl p-6 shadow-2xl animate-scale-in text-neutral-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/10">
-              <h3 className="text-base font-semibold text-white">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-white/[0.08]">
+              <h3 className="text-sm font-semibold text-white tracking-tight">
                 {editingFavorite ? t('newtab.editFavorite') : t('newtab.addNewFavorite')}
               </h3>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -316,7 +309,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
                   placeholder={t('newtab.siteNamePlaceholder')}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/70"
+                  className="w-full px-3 py-2 rounded-xl bg-neutral-950/80 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/50"
                   autoFocus
                 />
               </div>
@@ -331,21 +324,21 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                   onChange={(e) => setUrlInput(e.target.value)}
                   placeholder={t('newtab.webUrlPlaceholder')}
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/70"
+                  className="w-full px-3 py-2 rounded-xl bg-neutral-950/80 border border-white/10 text-white text-xs placeholder-neutral-500 focus:outline-none focus:border-emerald-500/50"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-neutral-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                  className="px-3.5 py-2 rounded-xl text-xs font-medium text-neutral-400 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
                 >
                   {t('newtab.cancel')}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 shadow-xs transition-colors cursor-pointer"
                 >
                   {editingFavorite ? t('newtab.saveChanges') : t('newtab.addToFavorites')}
                 </button>

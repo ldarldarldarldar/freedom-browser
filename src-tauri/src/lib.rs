@@ -32,6 +32,7 @@ pub fn run() {
             commands::browser::set_window_title,
             commands::browser::close_app,
             commands::taskmanager::get_system_task_manager_stats,
+            commands::taskmanager::clean_system_ram,
             commands::taskmanager::terminate_process,
             commands::downloads::start_download,
             commands::downloads::open_download_folder,

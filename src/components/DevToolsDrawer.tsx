@@ -136,12 +136,12 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
   return (
     <div
       id="freedom-devtools-panel"
-      className="h-64 bg-neutral-950 border-t border-emerald-500/30 text-neutral-200 flex flex-col select-none relative z-40 text-xs font-mono"
+      className="h-64 bg-[#0e1017] border-t border-white/10 text-neutral-200 flex flex-col select-none relative z-40 text-xs font-mono"
     >
       {/* DevTools Toolbar */}
-      <div className="flex items-center justify-between px-3 h-8 bg-neutral-900 border-b border-white/10 shrink-0">
+      <div className="flex items-center justify-between px-3 h-8.5 bg-[#13151f] border-b border-white/[0.08] shrink-0">
         <div className="flex items-center space-x-1">
-          <div className="flex items-center gap-1.5 mr-3 text-emerald-400 font-bold tracking-wider text-[11px]">
+          <div className="flex items-center gap-1.5 mr-3 text-emerald-400 font-semibold tracking-wider text-[11px]">
             <Terminal className="w-3.5 h-3.5" />
             <span>DEVTOOLS</span>
           </div>
@@ -149,10 +149,10 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
           <button
             type="button"
             onClick={() => setActiveTabPanel('console')}
-            className={`px-2.5 py-1 rounded text-xs transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
               activeTabPanel === 'console'
-                ? 'bg-neutral-800 text-white font-semibold'
-                : 'text-neutral-400 hover:text-white'
+                ? 'bg-white/[0.08] text-white font-medium'
+                : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             Console
@@ -161,10 +161,10 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
           <button
             type="button"
             onClick={() => setActiveTabPanel('network')}
-            className={`px-2.5 py-1 rounded text-xs transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
               activeTabPanel === 'network'
-                ? 'bg-neutral-800 text-white font-semibold'
-                : 'text-neutral-400 hover:text-white'
+                ? 'bg-white/[0.08] text-white font-medium'
+                : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             Network
@@ -173,10 +173,10 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
           <button
             type="button"
             onClick={() => setActiveTabPanel('elements')}
-            className={`px-2.5 py-1 rounded text-xs transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
               activeTabPanel === 'elements'
-                ? 'bg-neutral-800 text-white font-semibold'
-                : 'text-neutral-400 hover:text-white'
+                ? 'bg-white/[0.08] text-white font-medium'
+                : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             Elements
@@ -185,10 +185,10 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
           <button
             type="button"
             onClick={() => setActiveTabPanel('sources')}
-            className={`px-2.5 py-1 rounded text-xs transition-colors ${
+            className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
               activeTabPanel === 'sources'
-                ? 'bg-neutral-800 text-white font-semibold'
-                : 'text-neutral-400 hover:text-white'
+                ? 'bg-white/[0.08] text-white font-medium'
+                : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             Sources
@@ -199,7 +199,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
           <button
             type="button"
             onClick={handleOpenNativeInspector}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-[10px] transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white/[0.06] hover:bg-white/10 text-neutral-200 hover:text-white text-[11px] transition-colors"
             title="Open Native WebKit/WebView2 Inspector"
           >
             <ExternalLink className="w-3 h-3" />
@@ -209,7 +209,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded text-neutral-400 hover:text-white transition-colors"
+            className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
           >
             <X className="w-3.5 h-3.5" />
           </button>

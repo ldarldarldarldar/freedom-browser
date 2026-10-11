@@ -121,28 +121,28 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-neutral-900/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col text-neutral-200 animate-slide-left">
+    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[#11131a]/98 backdrop-blur-3xl border-l border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col text-neutral-200 animate-slide-left">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-neutral-950/80">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] bg-[#0c0d13]/80">
         <div className="flex items-center gap-2.5">
           <BookmarkIcon className="w-4 h-4 text-emerald-400" />
           <h2 className="text-sm font-semibold text-white tracking-wide">{t('bookmarks.title')}</h2>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.06] text-neutral-400">
             Ctrl+D
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+          className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {/* Search Bar */}
-      <div className="p-4 border-b border-white/5 space-y-3 bg-neutral-950/40">
-        <div className="relative flex items-center bg-neutral-800/80 border border-white/10 rounded-xl px-3 py-2">
+      <div className="p-3 border-b border-white/[0.06] space-y-2.5 bg-neutral-950/30">
+        <div className="relative flex items-center bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5">
           <Search className="w-3.5 h-3.5 text-neutral-400 mr-2 shrink-0" />
           <input
             type="text"
@@ -155,7 +155,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="text-neutral-400 hover:text-white text-xs"
+              className="text-neutral-400 hover:text-white text-xs cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -163,15 +163,15 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
         </div>
 
         {/* Folders Navigation Bar */}
-        <div className="flex items-center justify-between gap-1 overflow-x-auto pb-1 text-xs no-scrollbar">
+        <div className="flex items-center justify-between gap-1 overflow-x-auto pb-0.5 text-xs no-scrollbar">
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => setSelectedFolderId('all')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
+              className={`px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
                 selectedFolderId === 'all'
-                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                  : 'bg-neutral-800/60 text-neutral-400 hover:text-white'
+                  ? 'bg-white/[0.08] text-white border border-white/10'
+                  : 'bg-white/[0.03] text-neutral-400 hover:text-white'
               }`}
             >
               {t('bookmarks.all')}
@@ -181,10 +181,10 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedFolderId(f.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer ${
                     selectedFolderId === f.id
-                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40'
-                      : 'bg-neutral-800/60 text-neutral-400 hover:text-white'
+                      ? 'bg-white/[0.08] text-white border border-white/10'
+                      : 'bg-white/[0.03] text-neutral-400 hover:text-white'
                   }`}
                 >
                   <Folder className="w-3 h-3" />
@@ -319,7 +319,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
             <div
               key={bookmark.id}
               onClick={() => handleItemClick(bookmark.url)}
-              className="group relative flex items-center justify-between p-2.5 rounded-xl bg-neutral-950/60 hover:bg-neutral-800/80 border border-white/5 hover:border-emerald-500/30 cursor-pointer transition-all"
+              className="group relative flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.05] hover:border-white/10 cursor-pointer transition-colors"
             >
               <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
                 {bookmark.favicon ? (
@@ -336,10 +336,10 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                 )}
 
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-white truncate group-hover:text-emerald-300 transition-colors">
+                  <div className="text-xs font-medium text-neutral-200 group-hover:text-white truncate transition-colors">
                     {bookmark.title}
                   </div>
-                  <div className="text-[11px] text-neutral-400 font-mono truncate">
+                  <div className="text-[11px] text-neutral-500 font-mono truncate">
                     {bookmark.url}
                   </div>
                 </div>
@@ -358,7 +358,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                   type="button"
                   onClick={(e) => handleDeleteBookmark(bookmark.id, e)}
                   title={t('bookmarks.deleteTooltip')}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-neutral-400 hover:text-red-400 hover:bg-white/10 transition-all"
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

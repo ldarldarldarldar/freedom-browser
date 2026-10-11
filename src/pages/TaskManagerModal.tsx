@@ -140,11 +140,11 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div
         id="freedom-task-manager-dialog"
-        className="w-full max-w-4xl bg-neutral-900 border border-emerald-500/30 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] text-neutral-200 font-sans"
+        className="w-full max-w-4xl bg-[#12141c]/98 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col max-h-[85vh] text-neutral-200 font-sans"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-neutral-950 border-b border-white/10">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-6 py-4 bg-[#0d0f15] border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
             <Activity className="w-5 h-5 text-emerald-400" />
             <div>
               <h2 className="text-sm font-semibold text-white tracking-wide">
@@ -163,7 +163,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                 await fetchMetrics();
                 setIsRefreshing(false);
               }}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
               title={t('taskmgr.refreshTooltip')}
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -171,7 +171,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -179,8 +179,8 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
         </div>
 
         {/* Global Overview Bar */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-neutral-950/60 border-b border-white/5 text-xs font-mono">
-          <div className="p-2.5 rounded-lg bg-neutral-900/90 border border-white/5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-black/20 border-b border-white/[0.08] text-xs font-mono">
+          <div className="p-3.5 rounded-2xl bg-white/[0.025] border border-white/[0.07]">
             <div className="text-[10px] text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
               <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
               <span>{t('taskmgr.physicalRam')}</span>
@@ -193,7 +193,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
             </div>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-neutral-900/90 border border-white/5">
+          <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <div className="text-[10px] text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
               <Layers2 className="w-3.5 h-3.5 text-purple-400" />
               <span>{t('taskmgr.workingSet')}</span>
@@ -206,7 +206,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
             </div>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-neutral-900/90 border border-white/5">
+          <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <div className="text-[10px] text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
               <Cpu className="w-3.5 h-3.5 text-emerald-400" />
               <span>{t('taskmgr.browserCpu')}</span>
@@ -219,7 +219,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
             </div>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-neutral-900/90 border border-white/5">
+          <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <div className="text-[10px] text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-sky-400" />
               <span>{t('taskmgr.tabsOpen')}</span>
@@ -283,12 +283,12 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                     onClick={() => setSelectedProcessId(proc.id)}
                     className={`cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-emerald-950/40 text-white'
-                        : 'hover:bg-white/5'
+                        ? 'bg-white/[0.08] text-white'
+                        : 'hover:bg-white/[0.04]'
                     }`}
                   >
                     <td className="py-2 px-3 flex items-center gap-2">
-                      <div className="p-1 rounded bg-neutral-800/80 shrink-0">
+                      <div className="p-1 rounded bg-white/[0.05] shrink-0">
                         {getProcessIcon(proc.processType)}
                       </div>
                       <span className="font-sans font-medium truncate max-w-xs text-neutral-200">
@@ -311,7 +311,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                       <span
                         className={
                           proc.cpuUsagePercent > 10
-                            ? 'text-red-400 font-bold'
+                            ? 'text-rose-400 font-bold'
                             : proc.cpuUsagePercent > 0
                             ? 'text-emerald-400'
                             : 'text-neutral-500'
@@ -321,7 +321,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                       </span>
                     </td>
                     <td className="py-2 px-3 text-right">
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-400 border border-emerald-500/20">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         {t('taskmgr.statusActive')}
                       </span>
                     </td>
@@ -333,8 +333,8 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
         </div>
 
         {/* Footer with Controls */}
-        <div className="p-3 bg-neutral-950 border-t border-white/10 flex items-center justify-between">
-          <div className="text-neutral-400 text-[11px]">
+        <div className="px-6 py-3.5 bg-[#0d0f15] border-t border-white/[0.08] flex items-center justify-between">
+          <div className="text-neutral-400 text-xs">
             {selectedProcess ? (
               <span>
                 {t('taskmgr.selected', { title: selectedProcess.title, pid: selectedProcess.pid })}
@@ -352,7 +352,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                   onClick={() => {
                     if (selectedProcess.tabId) onReloadTab(selectedProcess.tabId);
                   }}
-                  className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white flex items-center gap-1.5 transition-colors text-xs"
+                  className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/10 text-neutral-200 hover:text-white flex items-center gap-1.5 transition-colors text-xs font-medium cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>{t('taskmgr.reloadPage')}</span>
@@ -363,7 +363,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                   onClick={() => {
                     if (selectedProcess.tabId) onSuspendTab(selectedProcess.tabId);
                   }}
-                  className="px-2.5 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5 transition-colors text-xs font-medium"
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5 transition-colors text-xs font-medium cursor-pointer"
                   title="Suspend tab to instantly reclaim RAM"
                 >
                   <Moon className="w-3.5 h-3.5" />
@@ -376,7 +376,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
               <button
                 type="button"
                 onClick={handleEndProcess}
-                className="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/40 text-red-300 flex items-center gap-1.5 transition-colors text-xs font-medium"
+                className="px-3.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 flex items-center gap-1.5 transition-colors text-xs font-medium cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('taskmgr.endProcess')}</span>

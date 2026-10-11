@@ -93,14 +93,11 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
   return (
     <div
       id="freedom-downloads-drawer"
-      className="absolute top-12 right-3 w-[400px] max-h-[75vh] bg-neutral-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden text-neutral-200 animate-fade-in"
-      style={{
-        boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.7), 0 0 1px 1px rgba(255, 255, 255, 0.05)',
-      }}
+      className="absolute top-13 right-3 w-[400px] max-h-[75vh] bg-[#11131a]/98 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden text-neutral-200 animate-fade-in"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-neutral-950/70 border-b border-white/5 select-none">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-4.5 py-3.5 bg-[#0c0d13]/80 border-b border-white/[0.08] select-none">
+        <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
             <Download className="w-3.5 h-3.5" />
           </div>
@@ -117,7 +114,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
           <button
             type="button"
             onClick={onOpenFolder}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
             title={t('downloads.openSystemFolder')}
           >
             <FolderOpen className="w-4 h-4" />
@@ -125,7 +122,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
             title={t('downloads.close')}
           >
             <X className="w-4 h-4" />
@@ -137,7 +134,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[420px]">
         {downloads.length === 0 ? (
           <div className="text-center py-10 text-neutral-500 text-xs">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-neutral-800/40 border border-white/5 flex items-center justify-center">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center">
               <Download className="w-5 h-5 text-neutral-500 opacity-60" />
             </div>
             <p className="font-medium text-neutral-300 mb-0.5">{t('downloads.noDownloads')}</p>
@@ -154,16 +151,16 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
             return (
               <div
                 key={item.id}
-                className="group p-3 rounded-xl bg-neutral-950/40 hover:bg-neutral-800/50 border border-white/5 hover:border-white/10 transition-all text-xs"
+                className="group p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/10 transition-colors text-xs"
               >
                 <div className="flex items-start justify-between gap-2.5">
                   <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                    <div className="p-2 rounded-lg bg-neutral-900 border border-white/5 mt-0.5 shrink-0">
+                    <div className="p-2 rounded-md bg-white/[0.04] border border-white/[0.06] mt-0.5 shrink-0">
                       {getFileIcon(item.filename)}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div
-                        className="font-medium text-white truncate max-w-[210px] text-xs cursor-pointer hover:text-emerald-300 transition-colors"
+                        className="font-medium text-neutral-200 truncate max-w-[210px] text-xs cursor-pointer hover:text-white transition-colors"
                         title={item.filename}
                         onClick={() => {
                           if (item.state === 'completed') {
@@ -174,7 +171,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                         {item.filename}
                       </div>
 
-                      <div className="text-[11px] text-neutral-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                      <div className="text-[11px] text-neutral-500 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
                         <span>
                           {formatSize(item.receivedBytes)}
                           {item.totalBytes > 0 && ` / ${formatSize(item.totalBytes)}`}
@@ -199,7 +196,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                         )}
 
                         {item.state === 'interrupted' && (
-                          <span className="text-red-400 flex items-center gap-0.5">
+                          <span className="text-rose-400 flex items-center gap-0.5">
                             <AlertCircle className="w-3 h-3 inline" /> {t('downloads.statusFailed')}
                           </span>
                         )}
@@ -223,7 +220,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                             <button
                               type="button"
                               onClick={() => onShowInFolder(item)}
-                              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+                              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors"
                               title={t('downloads.showInFolder')}
                             >
                               <Folder className="w-3.5 h-3.5" />
@@ -236,7 +233,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => onCancelDownload(item.id)}
-                          className="p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                           title={t('downloads.cancelDownload')}
                         >
                           <X className="w-3.5 h-3.5" />
@@ -248,7 +245,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => onRemoveItem(item.id)}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-white/10 transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
                           title={t('downloads.removeFromList')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -259,7 +256,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
 
                 {/* Progress bar */}
                 {item.state === 'progressing' && (
-                  <div className="w-full bg-neutral-800/80 h-1.5 rounded-full overflow-hidden mt-2.5">
+                  <div className="w-full bg-white/[0.06] h-1.5 rounded-full overflow-hidden mt-2.5">
                     <div
                       className="bg-emerald-400 h-full rounded-full transition-all duration-200"
                       style={{ width: `${percent}%` }}
@@ -274,11 +271,11 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
 
       {/* Footer */}
       {downloads.length > 0 && (
-        <div className="p-2.5 bg-neutral-950/60 border-t border-white/5 flex items-center justify-between text-[11px] select-none">
+        <div className="p-2.5 bg-neutral-950/50 border-t border-white/[0.06] flex items-center justify-between text-[11px] select-none">
           <button
             type="button"
             onClick={onOpenFolder}
-            className="text-neutral-400 hover:text-white flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-white/5 transition-colors"
+            className="text-neutral-400 hover:text-neutral-200 flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-white/[0.06] transition-colors"
           >
             <FolderOpen className="w-3.5 h-3.5" />
             <span>{t('downloads.openFolder')}</span>
@@ -287,7 +284,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
           <button
             type="button"
             onClick={onClearHistory}
-            className="text-neutral-400 hover:text-red-400 flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-red-500/10 transition-colors"
+            className="text-neutral-400 hover:text-rose-400 flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-rose-500/10 transition-colors"
           >
             <Trash2 className="w-3 h-3" />
             <span>{t('downloads.clearList')}</span>

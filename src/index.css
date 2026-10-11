@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+:root {
+  --fb-accent: #10b981;
+  --fb-surface-base: #0b0c10;
+  --fb-surface-chrome: #12141a;
+  --fb-surface-card: #181b24;
+  --fb-surface-border: rgba(255, 255, 255, 0.08);
+  --fb-surface-border-subtle: rgba(255, 255, 255, 0.04);
+}
+
+/* Typography & Rendering Smoothing */
+html, body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--fb-surface-base);
+  color: #ededed;
+}
+
 /* Performance Mode: Completely eliminates CSS transitions, keyframe animations, and expensive backdrop filters to minimize GPU/CPU */
 .performance-mode *:not(.tab-loading-spinner) {
   transition: none !important;
@@ -8,7 +27,7 @@
   box-shadow: none !important;
 }
 
-/* Tab Loading Spinner Animation */
+/* Tab Loading Spinner Animation - Clean & Minimalist */
 @keyframes tab-spin {
   0% {
     transform: rotate(0deg);
@@ -22,15 +41,14 @@
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid var(--theme-accent, #10b981);
+  border: 1.5px solid var(--theme-accent, #10b981);
   border-top-color: transparent !important;
   border-radius: 9999px;
-  animation: tab-spin 0.75s linear infinite !important;
+  animation: tab-spin 0.65s linear infinite !important;
   will-change: transform;
 }
 
-
-/* Low-overhead dark scrollbar */
+/* Sleek Minimalist Dark Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -41,12 +59,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--fb-scrollbar, rgba(255, 255, 255, 0.15));
-  border-radius: 4px;
+  background: var(--fb-scrollbar, rgba(255, 255, 255, 0.1));
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--fb-accent, #10b981);
+  background: var(--fb-scrollbar-hover, rgba(255, 255, 255, 0.22));
 }
 
 ::selection {
@@ -62,4 +80,22 @@
 
 .app-no-drag {
   -webkit-app-region: no-drag;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

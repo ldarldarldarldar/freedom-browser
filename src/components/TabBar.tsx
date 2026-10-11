@@ -135,7 +135,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   return (
     <div
       id="browser-tab-bar"
-      className={`flex items-center h-10 px-2 select-none border-b border-white/5 relative z-40 ${headerColorClass} overflow-x-auto no-scrollbar app-drag-region`}
+      className={`flex items-center h-10.5 px-2.5 select-none border-b border-white/[0.08] relative z-40 ${headerColorClass} overflow-x-auto no-scrollbar app-drag-region`}
       onDoubleClick={(e) => {
         if (
           (e.target as HTMLElement).id === 'browser-tab-bar' ||
@@ -145,11 +145,12 @@ export const TabBar: React.FC<TabBarProps> = ({
         }
       }}
     >
-      <div className="flex items-center flex-1 min-w-0 max-w-full space-x-1">
+      <div className="flex items-center flex-1 min-w-0 max-w-full space-x-1 py-1">
         {tabs.map((tab, index) => {
-          const isLeftSplit = splitViewState?.enabled && tab.id === splitViewState.leftTabId;
-          const isRightSplit = splitViewState?.enabled && tab.id === splitViewState.rightTabId;
-          const isInSplit = isLeftSplit || isRightSplit;
+          const splitPaneIndex = splitViewState?.enabled
+            ? splitViewState.panes.findIndex((p) => p.tabId === tab.id)
+            : -1;
+          const isInSplit = splitPaneIndex !== -1;
           const isActive = tab.id === activeTabId;
           const domain = TabSortService.extractHostname(tab.url);
           const prevDomain = index > 0 ? TabSortService.extractHostname(tabs[index - 1].url) : null;
@@ -163,7 +164,7 @@ export const TabBar: React.FC<TabBarProps> = ({
               {/* Vertical Separator between distinct domain groups */}
               {isDomainBoundary && (
                 <div
-                  className="w-[1px] h-4 mx-0.5 bg-white/15 shrink-0 self-center rounded-full pointer-events-none"
+                  className="w-[1px] h-4 mx-1 bg-white/15 shrink-0 self-center rounded-full pointer-events-none"
                   title={`Group: ${domain}`}
                 />
               )}
@@ -188,51 +189,83 @@ export const TabBar: React.FC<TabBarProps> = ({
                   const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuHeight - 8));
                   setContextMenu({ tab, x, y });
                 }}
-                title={`${displayTitle} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isLeftSplit ? ' [Split: Left Pane]' : isRightSplit ? ' [Split: Right Pane]' : ''}`}
-                className={`group relative flex items-center h-8 px-3.5 rounded-full text-xs transition-all duration-150 cursor-pointer min-w-[120px] max-w-[220px] flex-1 overflow-hidden app-no-drag border ${
+                title={`${displayTitle} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isInSplit ? ` [Split: Pane ${splitPaneIndex + 1}]` : ''}`}
+                className={`group relative flex items-center h-8 px-3 rounded-lg text-xs transition-all duration-150 cursor-pointer min-w-[124px] max-w-[230px] flex-1 overflow-hidden app-no-drag select-none ${
                   isActive
-                    ? 'bg-emerald-950/40 text-white border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.18)] ring-1 ring-emerald-500/20'
+                    ? 'bg-[#181a24] text-white border border-white/12 shadow-[0_2px_8px_rgba(0,0,0,0.5)] font-medium'
                     : isInSplit
-                    ? 'bg-emerald-950/20 text-neutral-200 border-emerald-500/30 hover:bg-emerald-950/30'
-                    : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/5 border-transparent'
+                    ? 'bg-emerald-950/30 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-950/50'
+                    : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.05] border border-transparent'
                 }`}
               >
-                {/* Split Indicator Badge */}
-                {isLeftSplit && (
-                  <span className="mr-1.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0" title={t('tab.splitLeftBadge')}>
-                    L
-                  </span>
+                {/* Active Tab Accent Bar */}
+                {isActive && (
+                  <div className="absolute top-0 left-2.5 right-2.5 h-[2px] bg-emerald-400 rounded-full" />
                 )}
-                {isRightSplit && (
-                  <span className="mr-1.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0" title={t('tab.splitRightBadge')}>
-                    R
+
+                {/* Split Indicator Badge */}
+                {isInSplit && (
+                  <span
+                    className="mr-1.5 px-1 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0"
+                    title={t('split.pane', { index: splitPaneIndex + 1 })}
+                  >
+                    P{splitPaneIndex + 1}
                   </span>
                 )}
 
-                {/* Favicon or Loading Spinner */}
-                <div className="mr-2 shrink-0 flex items-center">
+                {/* Favicon Container with FRC Status Dot */}
+                <div className="relative mr-2 shrink-0 flex items-center justify-center w-4 h-4">
                   {tab.isLoading ? (
                     <div className="tab-loading-spinner shrink-0" title={t('tab.loading')} />
-                  ) : tab.isSuspended ? (
-                    <Moon className="w-3.5 h-3.5 text-neutral-500" title={t('tab.suspendedTooltip')} />
                   ) : tab.url.startsWith('freedom://') ? (
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   ) : tab.favicon ? (
                     <img
                       src={tab.favicon}
                       alt=""
-                      className="w-3.5 h-3.5 rounded-sm object-contain"
+                      className={`w-3.5 h-3.5 rounded-sm object-contain transition-opacity ${
+                        tab.isSuspended || tab.lifecycleState === 'hibernated' || tab.lifecycleState === 'frozen'
+                          ? 'opacity-60'
+                          : 'opacity-100'
+                      }`}
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
                       }}
                     />
                   ) : (
-                    <Globe className="w-3.5 h-3.5 text-neutral-400" />
+                    <Globe
+                      className={`w-3.5 h-3.5 text-neutral-500 ${
+                        tab.isSuspended || tab.lifecycleState === 'hibernated' || tab.lifecycleState === 'frozen'
+                          ? 'opacity-60'
+                          : ''
+                      }`}
+                    />
                   )}
+
+                  {/* FRC Subtle Status Dot Cue */}
+                  {(tab.isSuspended || tab.lifecycleState === 'hibernated' || tab.lifecycleState === 'frozen') ? (
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-sky-400 ring-1 ring-[#12141c] shadow-[0_0_5px_rgba(56,189,248,0.9)]"
+                      title={tab.lifecycleState === 'frozen' ? t('frc.frozenTabTooltip') : t('frc.hibernatedTabTooltip')}
+                    />
+                  ) : tab.lifecycleState === 'throttled' ? (
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-[#12141c]"
+                      title={t('frc.throttledTabTooltip')}
+                    />
+                  ) : null}
                 </div>
 
-                {/* Title (No visible dup badge) */}
-                <span className={`truncate flex-1 font-medium ${tab.isSuspended ? 'opacity-60 italic' : ''}`}>
+                {/* Title */}
+                <span
+                  className={`truncate flex-1 font-normal tracking-tight text-xs ${
+                    isActive ? 'text-white font-medium' : 'text-neutral-300'
+                  } ${
+                    tab.isSuspended || tab.lifecycleState === 'hibernated' || tab.lifecycleState === 'frozen'
+                      ? 'opacity-60 italic'
+                      : ''
+                  }`}
+                >
                   {displayTitle}
                 </span>
 
@@ -244,7 +277,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                       e.stopPropagation();
                       onToggleMuteTab?.(tab.id);
                     }}
-                    className="mr-1 p-0.5 text-emerald-400 hover:text-white rounded app-no-drag"
+                    className="mr-1 p-0.5 text-emerald-400 hover:text-white rounded app-no-drag transition-colors"
                     title={tab.isMuted ? t('tab.unmute') : t('tab.mute')}
                   >
                     {tab.isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
@@ -259,10 +292,10 @@ export const TabBar: React.FC<TabBarProps> = ({
                     e.stopPropagation();
                     onCloseTab(tab.id);
                   }}
-                  className={`p-1 rounded-md ml-1 transition-all app-no-drag ${
+                  className={`w-4.5 h-4.5 rounded flex items-center justify-center ml-1 transition-all app-no-drag ${
                     isActive
-                      ? 'opacity-70 hover:opacity-100 hover:bg-white/10 text-neutral-300 hover:text-white'
-                      : 'opacity-0 group-hover:opacity-100 hover:bg-white/10 text-neutral-400 hover:text-white'
+                      ? 'text-neutral-400 hover:text-white hover:bg-white/15'
+                      : 'opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-white hover:bg-white/15'
                   }`}
                   title={t('tab.close')}
                 >
@@ -278,7 +311,7 @@ export const TabBar: React.FC<TabBarProps> = ({
           id="btn-new-tab"
           type="button"
           onClick={onNewTab}
-          className="flex items-center justify-center w-7 h-7 ml-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95 transition-all app-no-drag shrink-0"
+          className="flex items-center justify-center w-7.5 h-7.5 ml-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0 border border-white/[0.06]"
           title={t('tab.addNewTab')}
         >
           <Plus className="w-4 h-4" />
@@ -290,7 +323,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             id="btn-restore-closed-tab"
             type="button"
             onClick={onRestoreClosedTab}
-            className="flex items-center justify-center w-7 h-7 ml-0.5 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-white/5 active:scale-95 transition-all app-no-drag shrink-0"
+            className="flex items-center justify-center w-7.5 h-7.5 ml-1 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0 border border-white/[0.06]"
             title={t('tab.restoreClosed', { count: closedTabsCount })}
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -305,10 +338,10 @@ export const TabBar: React.FC<TabBarProps> = ({
               id="btn-tab-sort"
               type="button"
               onClick={handleSortButtonClick}
-              className={`flex items-center justify-center w-7 h-7 ml-0.5 rounded-lg transition-all app-no-drag cursor-pointer ${
+              className={`flex items-center justify-center w-7.5 h-7.5 ml-1 rounded-lg transition-all app-no-drag cursor-pointer border ${
                 showSortMenu || activeSortMode !== 'none'
-                  ? 'text-emerald-400 bg-white/10'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/5 active:scale-95'
+                  ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.08] border-white/[0.06] active:scale-95'
               }`}
               title={t('sort.buttonTooltip')}
             >
@@ -345,9 +378,9 @@ export const TabBar: React.FC<TabBarProps> = ({
               style={{ top: sortMenuPos.top, left: sortMenuPos.left }}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="fixed z-[99999] w-56 bg-neutral-900/98 border border-white/15 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] py-1.5 text-xs text-neutral-200 backdrop-blur-xl animate-fade-in app-no-drag pointer-events-auto select-none"
+              className="fixed z-[99999] w-52 bg-neutral-900/95 border border-white/10 rounded-xl shadow-2xl p-1 text-xs text-neutral-200 backdrop-blur-xl animate-fade-in app-no-drag pointer-events-auto select-none"
             >
-              <div className="px-3 py-1 font-semibold text-[10px] uppercase tracking-wider text-neutral-500">
+              <div className="px-2.5 py-1 font-medium text-[10px] uppercase tracking-wider text-neutral-500">
                 {t('tabBar.organization')}
               </div>
 
@@ -359,11 +392,11 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setShowSortMenu(false);
                   onSortTabs?.('site');
                 }}
-                className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center justify-between text-neutral-200 hover:text-white cursor-pointer app-no-drag transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white cursor-pointer app-no-drag transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <Globe className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="font-medium">{t('sort.groupBySiteDefault')}</span>
+                  <span className="font-medium text-xs">{t('sort.groupBySiteDefault')}</span>
                 </div>
                 {activeSortMode === 'site' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
               </button>
@@ -376,11 +409,11 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setShowSortMenu(false);
                   onSortTabs?.('ram');
                 }}
-                className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center justify-between text-neutral-200 hover:text-white cursor-pointer app-no-drag transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white cursor-pointer app-no-drag transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <Cpu className="w-3.5 h-3.5 text-rose-400" />
-                  <span>{t('sort.byRam')}</span>
+                  <span className="text-xs">{t('sort.byRam')}</span>
                 </div>
                 {activeSortMode === 'ram' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
               </button>
@@ -393,11 +426,11 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setShowSortMenu(false);
                   onSortTabs?.('duplicates');
                 }}
-                className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center justify-between text-neutral-200 hover:text-white cursor-pointer app-no-drag transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white cursor-pointer app-no-drag transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <Copy className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{t('sort.groupDuplicates')}</span>
+                  <span className="text-xs">{t('sort.groupDuplicates')}</span>
                 </div>
                 {activeSortMode === 'duplicates' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
               </button>
@@ -410,11 +443,11 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setShowSortMenu(false);
                   onSortTabs?.('title');
                 }}
-                className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center justify-between text-neutral-200 hover:text-white cursor-pointer app-no-drag transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white cursor-pointer app-no-drag transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <ArrowDownAZ className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{t('sort.byTitle')}</span>
+                  <span className="text-xs">{t('sort.byTitle')}</span>
                 </div>
                 {activeSortMode === 'title' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
               </button>
@@ -444,7 +477,7 @@ export const TabBar: React.FC<TabBarProps> = ({
               style={{ top: contextMenu.y, left: contextMenu.x }}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
-              className="fixed z-[99999] w-60 bg-neutral-900/98 border border-white/15 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.85)] py-1.5 text-xs text-neutral-200 backdrop-blur-xl animate-fade-in app-no-drag pointer-events-auto select-none"
+              className="fixed z-[99999] w-56 bg-neutral-900/95 border border-white/10 rounded-xl shadow-2xl p-1 text-xs text-neutral-200 backdrop-blur-xl animate-fade-in app-no-drag pointer-events-auto select-none"
             >
               <button
                 type="button"
@@ -455,7 +488,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setContextMenu(null);
                   onReloadTab?.(targetTab.id);
                 }}
-                className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 app-no-drag cursor-pointer transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 app-no-drag cursor-pointer transition-colors text-neutral-300 hover:text-white"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-neutral-400" />
                 <span>{t('tabMenu.reload')}</span>
@@ -470,7 +503,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setContextMenu(null);
                   onDuplicateTab?.(targetTab.id);
                 }}
-                className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 app-no-drag cursor-pointer transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 app-no-drag cursor-pointer transition-colors text-neutral-300 hover:text-white"
               >
                 <Copy className="w-3.5 h-3.5 text-neutral-400" />
                 <span>{t('tabMenu.duplicate')}</span>
@@ -486,10 +519,10 @@ export const TabBar: React.FC<TabBarProps> = ({
                     setContextMenu(null);
                     onOpenInSplitView(targetTab.id);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 app-no-drag cursor-pointer transition-colors text-emerald-400 hover:text-emerald-300"
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 app-no-drag cursor-pointer transition-colors text-emerald-400 hover:text-emerald-300"
                 >
                   <Columns2 className="w-3.5 h-3.5" />
-                  <span>{t('tabMenu.splitLeft')}</span>
+                  <span>{t('tabMenu.openInSplit')}</span>
                 </button>
               )}
 
@@ -503,7 +536,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                     setContextMenu(null);
                     onSuspendTab?.(targetTab.id);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
                 >
                   <Moon className="w-3.5 h-3.5 text-amber-400" />
                   <span>{t('tabBar.sleepTab')}</span>
@@ -513,8 +546,8 @@ export const TabBar: React.FC<TabBarProps> = ({
               {/* Group Actions if multiple tabs from this site */}
               {domainTabs.length > 1 && (
                 <>
-                  <div className="my-1 border-t border-white/10" />
-                  <div className="px-3 py-1 text-[10px] uppercase font-semibold text-neutral-500 tracking-wider">
+                  <div className="my-1 border-t border-white/[0.06]" />
+                  <div className="px-2.5 py-0.5 text-[10px] uppercase font-semibold text-neutral-500 tracking-wider">
                     {t('tabBar.groupSite', { domain: contextDomain, count: domainTabs.length })}
                   </div>
 
@@ -527,7 +560,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                       setContextMenu(null);
                       onSuspendTabs?.(ids);
                     }}
-                    className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
                   >
                     <Moon className="w-3.5 h-3.5 text-amber-400" />
                     <span>{t('tabBar.sleepSite', { count: domainTabs.length })}</span>
@@ -542,7 +575,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                       setContextMenu(null);
                       onCloseTabsFromSite?.(domainToClose);
                     }}
-                    className="w-full px-3 py-1.5 text-left hover:bg-rose-500/20 text-rose-300 flex items-center gap-2 app-no-drag cursor-pointer transition-colors"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-rose-500/15 text-rose-300 hover:text-rose-200 flex items-center gap-2 app-no-drag cursor-pointer transition-colors"
                   >
                     <X className="w-3.5 h-3.5 text-rose-400" />
                     <span>{t('tabBar.closeSite', { count: domainTabs.length })}</span>
@@ -550,7 +583,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                 </>
               )}
 
-              <div className="my-1 border-t border-white/10" />
+              <div className="my-1 border-t border-white/[0.06]" />
 
               {onCloseOtherTabs && tabs.length > 1 && (
                 <button
@@ -562,7 +595,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                     setContextMenu(null);
                     onCloseOtherTabs(targetId);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
                 >
                   <span>{t('tabMenu.closeOthers')}</span>
                 </button>
@@ -578,13 +611,13 @@ export const TabBar: React.FC<TabBarProps> = ({
                     setContextMenu(null);
                     onCloseTabsToRight(targetId);
                   }}
-                  className="w-full px-3 py-1.5 text-left hover:bg-white/10 flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
                 >
                   <span>{t('tabMenu.closeRight')}</span>
                 </button>
               )}
 
-              <div className="my-1 border-t border-white/10" />
+              <div className="my-1 border-t border-white/[0.06]" />
 
               <button
                 type="button"
@@ -595,7 +628,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setContextMenu(null);
                   onCloseTab(targetId);
                 }}
-                className="w-full px-3 py-1.5 text-left hover:bg-rose-500/20 text-rose-300 flex items-center justify-between app-no-drag cursor-pointer transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-rose-500/15 text-rose-300 hover:text-rose-200 flex items-center justify-between app-no-drag cursor-pointer transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <X className="w-3.5 h-3.5 text-rose-400" />

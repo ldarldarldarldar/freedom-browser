@@ -194,40 +194,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in font-sans">
       <div
         id="freedom-settings-dialog"
-        className="w-full max-w-3xl border border-emerald-500/30 rounded-xl shadow-2xl overflow-hidden flex flex-col h-[82vh] text-neutral-200 transition-colors"
+        className="w-full max-w-4xl border border-white/10 rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col h-[84vh] max-h-[680px] text-neutral-200 transition-colors"
         style={{
           backgroundColor:
             settings.applyThemeToBackground && settings.palette?.secondaryBg
               ? settings.palette.secondaryBg
               : settings.applyThemeToBackground && settings.palette?.cardBg
               ? settings.palette.cardBg
-              : '#171717',
-          borderColor: settings.palette?.borderColor || 'rgba(16,185,129,0.3)',
+              : '#12141c',
+          borderColor: settings.palette?.borderColor || 'rgba(255,255,255,0.1)',
         }}
       >
         {/* Modal Header */}
         <div
-          className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 transition-colors"
+          className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08] transition-colors"
           style={{
             backgroundColor:
               settings.applyThemeToBackground && settings.palette?.headerBg
                 ? settings.palette.headerBg
-                : '#0a0a0a',
+                : '#0d0f15',
           }}
         >
           <div className="flex items-center gap-2.5">
-            <Settings className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-base font-semibold text-white tracking-wide">
+            <Settings className="w-4.5 h-4.5 text-emerald-400" />
+            <h2 className="text-sm font-semibold text-white tracking-wide">
               {t('settings.title')}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -237,21 +237,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex flex-1 min-h-0">
           {/* Navigation Sidebar */}
           <div
-            className="w-56 border-r border-white/5 p-3 space-y-1 text-xs transition-colors"
+            className="w-56 border-r border-white/[0.08] p-3 space-y-1.5 text-xs transition-colors shrink-0"
             style={{
               backgroundColor:
                 settings.applyThemeToBackground && settings.palette?.sidebarBg
                   ? settings.palette.sidebarBg
-                  : 'rgba(10, 10, 10, 0.8)',
+                  : 'rgba(10, 11, 16, 0.75)',
             }}
           >
+            <div className="px-3 pt-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-neutral-500 font-semibold">
+              {t('settings.title')}
+            </div>
+
             <button
               type="button"
               onClick={() => setActiveTab('performance')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
                 activeTab === 'performance'
-                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
               }`}
             >
               <Zap className="w-4 h-4 text-emerald-400" />
@@ -261,10 +265,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('visual')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
                 activeTab === 'visual'
-                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
               }`}
             >
               <Palette className="w-4 h-4 text-emerald-400" />
@@ -274,10 +278,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('main')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
                 activeTab === 'main'
-                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
               }`}
             >
               <Settings className="w-4 h-4 text-emerald-400" />
@@ -287,10 +291,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('privacy')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
                 activeTab === 'privacy'
-                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
               }`}
             >
               <Shield className="w-4 h-4 text-emerald-400" />
@@ -300,10 +304,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('telemetry')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-left font-medium ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
                 activeTab === 'telemetry'
-                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/5'
+                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
+                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
               }`}
             >
               <Activity className="w-4 h-4 text-emerald-400" />
@@ -315,9 +319,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-6">
             {/* 1. BROWSER MODE & PERFORMANCE */}
             {activeTab === 'performance' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-5 animate-fade-in">
                 <div>
-                  <h3 className="text-base font-semibold text-white mb-1">
+                  <h3 className="text-sm font-semibold text-white mb-0.5 tracking-tight">
                     {t('settings.perfTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400 leading-relaxed">
@@ -326,26 +330,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Two Distinct Modes Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* Performance Mode Card */}
                   <div
                     onClick={() => handleModeChange('performance')}
                     className={`cursor-pointer p-4 rounded-xl border transition-all overflow-hidden flex flex-col justify-between ${
                       settings.browserMode === 'performance'
-                        ? 'bg-emerald-950/50 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-400/50'
-                        : 'bg-neutral-950/60 border-white/10 hover:border-white/20'
+                        ? 'bg-emerald-500/[0.06] border-emerald-500/35 ring-1 ring-emerald-500/20 shadow-xs'
+                        : 'bg-white/[0.02] border-white/[0.08] hover:border-white/15'
                     }`}
                   >
                     <div>
                       <div className="flex items-center justify-between gap-1.5 mb-2 min-h-[26px]">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <Zap className="w-4.5 h-4.5 text-emerald-400 shrink-0" />
+                          <Zap className="w-4 h-4 text-emerald-400 shrink-0" />
                           <span className="font-semibold text-white text-xs sm:text-sm tracking-tight truncate" title={t('settings.modePerformance')}>
                             {t('settings.modePerformance')}
                           </span>
                         </div>
                         {settings.browserMode === 'performance' ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500 text-black font-bold shrink-0 uppercase tracking-wider">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold shrink-0 uppercase tracking-wider">
                             {t('settings.activeBadge')}
                           </span>
                         ) : (
@@ -374,8 +378,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => handleModeChange('quality')}
                     className={`cursor-pointer p-4 rounded-xl border transition-all overflow-hidden flex flex-col justify-between ${
                       settings.browserMode === 'quality'
-                        ? 'bg-emerald-950/50 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] ring-1 ring-emerald-400/50'
-                        : 'bg-neutral-950/60 border-white/10 hover:border-white/20'
+                        ? 'bg-emerald-500/[0.06] border-emerald-500/35 ring-1 ring-emerald-500/20 shadow-xs'
+                        : 'bg-white/[0.02] border-white/[0.08] hover:border-white/15'
                     }`}
                   >
                     <div>
@@ -387,7 +391,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </span>
                         </div>
                         {settings.browserMode === 'quality' ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500 text-black font-bold shrink-0 uppercase tracking-wider">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold shrink-0 uppercase tracking-wider">
                             {t('settings.activeBadge')}
                           </span>
                         ) : (
@@ -413,7 +417,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Tab Suspension & Memory Reclamation Controls */}
-                <div className="p-4 rounded-xl bg-neutral-950/60 border border-white/10 space-y-4">
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-3.5">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-semibold text-white">
@@ -434,7 +438,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
 
                   {settings.autoSuspendInactiveTabs && (
-                    <div className="pl-4 border-l-2 border-emerald-500/40">
+                    <div className="pl-3 border-l-2 border-emerald-500/40">
                       <label className="text-xs text-neutral-300 block mb-1.5">
                         {t('settings.autoSuspendTimeout')}
                       </label>
@@ -445,7 +449,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             tabSuspensionTimeoutMinutes: Number(e.target.value),
                           })
                         }
-                        className="bg-neutral-900 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                        className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
                       >
                         <option value={3}>{t('settings.timeout3m')}</option>
                         <option value={5}>{t('settings.timeout5m')}</option>
@@ -479,9 +483,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* 2. THEMES, COLORS & CUSTOM BACKGROUND */}
             {activeTab === 'visual' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-5 animate-fade-in">
                 <div>
-                  <h3 className="text-base font-semibold text-white mb-1">
+                  <h3 className="text-sm font-semibold text-white mb-0.5 tracking-tight">
                     {t('settings.themesTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400">
@@ -491,10 +495,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 {/* 10 Curated Theme Presets */}
                 <div>
-                  <div className="text-xs font-semibold text-neutral-200 mb-2.5">
+                  <div className="text-xs font-medium text-neutral-300 mb-2">
                     {t('settings.themePresets')}
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                     {(Object.keys(THEME_PRESETS) as ThemePresetId[]).map((presetKey) => {
                       const p = THEME_PRESETS[presetKey as keyof typeof THEME_PRESETS];
                       const isSelected = settings.themePreset === presetKey;
@@ -526,22 +530,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           key={presetKey}
                           type="button"
                           onClick={() => handlePresetSelect(presetKey)}
-                          className={`flex flex-col p-2.5 rounded-xl border text-left text-xs transition-all relative overflow-hidden cursor-pointer ${
+                          className={`flex flex-col p-2 rounded-xl border text-left text-xs transition-all relative overflow-hidden cursor-pointer ${
                             isSelected
-                              ? 'border-emerald-400 bg-neutral-900/90 shadow-md ring-1 ring-emerald-400/40'
-                              : 'border-white/10 bg-neutral-950/60 hover:border-white/20'
+                              ? 'border-emerald-500/40 bg-white/[0.06] shadow-xs ring-1 ring-emerald-500/20'
+                              : 'border-white/[0.06] bg-white/[0.02] hover:border-white/15'
                           }`}
                         >
-                          <div className="flex items-center gap-1.5 mb-2">
+                          <div className="flex items-center gap-1.5 mb-1.5">
                             <span
-                              className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
+                              className="w-3 h-3 rounded-full border border-white/20 shrink-0"
                               style={{ backgroundColor: p.accentColor }}
                             />
-                            <span className="font-semibold text-white truncate" title={themeName}>
+                            <span className="font-medium text-neutral-200 truncate" title={themeName}>
                               {themeName}
                             </span>
                           </div>
-                          <div className="flex gap-1 h-3 rounded overflow-hidden">
+                          <div className="flex gap-1 h-2 rounded overflow-hidden">
                             <div className="flex-1" style={{ backgroundColor: p.mainBg }} />
                             <div className="flex-1" style={{ backgroundColor: p.headerBg }} />
                             <div className="flex-1" style={{ backgroundColor: p.cardBg }} />
@@ -553,7 +557,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Apply Theme to Background Toggle */}
-                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between">
                   <div>
                     <div className="text-xs font-semibold text-white">
                       {t('settings.applyThemeToBg')}
@@ -717,9 +721,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Freedom Mascot (Freen) Option */}
-                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 flex items-center justify-between">
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-neutral-900 border border-white/10 flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-inner">
+                    <div className="w-10 h-10 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-xs">
                       <img
                         src={freenImg}
                         alt="Freen Mascot"
@@ -729,7 +733,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div>
                       <div className="text-xs font-semibold text-white flex items-center gap-2">
                         <span>Freen Browser Mascot</span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 font-mono">
+                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/15 text-emerald-400 font-mono">
                           Native
                         </span>
                       </div>
@@ -744,13 +748,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) =>
                       onUpdateSettings({ showFreenMascot: e.target.checked })
                     }
-                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                   />
                 </div>
 
                 {/* Individual Visual Feature Toggles */}
-                <div className="border-t border-white/10 pt-4 space-y-3">
-                  <div className="text-xs font-semibold text-white mb-2">
+                <div className="border-t border-white/[0.06] pt-3.5 space-y-2.5">
+                  <div className="text-xs font-medium text-neutral-300 mb-1">
                     {t('settings.visualTogglesTitle')}
                   </div>
 
@@ -791,7 +795,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onChange={(e) =>
                           onUpdateSettings({ [key]: e.target.checked })
                         }
-                        className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                        className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                       />
                     </div>
                   ))}
@@ -801,9 +805,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* 3. MAIN & ENGINE SETTINGS */}
             {activeTab === 'main' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-5 animate-fade-in">
                 <div>
-                  <h3 className="text-base font-semibold text-white mb-1">
+                  <h3 className="text-sm font-semibold text-white mb-0.5 tracking-tight">
                     {t('settings.mainTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400">
@@ -812,7 +816,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Interface Language Selection */}
-                <div className="p-3.5 rounded-xl bg-neutral-950/60 border border-white/10 space-y-2">
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
                   <div>
                     <label className="text-xs font-semibold text-white block">
                       {t('settings.language')}
@@ -828,7 +832,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       setLanguage(newLang);
                       onUpdateSettings({ language: newLang });
                     }}
-                    className="w-full max-w-xs bg-neutral-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer"
                   >
                     <option value="en">{t('settings.langEnglish')}</option>
                     <option value="ru">{t('settings.langRussian')}</option>
@@ -836,7 +840,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-neutral-200 block mb-1.5">
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
                     {t('settings.defaultSearchEngine')}
                   </label>
                   <select
@@ -846,7 +850,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         defaultSearchEngine: e.target.value as BrowserSettings['defaultSearchEngine'],
                       })
                     }
-                    className="w-full max-w-xs bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer"
                   >
                     {SEARCH_ENGINES.map((engine) => (
                       <option key={engine.id} value={engine.id}>
@@ -857,7 +861,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-neutral-200 block mb-1.5">
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
                     {t('settings.downloadsDirectory')}
                   </label>
                   <div className="flex items-center gap-2 max-w-md">
@@ -869,19 +873,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onUpdateSettings({ downloadsLocation: val });
                         tauriBridge.setDownloadDir(val);
                       }}
-                      className="flex-1 bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                      className="flex-1 bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/50"
                     />
                     <button
                       type="button"
                       onClick={handleBrowseDownloads}
-                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer"
                     >
                       {t('settings.downloadsBrowse')}
                     </button>
                     <button
                       type="button"
                       onClick={() => tauriBridge.openDownloadFolder(settings.downloadsLocation)}
-                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer"
                       title={t('settings.openInFileManager')}
                     >
                       {t('settings.open')}
@@ -893,7 +897,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-neutral-200 block mb-1.5">
+                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
                     {t('settings.storageTitle')}
                   </label>
                   <div className="flex items-center gap-2 max-w-md">
@@ -901,13 +905,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="text"
                       readOnly
                       value={userDataPath || (language === 'ru' ? 'По умолчанию (папка пользователя)' : 'Default (User Profile Directory)')}
-                      className="flex-1 bg-neutral-950 border border-white/10 rounded-lg px-3 py-2 text-xs text-neutral-300 font-mono focus:outline-none"
+                      className="flex-1 bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-neutral-300 font-mono focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={handleChangeUserDataPath}
                       disabled={isMigratingStorage}
-                      className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer disabled:opacity-50"
                     >
                       {t('settings.storageChange')}
                     </button>
@@ -926,9 +930,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* 4. PRIVACY & SECURITY */}
             {activeTab === 'privacy' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-5 animate-fade-in">
                 <div>
-                  <h3 className="text-base font-semibold text-white mb-1">
+                  <h3 className="text-sm font-semibold text-white mb-0.5 tracking-tight">
                     {t('settings.privacyTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400">
@@ -936,14 +940,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {[
                     { key: 'doNotTrack', label: t('settings.doNotTrack') },
                     { key: 'blockThirdPartyCookies', label: t('settings.blockThirdParty') },
                     { key: 'popupsBlocked', label: t('settings.blockPopups') },
                     { key: 'clearBrowsingDataOnExit', label: t('settings.clearOnExit') },
                   ].map(({ key, label }) => (
-                    <div key={key} className="flex items-center justify-between py-1.5">
+                    <div key={key} className="flex items-center justify-between py-1">
                       <span className="text-xs text-neutral-200 font-medium">{label}</span>
                       <input
                         type="checkbox"
@@ -957,7 +961,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
 
-                <div className="pt-4 border-t border-white/10">
+                <div className="pt-3.5 border-t border-white/[0.06]">
                   <button
                     type="button"
                     onClick={() => {
@@ -965,7 +969,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       setDataCleared(true);
                       setTimeout(() => setDataCleared(false), 2500);
                     }}
-                    className="px-4 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-500/30 text-xs text-red-300 font-medium transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-xs text-rose-300 font-medium transition-colors cursor-pointer"
                   >
                     {dataCleared ? t('settings.clearedSuccess') : t('settings.clearAllData')}
                   </button>
@@ -975,9 +979,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* 5. ZERO TELEMETRY */}
             {activeTab === 'telemetry' && (
-              <div className="space-y-6 animate-fade-in">
+              <div className="space-y-5 animate-fade-in">
                 <div>
-                  <h3 className="text-base font-semibold text-white mb-1">
+                  <h3 className="text-sm font-semibold text-white mb-0.5 tracking-tight">
                     {t('settings.telemetryTitle')}
                   </h3>
                   <p className="text-xs text-neutral-400 leading-relaxed">
@@ -985,13 +989,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </p>
                 </div>
 
-                <div className="p-4 rounded-xl bg-neutral-950/80 border border-white/10 space-y-3">
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="text-xs font-semibold text-white">
                         {t('settings.diagnosticLogs')}
                       </div>
-                      <div className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+                      <div className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
                         {t('settings.diagnosticLogsDesc')}
                       </div>
                     </div>
@@ -1002,10 +1006,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onUpdateSettings({ localDiagnosticLogs: nextVal });
                         logger.setLoggingEnabled(nextVal);
                       }}
-                      className={`shrink-0 whitespace-nowrap min-w-[72px] text-center px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer ${
+                      className={`shrink-0 whitespace-nowrap min-w-[64px] text-center px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer ${
                         settings.localDiagnosticLogs
-                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40'
-                          : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-white/[0.06] text-neutral-400 border border-white/10'
                       }`}
                     >
                       [{settings.localDiagnosticLogs ? 'ON' : 'OFF'}]
@@ -1014,7 +1018,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {settings.localDiagnosticLogs && (
-                  <div className="space-y-3 pt-2">
+                  <div className="space-y-2.5 pt-1">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-neutral-300">
                         {t('settings.diagnosticEvents', { count: logs.length })}
@@ -1022,13 +1026,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button
                         type="button"
                         onClick={() => logger.clearLogs()}
-                        className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-[11px] text-neutral-300 cursor-pointer"
+                        className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-[11px] text-neutral-300 transition-colors cursor-pointer"
                       >
                         {t('settings.clearEvents')}
                       </button>
                     </div>
 
-                    <div className="p-3 bg-black rounded-lg font-mono text-[10px] text-emerald-400/90 h-36 overflow-y-auto border border-white/5 space-y-1">
+                    <div className="p-3 bg-black/60 rounded-xl font-mono text-[10px] text-emerald-400/90 h-36 overflow-y-auto border border-white/[0.06] space-y-1">
                       {logs.length > 0 ? (
                         logs.map((log) => (
                           <div key={log.id} className="leading-tight">

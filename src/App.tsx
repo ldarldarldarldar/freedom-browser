@@ -13,19 +13,22 @@ import { HistoryDrawer } from './components/HistoryDrawer';
 import { BookmarksDrawer } from './components/BookmarksDrawer';
 import { BookmarksBar } from './components/BookmarksBar';
 import { FindInPageBar } from './components/FindInPageBar';
+import { FRCPopover } from './components/FRCPopover';
 import { BrowserTab, DownloadItem, Bookmark, FindInPageState } from './browser/types';
+import { SystemStats } from './taskmanager/types';
 import { BrowserSettings } from './settings/types';
 import { DEFAULT_SETTINGS } from './settings/defaults';
 import { SearchEngineService } from './services/searchEngineService';
 import { logger } from './services/loggerService';
 import { tauriBridge } from './services/tauriBridge';
+import { frcService } from './services/frcService';
 import { HistoryService } from './services/historyService';
 import { BookmarkService } from './services/bookmarkService';
 import { SessionService } from './services/sessionService';
 import { ZoomService } from './services/zoomService';
 import { TabSortService, TabSortMode } from './services/tabSortService';
 import { FaviconService } from './services/faviconService';
-import { SplitViewService, SplitViewState } from './services/splitViewService';
+import { SplitViewService, SplitViewState, SplitLayoutType } from './services/splitViewService';
 import { I18nProvider } from './i18n';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
@@ -154,6 +157,8 @@ export default function App() {
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
+  const [isFRCPopoverOpen, setIsFRCPopoverOpen] = useState(false);
+  const [frcStats, setFrcStats] = useState<SystemStats | null>(() => frcService.getLatestStats());
 
   // Bookmarks State
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => BookmarkService.getBookmarks());
@@ -267,44 +272,118 @@ export default function App() {
   }, [settings]);
 
   const activeTab = useMemo(() => {
-    if (splitViewState.enabled) {
-      const paneTabId = splitViewState.activePane === 'left' ? splitViewState.leftTabId : splitViewState.rightTabId;
-      const found = tabs.find((t) => t.id === paneTabId);
+    if (splitViewState.enabled && splitViewState.panes.length > 0) {
+      const activePane =
+        splitViewState.panes.find((p) => p.id === splitViewState.activePaneId) ||
+        splitViewState.panes[0];
+      const found = tabs.find((t) => t.id === activePane?.tabId);
       if (found) return found;
     }
     return tabs.find((t) => t.id === activeTabId) || tabs[0];
   }, [tabs, activeTabId, splitViewState]);
 
-  // Inactive Tab Suspension (Memory Optimization)
+  // Freedom RAM Control (FRC) - Integrated Lifecycle, Telemetry & Dynamic Eviction Engine
   useEffect(() => {
-    if (!settings.autoSuspendInactiveTabs) return;
+    let isMounted = true;
 
-    const timeoutMs = settings.tabSuspensionTimeoutMinutes * 60 * 1000;
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setTabs((prev) => {
-        let hasChanges = false;
-        const next = prev.map((t) => {
-          const isTabInSplitView = splitViewState.enabled && (t.id === splitViewState.leftTabId || t.id === splitViewState.rightTabId);
-          if (
-            t.id !== activeTabId &&
-            !isTabInSplitView &&
-            !t.isSuspended &&
-            !t.url.startsWith('freedom://') &&
-            now - t.lastActive > timeoutMs
-          ) {
-            hasChanges = true;
-            logger.log('INFO', 'MEMORY', `Suspending inactive tab '${t.title}' to free RAM.`);
-            return { ...t, isSuspended: true };
+    const runFRCExecutionCycle = async () => {
+      try {
+        const metricsData = await tauriBridge.getSystemMetrics(tabs.length);
+        if (!isMounted || !metricsData) return;
+
+        // Fetch non-duplicated per-tab webview physical memory
+        const webviewsMem = await tauriBridge.getWebviewsMemory(tabs);
+
+        setFrcStats(metricsData.stats);
+        frcService.updateLatestStats(metricsData.stats, metricsData.processes || []);
+
+        const frcConfig = frcService.getSettings();
+        const now = Date.now();
+        const pressurePct = metricsData.stats.memoryPressurePercent || metricsData.stats.systemRamPercent || 0;
+        const isCriticalPressure = pressurePct >= (100 - frcConfig.critMemoryPercent);
+
+        setTabs((prevTabs) => {
+          let hasChanges = false;
+          const updatedTabs = prevTabs.map((tab) => {
+            const privateBytes = webviewsMem[tab.id] || tab.privateMemoryBytes;
+            const updatedTab = privateBytes !== tab.privateMemoryBytes
+              ? { ...tab, privateMemoryBytes: privateBytes }
+              : tab;
+
+            if (updatedTab.id === activeTabId) {
+              if (updatedTab.lifecycleState !== 'active' || updatedTab.isSuspended) {
+                hasChanges = true;
+                return { ...updatedTab, lifecycleState: 'active' as const, isSuspended: false };
+              }
+              return updatedTab;
+            }
+
+            // Tabs in split view active panes are considered active
+            const isInSplitActive =
+              splitViewState.enabled &&
+              splitViewState.panes.some((p) => p.tabId === updatedTab.id);
+
+            if (isInSplitActive) {
+              if (updatedTab.lifecycleState !== 'active') {
+                hasChanges = true;
+                return { ...updatedTab, lifecycleState: 'active' as const, isSuspended: false };
+              }
+              return updatedTab;
+            }
+
+            if (frcConfig.mode === 'unrestricted' || !frcConfig.enableAutoHibernation) {
+              return updatedTab;
+            }
+
+            const nextState = frcService.evaluateTabLifecycle(updatedTab, activeTabId, now);
+            if (nextState !== updatedTab.lifecycleState) {
+              hasChanges = true;
+              if (nextState === 'hibernated' && !updatedTab.isSuspended) {
+                frcService.serializeTabSession(updatedTab);
+                logger.log('INFO', 'MEMORY', `FRC-LIFE: Auto-hibernated tab '${updatedTab.title}' (idle timeout exceeded).`);
+                return { ...updatedTab, lifecycleState: nextState, isSuspended: true };
+              }
+              return { ...updatedTab, lifecycleState: nextState };
+            }
+
+            return updatedTab;
+          });
+
+          // Pressure-driven cascade eviction (FRC-TRIM-01)
+          if (isCriticalPressure && frcConfig.enableDynamicTrimming) {
+            const candidates = frcService.getEvictionCandidates(updatedTabs, activeTabId, now);
+            const eligible = candidates.filter((c) => !c.isGuarded);
+            if (eligible.length > 0) {
+              const topCandidate = eligible[0];
+              const idx = updatedTabs.findIndex((t) => t.id === topCandidate.tabId);
+              if (idx !== -1 && !updatedTabs[idx].isSuspended) {
+                frcService.serializeTabSession(updatedTabs[idx]);
+                updatedTabs[idx] = {
+                  ...updatedTabs[idx],
+                  isSuspended: true,
+                  lifecycleState: 'hibernated',
+                };
+                hasChanges = true;
+                logger.log('WARN', 'MEMORY', `FRC-TRIM: Cascade eviction hibernated tab '${topCandidate.tabTitle}' (Score: ${topCandidate.score}) under critical pressure (${pressurePct}%).`);
+              }
+            }
           }
-          return t;
-        });
-        return hasChanges ? next : prev;
-      });
-    }, 30000);
 
-    return () => clearInterval(interval);
-  }, [settings.autoSuspendInactiveTabs, settings.tabSuspensionTimeoutMinutes, activeTabId, splitViewState]);
+          return hasChanges ? updatedTabs : prevTabs;
+        });
+      } catch (err) {
+        console.warn('FRC cycle error:', err);
+      }
+    };
+
+    runFRCExecutionCycle();
+    const interval = setInterval(runFRCExecutionCycle, frcService.getSettings().pollingIntervalMs || 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [tabs.length, activeTabId, splitViewState]);
 
   // Tab operations
   const handleSelectTab = useCallback((id: string) => {
@@ -316,8 +395,6 @@ export default function App() {
       if (id === prev.rightTabId) {
         return { ...prev, activePane: 'right' };
       }
-      // If user clicks a third tab while Split View is active,
-      // load it into the active pane!
       return {
         ...prev,
         leftTabId: prev.activePane === 'left' ? id : prev.leftTabId,
@@ -326,8 +403,23 @@ export default function App() {
     });
 
     setActiveTabId(id);
+    const session = frcService.getSerializedTabSession(id);
     setTabs((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, lastActive: Date.now(), isSuspended: false } : t))
+      prev.map((t) => {
+        if (t.id === id) {
+          return {
+            ...t,
+            lastActive: Date.now(),
+            isSuspended: false,
+            lifecycleState: 'active' as const,
+            accessCount: (t.accessCount || 0) + 1,
+            url: session ? session.url : t.url,
+            title: session ? session.title : t.title,
+            favicon: session?.favicon || t.favicon,
+          };
+        }
+        return t;
+      })
     );
   }, []);
 
@@ -370,6 +462,7 @@ export default function App() {
     (id: string) => {
       // Destroy native WebKitGTK / WebView2 child webview if active
       tauriBridge.closeNativeTab(id);
+      frcService.removeSerializedTabSession(id);
 
       // Handle Split View tab closing safely
       setSplitViewState((prev) => {
@@ -581,7 +674,7 @@ export default function App() {
               ...t,
               url,
               displayUrl: url,
-              title: isNewTab ? 'New Tab' : isInternal ? 'Freedom Tab' : domain,
+              title: isNewTab ? 'New Tab' : url === 'freedom://memory' ? 'Process Diagnostics (FRC)' : isInternal ? 'Freedom Tab' : domain,
               favicon: isInternal ? undefined : t.favicon,
               isLoading: !isInternal,
               isSuspended: false,
@@ -635,8 +728,41 @@ export default function App() {
   }, [activeTab]);
 
   const handleWakeTab = useCallback((tabId: string) => {
+    const session = frcService.getSerializedTabSession(tabId);
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, isSuspended: false, lastActive: Date.now() } : t))
+      prev.map((t) => {
+        if (t.id === tabId) {
+          return {
+            ...t,
+            isSuspended: false,
+            lifecycleState: 'active' as const,
+            lastActive: Date.now(),
+            accessCount: (t.accessCount || 0) + 1,
+            url: session ? session.url : t.url,
+            title: session ? session.title : t.title,
+            favicon: session?.favicon || t.favicon,
+          };
+        }
+        return t;
+      })
+    );
+    logger.log('INFO', 'MEMORY', `FRC-LIFE: Restored hibernated tab ${tabId}.`);
+  }, []);
+
+  const handleHibernateTab = useCallback((tabId: string) => {
+    setTabs((prev) =>
+      prev.map((t) => {
+        if (t.id === tabId) {
+          frcService.serializeTabSession(t);
+          logger.log('INFO', 'MEMORY', `FRC-LIFE: Hibernated tab '${t.title}' (${t.id}).`);
+          return {
+            ...t,
+            lifecycleState: 'hibernated' as const,
+            isSuspended: true,
+          };
+        }
+        return t;
+      })
     );
   }, []);
 
@@ -653,7 +779,13 @@ export default function App() {
 
   const handleSuspendTab = useCallback((tabId: string) => {
     setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, isSuspended: true } : t))
+      prev.map((t) => {
+        if (t.id === tabId) {
+          frcService.serializeTabSession(t);
+          return { ...t, isSuspended: true, lifecycleState: 'hibernated' as const };
+        }
+        return t;
+      })
     );
     logger.log('INFO', 'MEMORY', `Tab ${tabId} suspended manually.`);
   }, []);
@@ -661,9 +793,13 @@ export default function App() {
   const handleSuspendTabs = useCallback((tabIds: string[]) => {
     const idSet = new Set(tabIds);
     setTabs((prev) =>
-      prev.map((t) =>
-        idSet.has(t.id) && !t.url.startsWith('freedom://') ? { ...t, isSuspended: true } : t
-      )
+      prev.map((t) => {
+        if (idSet.has(t.id) && !t.url.startsWith('freedom://')) {
+          frcService.serializeTabSession(t);
+          return { ...t, isSuspended: true, lifecycleState: 'hibernated' as const };
+        }
+        return t;
+      })
     );
     logger.log('INFO', 'MEMORY', `Suspended ${tabIds.length} tabs to reclaim RAM.`);
   }, []);
@@ -833,9 +969,10 @@ export default function App() {
       if (prev.enabled) {
         return { ...prev, enabled: false };
       }
-      const leftId = activeTab?.id || tabs[0]?.id || `tab-${Date.now()}`;
-      let rightId = tabs.find((t) => t.id !== leftId)?.id;
-      if (!rightId) {
+      const p1Id = activeTab?.id || tabs[0]?.id || `tab-${Date.now()}`;
+      let p2Tab = tabs.find((t) => t.id !== p1Id);
+      let p2Id = p2Tab?.id;
+      if (!p2Id) {
         const newRightTabId = `tab-${Date.now()}`;
         const newTab: BrowserTab = {
           id: newRightTabId,
@@ -854,14 +991,24 @@ export default function App() {
           security: 'internal',
         };
         setTabs((tList) => [...tList, newTab]);
-        rightId = newRightTabId;
+        p2Id = newRightTabId;
       }
+
+      const panes = [
+        { id: 'pane-1', tabId: p1Id },
+        { id: 'pane-2', tabId: p2Id },
+      ];
+
       return {
         enabled: true,
-        leftTabId: leftId,
-        rightTabId: rightId,
+        panes,
+        activePaneId: 'pane-2',
+        layout: '2-vertical',
+        dividerPositions: SplitViewService.getDefaultDividers('2-vertical'),
+        leftTabId: p1Id,
+        rightTabId: p2Id,
         activePane: 'right',
-        dividerPosition: prev.dividerPosition || 50,
+        dividerPosition: 50,
       };
     });
   }, [activeTab, tabs]);
@@ -869,16 +1016,52 @@ export default function App() {
   const handleOpenInSplitView = useCallback(
     (targetTabId: string) => {
       setSplitViewState((prev) => {
-        const leftId =
-          activeTabId === targetTabId
-            ? tabs.find((t) => t.id !== targetTabId)?.id || targetTabId
-            : activeTabId;
+        if (!prev.enabled || prev.panes.length < 2) {
+          const p1Id =
+            activeTabId === targetTabId
+              ? tabs.find((t) => t.id !== targetTabId)?.id || targetTabId
+              : activeTabId;
+          const panes = [
+            { id: 'pane-1', tabId: p1Id },
+            { id: 'pane-2', tabId: targetTabId },
+          ];
+          return {
+            enabled: true,
+            panes,
+            activePaneId: 'pane-2',
+            layout: '2-vertical',
+            dividerPositions: SplitViewService.getDefaultDividers('2-vertical'),
+            leftTabId: p1Id,
+            rightTabId: targetTabId,
+            activePane: 'right',
+            dividerPosition: 50,
+          };
+        }
+
+        const existingPaneIndex = prev.panes.findIndex((p) => p.tabId === targetTabId);
+        if (existingPaneIndex !== -1) {
+          return { ...prev, activePaneId: prev.panes[existingPaneIndex].id };
+        }
+
+        if (prev.panes.length < 4) {
+          const newPaneId = `pane-${prev.panes.length + 1}`;
+          const newPanes = [...prev.panes, { id: newPaneId, tabId: targetTabId }];
+          const layout = SplitViewService.getDefaultLayoutForCount(newPanes.length);
+          return {
+            ...prev,
+            panes: newPanes,
+            activePaneId: newPaneId,
+            layout,
+            dividerPositions: SplitViewService.getDefaultDividers(layout),
+          };
+        }
+
+        const updatedPanes = prev.panes.map((p) =>
+          p.id === prev.activePaneId ? { ...p, tabId: targetTabId } : p
+        );
         return {
-          enabled: true,
-          leftTabId: leftId,
-          rightTabId: targetTabId,
-          activePane: 'right',
-          dividerPosition: prev.dividerPosition || 50,
+          ...prev,
+          panes: updatedPanes,
         };
       });
       setActiveTabId(targetTabId);
@@ -886,28 +1069,177 @@ export default function App() {
     [activeTabId, tabs]
   );
 
-  const handleSelectPane = useCallback((pane: 'left' | 'right') => {
+  const handleSelectPane = useCallback((paneId: string) => {
     setSplitViewState((prev) => {
-      const tabId = pane === 'left' ? prev.leftTabId : prev.rightTabId;
-      if (tabId) {
-        setActiveTabId(tabId);
+      const found = prev.panes.find((p) => p.id === paneId);
+      if (found) {
+        setActiveTabId(found.tabId);
       }
-      return { ...prev, activePane: pane };
+      return {
+        ...prev,
+        activePaneId: paneId,
+        activePane: paneId === prev.panes[1]?.id ? 'right' : 'left',
+      };
     });
   }, []);
 
-  const handleClosePane = useCallback((pane: 'left' | 'right') => {
+  const handleClosePane = useCallback((paneId: string) => {
     setSplitViewState((prev) => {
-      const remainingTabId = pane === 'left' ? prev.rightTabId : prev.leftTabId;
-      if (remainingTabId) {
-        setActiveTabId(remainingTabId);
+      const remainingPanes = prev.panes.filter((p) => p.id !== paneId);
+      if (remainingPanes.length < 2) {
+        const remainingTabId = remainingPanes[0]?.tabId || prev.panes[0]?.tabId;
+        if (remainingTabId) {
+          setActiveTabId(remainingTabId);
+        }
+        return {
+          ...prev,
+          enabled: false,
+          panes: remainingPanes,
+        };
       }
-      return { ...prev, enabled: false };
+
+      const layout = SplitViewService.getAvailableLayouts(remainingPanes.length).includes(prev.layout)
+        ? prev.layout
+        : SplitViewService.getDefaultLayoutForCount(remainingPanes.length);
+
+      const activePaneId = remainingPanes.some((p) => p.id === prev.activePaneId)
+        ? prev.activePaneId
+        : remainingPanes[0].id;
+
+      const activePane = remainingPanes.find((p) => p.id === activePaneId);
+      if (activePane) {
+        setActiveTabId(activePane.tabId);
+      }
+
+      return {
+        ...prev,
+        panes: remainingPanes,
+        activePaneId,
+        layout,
+        dividerPositions: SplitViewService.getDefaultDividers(layout),
+      };
     });
   }, []);
 
-  const handleDividerChange = useCallback((position: number) => {
-    setSplitViewState((prev) => ({ ...prev, dividerPosition: position }));
+  const handleSelectLayout = useCallback((layout: SplitLayoutType) => {
+    setSplitViewState((prev) => ({
+      ...prev,
+      layout,
+      dividerPositions: SplitViewService.getDefaultDividers(layout),
+    }));
+  }, []);
+
+  const handleAddPane = useCallback(() => {
+    setSplitViewState((prev) => {
+      if (prev.panes.length >= 4) return prev;
+
+      const usedTabIds = new Set(prev.panes.map((p) => p.tabId));
+      let targetTabId = tabs.find((t) => !usedTabIds.has(t.id))?.id;
+
+      if (!targetTabId) {
+        targetTabId = `tab-${Date.now()}`;
+        const newTab: BrowserTab = {
+          id: targetTabId,
+          title: 'New Tab',
+          url: 'freedom://newtab',
+          displayUrl: 'freedom://newtab',
+          isLoading: false,
+          canGoBack: false,
+          canGoForward: false,
+          isSuspended: false,
+          lastActive: Date.now(),
+          isCrashed: false,
+          history: ['freedom://newtab'],
+          historyIndex: 0,
+          zoomLevel: ZoomService.getZoomForUrl('freedom://newtab'),
+          security: 'internal',
+        };
+        setTabs((tList) => [...tList, newTab]);
+      }
+
+      const newPaneId = `pane-${prev.panes.length + 1}`;
+      const newPanes = [...prev.panes, { id: newPaneId, tabId: targetTabId }];
+      const layout = SplitViewService.getDefaultLayoutForCount(newPanes.length);
+
+      setActiveTabId(targetTabId);
+
+      return {
+        ...prev,
+        panes: newPanes,
+        activePaneId: newPaneId,
+        layout,
+        dividerPositions: SplitViewService.getDefaultDividers(layout),
+      };
+    });
+  }, [tabs]);
+
+  const handleResetDividers = useCallback(() => {
+    setSplitViewState((prev) => ({
+      ...prev,
+      dividerPositions: SplitViewService.getDefaultDividers(prev.layout),
+    }));
+  }, []);
+
+  const handleSwitchPaneTab = useCallback((paneId: string, targetTabId: string) => {
+    setSplitViewState((prev) => {
+      const otherPane = prev.panes.find((p) => p.tabId === targetTabId && p.id !== paneId);
+      const currentPane = prev.panes.find((p) => p.id === paneId);
+      const currentTabId = currentPane?.tabId;
+
+      const updatedPanes = prev.panes.map((p) => {
+        if (p.id === paneId) {
+          return { ...p, tabId: targetTabId };
+        }
+        if (otherPane && currentTabId && p.id === otherPane.id) {
+          return { ...p, tabId: currentTabId };
+        }
+        return p;
+      });
+
+      return {
+        ...prev,
+        panes: updatedPanes,
+        activePaneId: paneId,
+      };
+    });
+    setActiveTabId(targetTabId);
+  }, []);
+
+  const handleNewTabInPane = useCallback((paneId: string) => {
+    const newTabId = `tab-${Date.now()}`;
+    const newTab: BrowserTab = {
+      id: newTabId,
+      title: 'New Tab',
+      url: 'freedom://newtab',
+      displayUrl: 'freedom://newtab',
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSuspended: false,
+      lastActive: Date.now(),
+      isCrashed: false,
+      history: ['freedom://newtab'],
+      historyIndex: 0,
+      zoomLevel: ZoomService.getZoomForUrl('freedom://newtab'),
+      security: 'internal',
+    };
+    setTabs((tList) => [...tList, newTab]);
+
+    setSplitViewState((prev) => {
+      const updatedPanes = prev.panes.map((p) =>
+        p.id === paneId ? { ...p, tabId: newTabId } : p
+      );
+      return {
+        ...prev,
+        panes: updatedPanes,
+        activePaneId: paneId,
+      };
+    });
+    setActiveTabId(newTabId);
+  }, []);
+
+  const handleDividerChange = useCallback((positions: number[]) => {
+    setSplitViewState((prev) => ({ ...prev, dividerPositions: positions }));
   }, []);
 
   const handlePaneNavigate = useCallback(
@@ -1546,6 +1878,21 @@ export default function App() {
         onSortTabs={handleSortTabs}
         isSplitView={splitViewState.enabled}
         onToggleSplitView={handleToggleSplitView}
+        onToggleFRCPopover={() => setIsFRCPopoverOpen((prev) => !prev)}
+        isFRCPopoverOpen={isFRCPopoverOpen}
+        browserRamMb={frcStats ? (frcStats.totalBrowserRamMb ?? frcStats.browserRamMb ?? Math.round(frcStats.totalBrowserRamBytes / (1024 * 1024))) : 0}
+        systemRamMb={frcStats ? (frcStats.totalSystemRamMb ?? Math.round(frcStats.totalSystemRamBytes / (1024 * 1024))) : 0}
+        memoryPressureLevel={frcStats?.memoryPressureLevel || 'normal'}
+      />
+
+      {/* Freedom RAM Control Popover */}
+      <FRCPopover
+        isOpen={isFRCPopoverOpen}
+        onClose={() => setIsFRCPopoverOpen(false)}
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onHibernateTab={handleHibernateTab}
+        onNavigate={handleNavigate}
       />
 
       {/* Bookmarks Bar */}
@@ -1563,6 +1910,8 @@ export default function App() {
           onNavigate={handleNavigate}
           onReload={handleReload}
           onWakeTab={handleWakeTab}
+          onHibernateTab={handleHibernateTab}
+          onTerminateTab={handleTerminateTab}
           onTabTitleChange={handleTabTitleChange}
           onTabFaviconChange={handleTabFaviconChange}
           onTabLoadingChange={handleTabLoadingChange}
@@ -1584,6 +1933,12 @@ export default function App() {
           onPaneBack={handlePaneBack}
           onPaneForward={handlePaneForward}
           onPaneReload={handlePaneReload}
+          onSwitchPaneTab={handleSwitchPaneTab}
+          onNewTabInPane={handleNewTabInPane}
+          onSelectLayout={handleSelectLayout}
+          onAddPane={handleAddPane}
+          onResetDividers={handleResetDividers}
+          onExitSplitView={handleToggleSplitView}
         />
 
         {/* Find In Page Overlay */}

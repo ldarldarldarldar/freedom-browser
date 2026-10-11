@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(channel, subscription);
   },
   getSystemMetrics: () => ipcRenderer.invoke('get_system_task_manager_stats'),
+  cleanRam: () => ipcRenderer.invoke('clean_ram'),
   terminateProcess: (pid) => ipcRenderer.invoke('terminate_process', pid),
   openDevTools: () => ipcRenderer.invoke('open_devtools'),
   openDownloadFolder: (folder) => ipcRenderer.invoke('open_download_folder', folder),

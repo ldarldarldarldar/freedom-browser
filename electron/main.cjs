@@ -541,6 +541,23 @@ function getLinuxProcessMemory(pid) {
   }
 }
 
+function getLinuxSystemMemory() {
+  try {
+    const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+    const getVal = (key) => {
+      const m = meminfo.match(new RegExp(`${key}:\\s+(\\d+)\\s+kB`));
+      return m ? parseInt(m[1], 10) * 1024 : 0;
+    };
+    const memAvailable = getVal('MemAvailable') || getVal('MemFree');
+    const swapTotal = getVal('SwapTotal');
+    const swapFree = getVal('SwapFree');
+    const swapUsed = Math.max(0, swapTotal - swapFree);
+    return { memAvailable, swapTotal, swapUsed };
+  } catch {
+    return null;
+  }
+}
+
 // Real Non-Duplicating System Task Manager Resource Monitor
 ipcMain.handle('get_system_task_manager_stats', async () => {
   try {
@@ -554,6 +571,20 @@ ipcMain.handle('get_system_task_manager_stats', async () => {
     let totalNonDuplicatedRam = 0;
     let totalPrivateRam = 0;
     let totalWorkingSetRam = 0;
+
+    let availableSystemRam = freeMem;
+    let totalSwap = 0;
+    let usedSwap = 0;
+    if (isLinux) {
+      const sysMem = getLinuxSystemMemory();
+      if (sysMem) {
+        availableSystemRam = sysMem.memAvailable;
+        totalSwap = sysMem.swapTotal;
+        usedSwap = sysMem.swapUsed;
+      }
+    }
+    const pressurePercent = Math.min(100, Math.round(((totalMem - availableSystemRam) / totalMem) * 100));
+    const pressureLevel = pressurePercent >= 85 ? 'critical' : pressurePercent >= 70 ? 'moderate' : 'normal';
 
     const processes = metrics.map((m) => {
       let procTitle = 'Freedom Browser Core';
@@ -628,9 +659,18 @@ ipcMain.handle('get_system_task_manager_stats', async () => {
       stats: {
         totalBrowserRamBytes: totalNonDuplicatedRam,
         totalBrowserRamMb: Math.round(totalNonDuplicatedRam / (1024 * 1024)),
+        browserRamMb: Math.round(totalNonDuplicatedRam / (1024 * 1024)),
         privateRamMb: Math.round(totalPrivateRam / (1024 * 1024)),
         workingSetMb: Math.round(totalWorkingSetRam / (1024 * 1024)),
         totalSystemRamBytes: totalMem,
+        totalSystemRamMb: Math.round(totalMem / (1024 * 1024)),
+        systemRamMb: Math.round(totalMem / (1024 * 1024)),
+        availableSystemRamBytes: availableSystemRam,
+        availableSystemRamMb: Math.round(availableSystemRam / (1024 * 1024)),
+        totalSwapBytes: totalSwap,
+        usedSwapBytes: usedSwap,
+        memoryPressurePercent: pressurePercent,
+        memoryPressureLevel: pressureLevel,
         systemRamPercent: Math.min(100, Math.round((usedMem / totalMem) * 100)),
         totalBrowserCpuPercent: Math.round((cpuUsage.percentCPUUsage || 0) * 10) / 10,
         totalSystemCpuPercent: Math.min(100, Math.round(metrics.reduce((acc, m) => acc + (m.cpu?.percentCPUUsage || 0), 0))),
@@ -711,6 +751,77 @@ ipcMain.handle('terminate_process', (event, pid) => {
   } catch (err) {
     console.warn(`Failed to terminate PID ${pid}:`, err);
     return false;
+  }
+});
+
+// Freedom RAM Control (FRC) - Manual memory reclamation / clean RAM
+ipcMain.handle('clean_ram', async () => {
+  try {
+    const isLinux = process.platform === 'linux';
+    const beforeMetrics = app.getAppMetrics();
+    let beforeBytes = 0;
+    for (const m of beforeMetrics) {
+      if (isLinux) {
+        const mem = getLinuxProcessMemory(m.pid);
+        beforeBytes += mem ? mem.pssBytes : ((m.memory?.workingSetSize || 0) * 1024);
+      } else {
+        const priv = (m.memory?.privateBytes || 0) * 1024;
+        beforeBytes += priv > 0 ? priv : ((m.memory?.workingSetSize || 0) * 1024);
+      }
+    }
+
+    // 1. Invoke V8 isolate GC in main process if exposed
+    if (global.gc) {
+      try { global.gc(); } catch {}
+    }
+
+    // 2. Clear Chromium caches across all active webContents and defaultSession
+    try {
+      await session.defaultSession.clearCache();
+      await session.defaultSession.clearHostResolverCache();
+      await session.defaultSession.clearStorageData({
+        storages: ['serviceworkers', 'cachestorage']
+      });
+    } catch (e) {
+      console.warn('Cache clearing notice:', e);
+    }
+
+    // 3. Trim renderer working sets
+    const allWebContents = webContents.getAllWebContents();
+    for (const wc of allWebContents) {
+      if (!wc.isDestroyed()) {
+        try {
+          if (typeof wc.session?.clearCache === 'function') {
+            await wc.session.clearCache();
+          }
+        } catch {}
+      }
+    }
+
+    // Measure after
+    const afterMetrics = app.getAppMetrics();
+    let afterBytes = 0;
+    for (const m of afterMetrics) {
+      if (isLinux) {
+        const mem = getLinuxProcessMemory(m.pid);
+        afterBytes += mem ? mem.pssBytes : ((m.memory?.workingSetSize || 0) * 1024);
+      } else {
+        const priv = (m.memory?.privateBytes || 0) * 1024;
+        afterBytes += priv > 0 ? priv : ((m.memory?.workingSetSize || 0) * 1024);
+      }
+    }
+
+    const reclaimedBytes = Math.max(0, beforeBytes - afterBytes);
+    const reclaimedMb = Math.round(reclaimedBytes / (1024 * 1024));
+
+    return {
+      success: true,
+      reclaimedMb,
+      reclaimedBytes,
+    };
+  } catch (err) {
+    console.error('clean_ram error:', err);
+    return { success: false, reclaimedMb: 0, reclaimedBytes: 0 };
   }
 });
 

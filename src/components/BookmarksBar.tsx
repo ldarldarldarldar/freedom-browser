@@ -25,7 +25,7 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
   return (
     <div
       id="freedom-bookmarks-bar"
-      className="flex items-center gap-1 px-3 py-1 bg-neutral-950/90 border-b border-white/5 text-xs text-neutral-300 select-none overflow-x-auto no-scrollbar"
+      className="flex items-center gap-1 px-3 py-1 bg-[#0d0e14]/90 backdrop-blur-md border-b border-white/[0.06] text-xs text-neutral-300 select-none overflow-x-auto no-scrollbar shrink-0"
     >
       {barBookmarks.slice(0, 15).map((bm) => (
         <button
@@ -33,7 +33,7 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
           type="button"
           onClick={() => onNavigate(bm.url)}
           title={`${bm.title}\n${bm.url}`}
-          className="flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-neutral-800 text-neutral-300 hover:text-white max-w-[160px] truncate transition-colors shrink-0"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-white/[0.07] text-neutral-300 hover:text-white max-w-[170px] truncate transition-colors shrink-0 text-[11px] font-medium"
         >
           {bm.favicon ? (
             <img
@@ -45,9 +45,9 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
               }}
             />
           ) : (
-            <Globe className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+            <Globe className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
           )}
-          <span className="truncate text-[11px]">{bm.title}</span>
+          <span className="truncate">{bm.title}</span>
         </button>
       ))}
 
@@ -56,10 +56,10 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
           type="button"
           onClick={onOpenBookmarksManager}
           title={t('bookmarks.otherBookmarks')}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-white ml-auto shrink-0 transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-white/[0.07] text-neutral-400 hover:text-white ml-auto shrink-0 transition-colors text-[11px] font-medium"
         >
           <Folder className="w-3 h-3 text-emerald-400" />
-          <span className="text-[11px]">{t('bookmarks.otherBookmarks')} ({otherBookmarks.length})</span>
+          <span>{t('bookmarks.otherBookmarks')} ({otherBookmarks.length})</span>
         </button>
       )}
     </div>

@@ -1,3 +1,18 @@
+export type TabLifecycleState = 'active' | 'throttled' | 'frozen' | 'hibernated';
+
+export interface TabSerializedSession {
+  url: string;
+  title: string;
+  favicon?: string;
+  history: string[];
+  historyIndex: number;
+  scrollX?: number;
+  scrollY?: number;
+  zoomLevel?: number;
+  savedAt: number;
+  formState?: Record<string, string>;
+}
+
 export interface BrowserTab {
   id: string;
   title: string;
@@ -8,6 +23,7 @@ export interface BrowserTab {
   canGoBack: boolean;
   canGoForward: boolean;
   isSuspended: boolean;
+  lifecycleState?: TabLifecycleState;
   lastActive: number;
   isCrashed: boolean;
   crashReason?: string;
@@ -17,6 +33,15 @@ export interface BrowserTab {
   isAudioPlaying?: boolean;
   isMuted?: boolean;
   security: 'secure' | 'insecure' | 'internal';
+  isPinned?: boolean;
+  accessCount?: number;
+  privateMemoryBytes?: number;
+  rssMemoryBytes?: number;
+  workingSetBytes?: number;
+  hasUnsavedForm?: boolean;
+  isMediaPlaying?: boolean;
+  isPipActive?: boolean;
+  serializedSession?: TabSerializedSession;
 }
 
 export interface BookmarkFolder {

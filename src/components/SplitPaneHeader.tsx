@@ -1,33 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, RotateCcw, X, Globe, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  RotateCcw,
+  X,
+  Globe,
+  ShieldCheck,
+  Layers,
+  Plus,
+  Check,
+  Search,
+} from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { SearchEngineId } from '../settings/types';
 import { SearchEngineService } from '../services/searchEngineService';
+import { SplitPane } from '../services/splitViewService';
 import { useTranslation } from '../i18n';
 
 interface SplitPaneHeaderProps {
-  pane: 'left' | 'right';
+  paneIndex: number;
+  paneId: string;
   tab: BrowserTab;
+  allTabs: BrowserTab[];
+  allPanes: SplitPane[];
   isActive: boolean;
+  canClose: boolean;
   onSelect: () => void;
   onClose: () => void;
   onBack: (tabId: string) => void;
   onForward: (tabId: string) => void;
   onReload: (tabId: string) => void;
   onNavigate: (tabId: string, url: string) => void;
+  onSwitchTab: (paneId: string, targetTabId: string) => void;
+  onNewTabInPane: (paneId: string) => void;
   defaultSearchEngine: SearchEngineId;
 }
 
 export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
-  pane,
+  paneIndex,
+  paneId,
   tab,
+  allTabs,
+  allPanes,
   isActive,
+  canClose,
   onSelect,
   onClose,
   onBack,
   onForward,
   onReload,
   onNavigate,
+  onSwitchTab,
+  onNewTabInPane,
   defaultSearchEngine,
 }) => {
   const { t } = useTranslation();
@@ -35,12 +59,27 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
     tab.url === 'freedom://newtab' ? '' : tab.url
   );
   const [isFocused, setIsFocused] = useState(false);
+  const [isTabMenuOpen, setIsTabMenuOpen] = useState(false);
+  const [tabFilter, setTabFilter] = useState('');
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isFocused) {
       setInputValue(tab.url === 'freedom://newtab' ? '' : tab.url);
     }
   }, [tab.url, isFocused]);
+
+  // Close tab switch menu when clicking outside
+  useEffect(() => {
+    if (!isTabMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsTabMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isTabMenuOpen]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,17 +88,46 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
     onNavigate(tab.id, resolved);
   };
 
+  const filteredTabs = allTabs.filter((tItem) => {
+    if (!tabFilter.trim()) return true;
+    const q = tabFilter.toLowerCase();
+    return (
+      (tItem.title && tItem.title.toLowerCase().includes(q)) ||
+      (tItem.url && tItem.url.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div
       onClick={onSelect}
-      className={`h-9 w-full flex items-center px-2 select-none border-b transition-colors z-20 shrink-0 ${
+      className={`h-9 w-full flex items-center px-2.5 select-none border-b transition-all z-30 shrink-0 relative ${
         isActive
-          ? 'bg-neutral-900 border-emerald-500/40 shadow-sm'
-          : 'bg-neutral-950 border-white/10 opacity-80 hover:opacity-100'
+          ? 'bg-[#151722] border-emerald-500/40 text-white shadow-xs'
+          : 'bg-[#0d0f16]/90 border-white/[0.06] text-neutral-400 hover:text-neutral-200'
       }`}
     >
+      {/* Active Pane Accent Line */}
+      {isActive && (
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-emerald-400" />
+      )}
+
+      {/* Pane Index Badge */}
+      <div className="flex items-center gap-1 shrink-0 mr-1.5">
+        <span
+          className={`flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border transition-colors ${
+            isActive
+              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+              : 'bg-white/[0.04] text-neutral-400 border-white/10'
+          }`}
+          title={t('split.pane', { index: paneIndex })}
+        >
+          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+          P{paneIndex}
+        </span>
+      </div>
+
       {/* Navigation Controls: Back, Forward, Reload */}
-      <div className="flex items-center space-x-0.5 shrink-0 mr-1.5">
+      <div className="flex items-center gap-0.5 shrink-0 mr-1.5">
         <button
           type="button"
           disabled={!tab.canGoBack}
@@ -67,7 +135,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             e.stopPropagation();
             onBack(tab.id);
           }}
-          className="p-1 rounded-md hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-neutral-300 hover:text-white transition-colors"
+          className="p-1 rounded-md hover:bg-white/[0.08] disabled:opacity-25 disabled:pointer-events-none text-neutral-400 hover:text-white transition-colors"
           title={t('nav.back')}
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -79,7 +147,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             e.stopPropagation();
             onForward(tab.id);
           }}
-          className="p-1 rounded-md hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none text-neutral-300 hover:text-white transition-colors"
+          className="p-1 rounded-md hover:bg-white/[0.08] disabled:opacity-25 disabled:pointer-events-none text-neutral-400 hover:text-white transition-colors"
           title={t('nav.forward')}
         >
           <ArrowRight className="w-3.5 h-3.5" />
@@ -90,7 +158,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
             e.stopPropagation();
             onReload(tab.id);
           }}
-          className="p-1 rounded-md hover:bg-white/10 text-neutral-300 hover:text-white transition-colors"
+          className="p-1 rounded-md hover:bg-white/[0.08] text-neutral-400 hover:text-white transition-colors"
           title={t('nav.reload')}
         >
           <RotateCcw
@@ -105,8 +173,10 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className={`flex-1 min-w-0 flex items-center bg-black/40 hover:bg-black/60 border rounded-lg px-2 py-0.5 text-xs text-neutral-200 transition-all ${
-          isFocused ? 'border-emerald-500/60 ring-1 ring-emerald-500/20' : 'border-white/10'
+        className={`flex-1 min-w-0 flex items-center h-7 px-2.5 rounded-lg border text-xs text-neutral-200 transition-all ${
+          isFocused
+            ? 'bg-[#090a0f] border-emerald-500/40 ring-1 ring-emerald-500/20 text-white'
+            : 'bg-white/[0.035] hover:bg-white/[0.06] border-white/[0.08]'
         }`}
       >
         <div className="mr-1.5 shrink-0 flex items-center">
@@ -141,38 +211,155 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
         />
       </form>
 
-      {/* Active Pane indicator & Close button */}
-      <div className="flex items-center space-x-1.5 shrink-0 ml-2">
-        {isActive ? (
-          <span className="flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded border border-emerald-500/30">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            {t('split.active')}
-          </span>
-        ) : (
+      {/* Pane Actions: Tab Selector & Close */}
+      <div className="flex items-center space-x-0.5 shrink-0 ml-1.5 relative">
+        {/* Tab Selector Button */}
+        <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              setIsTabMenuOpen((prev) => !prev);
+              setTabFilter('');
               onSelect();
             }}
-            className="text-[10px] font-mono text-neutral-400 hover:text-white px-1.5 py-0.5 rounded hover:bg-white/10 transition-colors"
-            title={t('split.focusTooltip')}
+            className={`p-1 rounded-md text-xs transition-colors flex items-center gap-1 ${
+              isTabMenuOpen
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                : 'text-neutral-400 hover:text-white hover:bg-white/[0.08]'
+            }`}
+            title={t('split.switchTab')}
           >
-            {t('split.focus')}
+            <Layers className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Tab Selector Popover Menu */}
+          {isTabMenuOpen && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute right-0 top-full mt-1.5 w-64 max-h-80 bg-neutral-900/98 border border-white/10 rounded-xl shadow-2xl p-1 z-50 flex flex-col text-xs text-neutral-200 animate-fade-in backdrop-blur-xl"
+            >
+              <div className="px-2.5 py-1.5 border-b border-white/[0.08] flex items-center justify-between">
+                <span className="font-semibold text-white tracking-wide">
+                  {t('split.selectTabForPane')}
+                </span>
+                <span className="text-[10px] font-mono text-neutral-400">
+                  {allTabs.length} {t('split.tabsCount')}
+                </span>
+              </div>
+
+              {/* Filter input */}
+              {allTabs.length > 4 && (
+                <div className="px-2 pt-2 pb-1">
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-black/40 border border-white/10 rounded-lg">
+                    <Search className="w-3 h-3 text-neutral-400 shrink-0" />
+                    <input
+                      type="text"
+                      value={tabFilter}
+                      onChange={(e) => setTabFilter(e.target.value)}
+                      placeholder={t('tabBar.searchTabs')}
+                      className="w-full bg-transparent text-xs text-white placeholder-neutral-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Tabs List */}
+              <div className="overflow-y-auto no-scrollbar max-h-52 px-1 py-1 space-y-0.5">
+                {filteredTabs.map((tItem) => {
+                  const isCurrentInThisPane = tItem.id === tab.id;
+                  const otherPane = allPanes.find(
+                    (p) => p.tabId === tItem.id && p.id !== paneId
+                  );
+                  const isNewTabItem = tItem.url === 'freedom://newtab';
+                  const title = isNewTabItem
+                    ? 'New Tab'
+                    : tItem.title || tItem.url;
+
+                  return (
+                    <button
+                      key={tItem.id}
+                      type="button"
+                      onClick={() => {
+                        setIsTabMenuOpen(false);
+                        onSwitchTab(paneId, tItem.id);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-lg text-left flex items-center gap-2 transition-colors group cursor-pointer ${
+                        isCurrentInThisPane
+                          ? 'bg-emerald-500/20 text-white font-medium border border-emerald-500/30'
+                          : 'hover:bg-white/10 text-neutral-300 hover:text-white'
+                      }`}
+                    >
+                      <div className="shrink-0 flex items-center">
+                        {tItem.url.startsWith('freedom://') ? (
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : tItem.favicon ? (
+                          <img
+                            src={tItem.favicon}
+                            alt=""
+                            className="w-3.5 h-3.5 object-contain rounded-xs"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Globe className="w-3.5 h-3.5 text-neutral-400" />
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate text-xs">{title}</div>
+                        <div className="truncate text-[10px] text-neutral-500 font-mono">
+                          {tItem.url}
+                        </div>
+                      </div>
+
+                      {isCurrentInThisPane && (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      )}
+
+                      {otherPane && !isCurrentInThisPane && (
+                        <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-white/10 shrink-0">
+                          {otherPane.id.replace('pane-', 'P')}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Action: Open New Tab in Pane */}
+              <div className="pt-1.5 px-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTabMenuOpen(false);
+                    onNewTabInPane(paneId);
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-white text-xs transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{t('split.newTabInPane')}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Close Pane Button */}
+        {canClose && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            className="p-1 rounded-md text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+            title={t('split.closePaneTooltip')}
+          >
+            <X className="w-3.5 h-3.5" />
           </button>
         )}
-
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className="p-1 rounded-md text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-          title={t('split.closePane', { pane: pane === 'left' ? t('split.leftPane') : t('split.rightPane') })}
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
     </div>
   );

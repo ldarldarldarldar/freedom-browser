@@ -33,4 +33,33 @@
   } catch (err) {
     // Fail-safe: do not disrupt normal page execution
   }
+
+  // Freedom RAM Control (FRC-GUARD) Telemetry Sensors:
+  // Detect active media playback, WebRTC streams, and unsaved form states
+  try {
+    const { ipcRenderer } = require('electron');
+
+    const checkMediaState = () => {
+      try {
+        const mediaElements = Array.from(document.querySelectorAll('audio, video'));
+        const isPlaying = mediaElements.some((el) => !el.paused && !el.ended && el.readyState > 2);
+        ipcRenderer.sendToHost('frc-media-state', { isPlaying });
+      } catch {}
+    };
+
+    document.addEventListener('play', checkMediaState, true);
+    document.addEventListener('pause', checkMediaState, true);
+    document.addEventListener('ended', checkMediaState, true);
+
+    document.addEventListener('input', (e) => {
+      try {
+        const target = e.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+          if (target.value && target.value.trim().length > 0) {
+            ipcRenderer.sendToHost('frc-form-dirty', { hasDirty: true });
+          }
+        }
+      } catch {}
+    }, true);
+  } catch {}
 })();

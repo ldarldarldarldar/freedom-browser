@@ -72,7 +72,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
 
   return (
     <div className="flex flex-col items-center justify-center h-full px-4 text-center select-none bg-neutral-950/90 text-neutral-200">
-      <div className="p-4 rounded-2xl bg-neutral-900 border border-white/10 mb-5">
+      <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/[0.08] mb-5">
         {details.icon}
       </div>
 
@@ -83,12 +83,12 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
       </p>
 
       {errorMessage && (
-        <div className="p-2 rounded bg-neutral-900 border border-white/5 font-mono text-[11px] text-red-300 max-w-md mb-4 break-all">
+        <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 font-mono text-[11px] text-rose-300 max-w-md mb-4 break-all">
           {errorMessage}
         </div>
       )}
 
-      <div className="text-[10px] font-mono text-neutral-500 mb-6 bg-neutral-900/60 px-2.5 py-1 rounded">
+      <div className="text-[10px] font-mono text-neutral-500 mb-6 bg-white/[0.03] border border-white/[0.05] px-2.5 py-1 rounded-md">
         URL: {url} • Error Code: {details.code}
       </div>
 
@@ -96,7 +96,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
         <button
           type="button"
           onClick={onReload}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-xs font-semibold transition-colors"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-medium transition-colors"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>{t('error.tryAgain')}</span>
@@ -105,7 +105,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
         <button
           type="button"
           onClick={onHome}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium transition-colors"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white/[0.06] hover:bg-white/10 border border-white/[0.06] text-neutral-200 text-xs font-medium transition-colors"
         >
           <Home className="w-3.5 h-3.5" />
           <span>{t('error.home')}</span>
