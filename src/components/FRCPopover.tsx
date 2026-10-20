@@ -125,7 +125,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
               {t('frc.title')}
             </h3>
             <span className="text-[10px] text-neutral-400 font-mono">
-              {t('frc.subsystem')} • v0.5.4.7.2
+              {t('frc.subsystem')} • v0.5.4.7.3
             </span>
           </div>
         </div>

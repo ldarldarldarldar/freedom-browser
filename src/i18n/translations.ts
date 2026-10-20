@@ -364,7 +364,7 @@ export const TRANSLATIONS = {
 
     // About Modal
     'about.title': 'About Freedom Browser',
-    'about.version': 'Version 0.5.4.7.2-release (x86_64 / aarch64)',
+    'about.version': 'Version 0.5.4.7.3-release (x86_64 / aarch64)',
     'about.description': 'A fast, lightweight, privacy-focused desktop web browser built with Rust, Tauri 2, and native platform engines (WebView2 on Windows, WebKitGTK on Linux).',
     'about.principleFreedom': 'Freedom',
     'about.principleFreedomDesc': 'Zero remote telemetry, full user privacy, no tracking cookies.',
@@ -804,7 +804,7 @@ export const TRANSLATIONS = {
 
     // About Modal
     'about.title': 'О браузере Freedom',
-    'about.version': 'Версия 0.5.4.7.2-release (x86_64 / aarch64)',
+    'about.version': 'Версия 0.5.4.7.3-release (x86_64 / aarch64)',
     'about.description': 'Быстрый, лёгкий и приватный настольный веб-браузер на базе Rust, Tauri 2 и нативных системных движков (WebView2 на Windows, WebKitGTK на Linux).',
     'about.principleFreedom': 'Свобода',
     'about.principleFreedomDesc': 'Ноль телеметрии, полная конфиденциальность, никаких отслеживающих cookie.',

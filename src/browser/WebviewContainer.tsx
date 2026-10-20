@@ -312,7 +312,7 @@ const ElectronWebviewTab: React.FC<{
         src={tab.url}
         className="w-full h-full border-none outline-none bg-neutral-950"
         allowpopups="true"
-        webpreferences="contextIsolation=yes"
+        webpreferences="contextIsolation=yes, javascript=yes, allowRunningInsecureContent=no"
         preload={(window as any).electronAPI?.webviewPreload || undefined}
       />
     </div>

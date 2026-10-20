@@ -1,7 +1,8 @@
 {
   "name": "freedom-browser",
+  "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.5.4-7.2",
+  "version": "0.5.4-7.3",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
@@ -57,12 +58,50 @@
       "electron/**/*",
       "package.json"
     ],
+    "fileAssociations": [
+      {
+        "ext": "html",
+        "name": "HTML Document",
+        "description": "HTML Document",
+        "mimeType": "text/html",
+        "role": "Viewer"
+      },
+      {
+        "ext": "htm",
+        "name": "HTML Document",
+        "description": "HTML Document",
+        "mimeType": "text/html",
+        "role": "Viewer"
+      },
+      {
+        "ext": "shtml",
+        "name": "HTML Document",
+        "description": "HTML Document",
+        "mimeType": "text/html",
+        "role": "Viewer"
+      },
+      {
+        "ext": "xhtml",
+        "name": "XHTML Document",
+        "description": "XHTML Document",
+        "mimeType": "application/xhtml+xml",
+        "role": "Viewer"
+      }
+    ],
     "linux": {
       "target": [
         "AppImage"
       ],
       "category": "Network;WebBrowser",
-      "icon": "build/icons"
+      "icon": "build/icons",
+      "syncDesktopName": true,
+      "mimeTypes": [
+        "text/html",
+        "text/xml",
+        "application/xhtml+xml",
+        "x-scheme-handler/http",
+        "x-scheme-handler/https"
+      ]
     },
     "win": {
       "target": [
@@ -70,7 +109,21 @@
         "portable",
         "zip"
       ],
-      "icon": "build/icons/icon.ico"
+      "icon": "build/icons/icon.ico",
+      "fileAssociations": [
+        {
+          "ext": "html",
+          "name": "HTML Document",
+          "description": "HTML Document",
+          "role": "Viewer"
+        },
+        {
+          "ext": "htm",
+          "name": "HTML Document",
+          "description": "HTML Document",
+          "role": "Viewer"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

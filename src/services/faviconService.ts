@@ -15,6 +15,7 @@ const OFFICIAL_BRAND_ICONS: Record<string, string> = {
   'reddit.com': `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="%23ff4500"/><path fill="%23ffffff" d="M12 4.5a1.2 1.2 0 100 2.4 1.2 1.2 0 000-2.4zm5.8 4.2a1.8 1.8 0 00-2.6-.2 8.4 8.4 0 00-3.2-.6l.6-2.6 1.8.4a1.2 1.2 0 10.2-.6l-2.2-.5a.3.3 0 00-.3.2l-.7 3.3a8.3 8.3 0 00-3.3.6 1.8 1.8 0 00-2.6 2.3c-.1.3-.1.6-.1.9 0 2.4 2.4 4.4 5.3 4.4s5.3-2 5.3-4.4c0-.3 0-.6-.1-.9a1.8 1.8 0 001.4-2zm-8.8 3.5a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2zm6 2.6c-.6.6-1.8.8-3 .8s-2.4-.2-3-.8a.3.3 0 01.4-.4c.5.5 1.5.7 2.6.7s2.1-.2 2.6-.7a.3.3 0 01.4.4zm-.2-1.5a1.1 1.1 0 110-2.2 1.1 1.1 0 010 2.2z"/></svg>`,
   'rust-lang.org': `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="%23ffffff"><path d="M16 2.5a13.5 13.5 0 100 27 13.5 13.5 0 000-27zm0 2.2a11.3 11.3 0 0110.8 8.1l-1.9.7a9.4 9.4 0 00-2.3-2.9l1 1.8a11.3 11.3 0 01-15.2 0l1-1.8a9.4 9.4 0 00-2.3 2.9l-1.9-.7A11.3 11.3 0 0116 4.7zm-4.5 7.1h4.8c2.1 0 3.7.8 3.7 2.7 0 1.4-.9 2.2-2.1 2.5l2.6 4.7h-2.5l-2.2-4.2h-2.2v4.2h-2.1v-9.9zm2.1 1.8v2.3h2.6c1.1 0 1.8-.4 1.8-1.2 0-.7-.7-1.1-1.8-1.1h-2.6z"/></svg>`,
   'discord.com': `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="%235865f2"/><path fill="%23ffffff" d="M19.3 5.3a14.8 14.8 0 00-3.6-1.1.2.2 0 00-.2.1 10.3 10.3 0 00-.5 1 13.7 13.7 0 00-6 0 10.3 10.3 0 00-.5-1 .2.2 0 00-.2-.1A14.8 14.8 0 004.7 5.3a.2.2 0 00-.1.1C2.3 8.8 1.7 12.2 2 15.6a.2.2 0 00.1.1 14.9 14.9 0 004.5 2.3.2.2 0 00.2-.1c.4-.5.7-1 1-1.6a.2.2 0 00-.1-.2 9.8 9.8 0 01-1.4-.7.2.2 0 010-.3c.1-.1.2-.2.3-.2a10.6 10.6 0 009.8 0 .2.2 0 01.3.2.2.2 0 010 .3c-.5.3-1 .5-1.4.7a.2.2 0 00-.1.2c.3.6.7 1.1 1 1.6a.2.2 0 00.2.1 14.9 14.9 0 004.5-2.3.2.2 0 00.1-.1c.4-3.9-.7-7.3-2.6-10.3a.2.2 0 00-.1-.1zM8.5 13.7c-.8 0-1.5-.7-1.5-1.6s.7-1.6 1.5-1.6c.9 0 1.6.7 1.5 1.6 0 .9-.7 1.6-1.5 1.6zm7 0c-.8 0-1.5-.7-1.5-1.6s.7-1.6 1.5-1.6c.9 0 1.6.7 1.5 1.6 0 .9-.7 1.6-1.5 1.6z"/></svg>`,
+  'local-file': `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%2338bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
 };
 
 const CACHE_KEY_PREFIX = 'freedom_favicons_v2_';
@@ -26,6 +27,10 @@ export class FaviconService {
    * Extract normalized hostname domain from URL
    */
   public static extractDomain(url: string): string {
+    if (!url) return '';
+    if (url.startsWith('file://')) {
+      return 'local-file';
+    }
     try {
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://' + url;

@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
@@ -8,6 +8,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (event, ...args) => listener(...args);
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
+  },
+  getPathForFile: (file) => {
+    try {
+      if (webUtils && typeof webUtils.getPathForFile === 'function') {
+        return webUtils.getPathForFile(file);
+      }
+    } catch (e) {
+      console.warn('getPathForFile error:', e);
+    }
+    return (file && file.path) || '';
   },
   getSystemMetrics: () => ipcRenderer.invoke('get_system_task_manager_stats'),
   cleanRam: () => ipcRenderer.invoke('clean_ram'),
@@ -37,6 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   chooseUserDataPath: () => ipcRenderer.invoke('choose_user_data_path'),
   migrateUserDataPath: (options) => ipcRenderer.invoke('migrate_user_data_path', options),
   relaunchApp: () => ipcRenderer.invoke('relaunch_app'),
+  chooseFileToOpen: () => ipcRenderer.invoke('choose_file_to_open'),
   webviewPreload: (() => {
     const p = require('path').join(__dirname, 'webview-preload.cjs');
     return process.platform === 'win32'

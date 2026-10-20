@@ -30,6 +30,7 @@ import { TabSortService, TabSortMode } from './services/tabSortService';
 import { FaviconService } from './services/faviconService';
 import { SplitViewService, SplitViewState, SplitLayoutType } from './services/splitViewService';
 import { I18nProvider } from './i18n';
+import { FileCode } from 'lucide-react';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
@@ -59,7 +60,7 @@ export default function App() {
             id: 'tab-1',
             title: SearchEngineService.extractDomain(openUrl),
             url: openUrl,
-            displayUrl: openUrl,
+            displayUrl: SearchEngineService.formatDisplayUrl(openUrl),
             isLoading: false,
             canGoBack: false,
             canGoForward: false,
@@ -69,7 +70,7 @@ export default function App() {
             history: [openUrl],
             historyIndex: 0,
             zoomLevel: ZoomService.getZoomForUrl(openUrl),
-            security: openUrl.startsWith('https://') ? 'secure' : 'insecure',
+            security: openUrl.startsWith('https://') || openUrl.startsWith('file://') ? 'secure' : 'insecure',
           },
         ];
       }
@@ -158,6 +159,7 @@ export default function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
   const [isFRCPopoverOpen, setIsFRCPopoverOpen] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [frcStats, setFrcStats] = useState<SystemStats | null>(() => frcService.getLatestStats());
 
   // Bookmarks State
@@ -439,7 +441,7 @@ export default function App() {
       history: [targetUrl],
       historyIndex: 0,
       zoomLevel: ZoomService.getZoomForUrl(targetUrl),
-      security: targetUrl.startsWith('https://') ? 'secure' : 'internal',
+      security: targetUrl.startsWith('https://') || targetUrl.startsWith('file://') ? 'secure' : 'internal',
     };
 
     setTabs((prev) => [...prev, newTab]);
@@ -457,6 +459,19 @@ export default function App() {
 
     logger.log('INFO', 'RENDERER', `Created tab ${newId} with URL ${targetUrl}`);
   }, []);
+
+  const handleOpenFile = useCallback(async () => {
+    try {
+      if ((window as any).electronAPI?.chooseFileToOpen) {
+        const fileUrl = await (window as any).electronAPI.chooseFileToOpen();
+        if (fileUrl) {
+          handleNewTab(fileUrl);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to open file picker:', err);
+    }
+  }, [handleNewTab]);
 
   const handleCloseTab = useCallback(
     (id: string) => {
@@ -1454,10 +1469,53 @@ export default function App() {
       const unsubZoomReset = (window as any).electronAPI.on('webview-zoom-reset', () => {
         handleResetZoom();
       });
+      const unsubExternalUrl = (window as any).electronAPI.on('open-external-url', ({ url: incomingUrl }: { url: string }) => {
+        if (!incomingUrl) return;
+        setTabs((prev) => {
+          if (prev.length === 1 && prev[0].url === 'freedom://newtab') {
+            return [
+              {
+                ...prev[0],
+                url: incomingUrl,
+                displayUrl: SearchEngineService.formatDisplayUrl(incomingUrl),
+                title: SearchEngineService.extractDomain(incomingUrl),
+                isLoading: false,
+                history: [incomingUrl],
+                historyIndex: 0,
+                zoomLevel: ZoomService.getZoomForUrl(incomingUrl),
+                security: incomingUrl.startsWith('https://') || incomingUrl.startsWith('file://') ? 'secure' : 'insecure',
+              },
+            ];
+          }
+          const newId = `tab-${Date.now()}`;
+          const newTab: BrowserTab = {
+            id: newId,
+            title: SearchEngineService.extractDomain(incomingUrl),
+            url: incomingUrl,
+            displayUrl: SearchEngineService.formatDisplayUrl(incomingUrl),
+            isLoading: false,
+            canGoBack: false,
+            canGoForward: false,
+            isSuspended: false,
+            lastActive: Date.now(),
+            isCrashed: false,
+            history: [incomingUrl],
+            historyIndex: 0,
+            zoomLevel: ZoomService.getZoomForUrl(incomingUrl),
+            security: incomingUrl.startsWith('https://') || incomingUrl.startsWith('file://') ? 'secure' : 'insecure',
+          };
+          setActiveTabId(newId);
+          return [...prev, newTab];
+        });
+      });
+
       const unsubShortcut = (window as any).electronAPI.on('webview-shortcut', (action: string) => {
         switch (action) {
           case 'new-tab':
             handleNewTab('freedom://newtab');
+            break;
+          case 'open-file':
+            handleOpenFile();
             break;
           case 'close-tab':
             if (activeTabId) handleCloseTab(activeTabId);
@@ -1493,6 +1551,7 @@ export default function App() {
       });
 
       return () => {
+        unsubExternalUrl?.();
         unsubNewWindow?.();
         unsubOpenTab?.();
         unsubSearchText?.();
@@ -1507,6 +1566,7 @@ export default function App() {
     }
   }, [
     handleNewTab,
+    handleOpenFile,
     handleCloseTab,
     handleRestoreClosedTab,
     handleToggleBookmark,
@@ -1670,6 +1730,13 @@ export default function App() {
         return;
       }
 
+      // Ctrl+O: Open File
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        handleOpenFile();
+        return;
+      }
+
       // Escape: Close transient UI
       if (e.key === 'Escape') {
         if (findState.isOpen) {
@@ -1704,6 +1771,7 @@ export default function App() {
     isAboutOpen,
     isTaskManagerOpen,
     handleNewTab,
+    handleOpenFile,
     handleRestoreClosedTab,
     handleCloseTab,
     handleToggleBookmark,
@@ -1713,6 +1781,78 @@ export default function App() {
     handleResetZoom,
     handleCloseFind,
   ]);
+
+  // Global Drag & Drop: Drag any local HTML or file into the window to open in a new tab
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const handleDragEnter = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+        dragCounter++;
+        setIsDraggingFile(true);
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        setIsDraggingFile(false);
+      }
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsDraggingFile(false);
+
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        let filePath = '';
+        if ((window as any).electronAPI?.getPathForFile) {
+          try {
+            filePath = (window as any).electronAPI.getPathForFile(file);
+          } catch {}
+        }
+        if (!filePath) {
+          filePath = (file as any).path || '';
+        }
+
+        if (filePath) {
+          const isWindows = /^[a-zA-Z]:[/\\]/.test(filePath);
+          let fileUrl: string;
+          if (filePath.startsWith('file://')) {
+            fileUrl = filePath;
+          } else if (isWindows) {
+            fileUrl = 'file:///' + encodeURI(filePath.replace(/\\/g, '/'));
+          } else {
+            fileUrl = 'file://' + encodeURI(filePath);
+          }
+          handleNewTab(fileUrl);
+        }
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('drop', handleDrop);
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, [handleNewTab]);
 
   const isPerformanceMode = settings.browserMode === 'performance';
 
@@ -2041,6 +2181,27 @@ export default function App() {
       {/* About Modal */}
       {isAboutOpen && (
         <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+      )}
+
+      {/* Drag & Drop Visual Overlay (covers window and webviews during dragging) */}
+      {isDraggingFile && (
+        <div className="fixed inset-0 z-50 pointer-events-none bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center border-4 border-dashed border-emerald-500/80 transition-all">
+          <div className="p-8 rounded-3xl bg-neutral-900/95 border border-emerald-500/30 shadow-2xl flex flex-col items-center gap-4 text-center max-w-md">
+            <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner">
+              <FileCode className="w-8 h-8" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <h3 className="text-lg font-bold text-neutral-100">
+                {settings.language === 'ru' ? 'Отпустите файл здесь' : 'Drop File Here'}
+              </h3>
+              <p className="text-xs text-neutral-400">
+                {settings.language === 'ru'
+                  ? 'Документ сразу откроется в новой вкладке Freedom Browser'
+                  : 'The document will open in a new tab in Freedom Browser'}
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Freedom Mascot: Freen in bottom-right corner */}

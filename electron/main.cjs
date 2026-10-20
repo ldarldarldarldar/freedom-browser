@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, cli
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const url = require('url');
 
 // User Data Storage Path Configuration
 // Separates application binaries (e.g. Program Files\Freedom Browser) from user data (profiles, history, bookmarks, cookies).
@@ -42,14 +43,237 @@ app.commandLine.appendSwitch('no-default-browser-check');
 app.commandLine.appendSwitch('disable-features', 'MediaRouter,OptimizationHints,InterestFeedContentSuggestions,Translate,CalculateNativeWinOcclusion');
 app.commandLine.appendSwitch('renderer-process-limit', '6'); // Prevents runaway process explosion
 app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache (keeps working set lean)
-app.commandLine.appendSwitch('media-cache-size', '33554432'); // 32MB media cache
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=128'); // Keep V8 memory lean (128MB ceiling)
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512'); // Ensure sufficient V8 heap for modern complex WebApps and Google Sign-in
 
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 let mainWindow = null;
 const activeDownloads = new Map();
 let activeDownloadsLocation = '';
 let currentAppLanguage = 'en';
+let pendingOpenUrl = null;
+
+const isPlatformWin = process.platform === 'win32';
+const isPlatformMac = process.platform === 'darwin';
+
+// Unified authentic Desktop Chrome User-Agent across all web navigation and authentication flows
+const desktopChromeUA = isPlatformWin
+  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+  : isPlatformMac
+  ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+  : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36';
+
+// Extract local HTML file path or Web URL from CLI arguments (for "Open with" -> Freedom Browser)
+function extractFileUrlFromArgs(argv, workingDir = process.cwd()) {
+  if (!Array.isArray(argv) || argv.length === 0) return null;
+
+  for (let i = 1; i < argv.length; i++) {
+    const rawArg = argv[i];
+    if (!rawArg || typeof rawArg !== 'string') continue;
+
+    // Remove wrapping quotes if present
+    const trimmed = rawArg.trim().replace(/^["']|["']$/g, '');
+    if (!trimmed) continue;
+
+    // Ignore electron flags, chromium switches, dev flags
+    if (trimmed.startsWith('--') || trimmed.startsWith('-')) continue;
+
+    // Ignore app entry points, wrappers, and executables
+    const baseName = path.basename(trimmed).toLowerCase();
+    if (
+      trimmed === '.' ||
+      baseName === 'main.cjs' ||
+      baseName === 'electron' ||
+      baseName === 'electron.exe' ||
+      baseName === 'freedom' ||
+      baseName === 'freedom.exe' ||
+      baseName === 'freedom browser' ||
+      baseName === 'freedom browser.exe' ||
+      baseName === 'freedom-browser' ||
+      baseName.endsWith('.appimage') ||
+      trimmed.includes('node_modules/electron')
+    ) {
+      continue;
+    }
+
+    // 1. Direct Web/File URLs
+    if (
+      trimmed.startsWith('file://') ||
+      trimmed.startsWith('http://') ||
+      trimmed.startsWith('https://') ||
+      trimmed.startsWith('freedom://')
+    ) {
+      return trimmed;
+    }
+
+    // 2. Local File Paths (e.g. /home/.../page.html or C:\...\page.html or ./page.html or sample.html)
+    const isWindowsPath = /^[a-zA-Z]:[/\\]/.test(trimmed);
+    const isAbsoluteUnix = trimmed.startsWith('/');
+    const isRelative = trimmed.startsWith('./') || trimmed.startsWith('../') || trimmed.startsWith('~');
+    const isDocFile = /\.(html?|xhtml|shtml|xml|svg|txt|pdf)$/i.test(trimmed);
+
+    if (isWindowsPath) {
+      const normalized = trimmed.replace(/\\/g, '/');
+      return 'file:///' + encodeURI(normalized);
+    }
+
+    if (isAbsoluteUnix || isRelative || isDocFile) {
+      try {
+        let absPath;
+        if (trimmed.startsWith('~')) {
+          absPath = path.join(os.homedir(), trimmed.slice(1));
+        } else {
+          absPath = path.isAbsolute(trimmed) ? trimmed : path.resolve(workingDir, trimmed);
+        }
+        return url.pathToFileURL(absPath).toString();
+      } catch (err) {
+        console.warn('Failed to parse file path arg:', trimmed, err);
+      }
+    }
+  }
+
+  return null;
+}
+
+// Register desktop file and MIME association in Linux environment so "Open With" / "Открыть с помощью" lists Freedom Browser
+function registerLinuxDesktopIntegration() {
+  if (process.platform !== 'linux') return;
+  try {
+    const homeDir = os.homedir();
+    const appsDir = path.join(homeDir, '.local', 'share', 'applications');
+    const iconsDir = path.join(homeDir, '.local', 'share', 'icons', 'hicolor', '512x512', 'apps');
+    fs.mkdirSync(appsDir, { recursive: true });
+    fs.mkdirSync(iconsDir, { recursive: true });
+
+    // Determine target executable
+    let targetExec = process.env.APPIMAGE || '';
+    if (!targetExec) {
+      const candidates = [
+        path.join(__dirname, '../Freedom Browser.AppImage'),
+        path.join(__dirname, '../Freedom.AppImage'),
+        path.join(__dirname, '../release/Freedom-0.5.4-7.3.AppImage'),
+        process.execPath,
+      ];
+      for (const cand of candidates) {
+        if (fs.existsSync(cand)) {
+          targetExec = cand;
+          break;
+        }
+      }
+    }
+    if (!targetExec) targetExec = process.execPath;
+
+    // Copy icon
+    const srcIcon = path.join(__dirname, '../build/icons/512x512.png');
+    const destIcon = path.join(iconsDir, 'freedom-browser.png');
+    if (fs.existsSync(srcIcon)) {
+      try {
+        fs.copyFileSync(srcIcon, destIcon);
+      } catch {}
+    }
+
+    const desktopFile = path.join(appsDir, 'freedom-browser.desktop');
+    const desktopContent = `[Desktop Entry]
+Name=Freedom Browser
+GenericName=Web Browser
+Comment=Lightweight, fast, and privacy-focused desktop web browser
+Exec="${targetExec}" %U
+Terminal=false
+Type=Application
+Icon=freedom-browser
+StartupWMClass=freedom-browser
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+Categories=Network;WebBrowser;
+`;
+
+    fs.writeFileSync(desktopFile, desktopContent, 'utf8');
+
+    // Register with mimeapps.list
+    const mimeConfigFile = path.join(homeDir, '.config', 'mimeapps.list');
+    let mimeContent = fs.existsSync(mimeConfigFile) ? fs.readFileSync(mimeConfigFile, 'utf8') : '';
+    const associations = [
+      'text/html=freedom-browser.desktop;',
+      'text/xml=freedom-browser.desktop;',
+      'application/xhtml+xml=freedom-browser.desktop;',
+      'x-scheme-handler/http=freedom-browser.desktop;',
+      'x-scheme-handler/https=freedom-browser.desktop;'
+    ];
+
+    if (!mimeContent.includes('[Added Associations]')) {
+      mimeContent = `[Added Associations]\n` + associations.join('\n') + '\n\n' + mimeContent;
+      fs.writeFileSync(mimeConfigFile, mimeContent, 'utf8');
+    } else {
+      let modified = false;
+      for (const assoc of associations) {
+        const mimeType = assoc.split('=')[0];
+        if (!mimeContent.includes(mimeType + '=')) {
+          mimeContent = mimeContent.replace('[Added Associations]', `[Added Associations]\n${assoc}`);
+          modified = true;
+        } else if (!mimeContent.includes('freedom-browser.desktop')) {
+          const regex = new RegExp(`(${mimeType}=)([^\\n]+)`);
+          mimeContent = mimeContent.replace(regex, `$1freedom-browser.desktop;$2`);
+          modified = true;
+        }
+      }
+      if (modified) {
+        fs.writeFileSync(mimeConfigFile, mimeContent, 'utf8');
+      }
+    }
+
+    const { exec } = require('child_process');
+    exec(`update-desktop-database "${appsDir}" 2>/dev/null`, () => {});
+  } catch (err) {
+    console.warn('Failed to register Linux desktop integration:', err);
+  }
+}
+
+// Single instance enforcement: forward file open requests to existing window
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+
+      const targetUrl = extractFileUrlFromArgs(commandLine, workingDirectory);
+      if (targetUrl) {
+        if (mainWindow.webContents.isLoading()) {
+          mainWindow.webContents.once('did-finish-load', () => {
+            mainWindow.webContents.send('open-external-url', { url: targetUrl });
+          });
+        } else {
+          mainWindow.webContents.send('open-external-url', { url: targetUrl });
+        }
+      }
+    }
+  });
+}
+
+// Native OS open-file handler (macOS and Linux desktop managers)
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  try {
+    const fileUrl = url.pathToFileURL(filePath).toString();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('open-external-url', { url: fileUrl });
+    } else {
+      pendingOpenUrl = fileUrl;
+    }
+  } catch (err) {
+    console.warn('Failed to open file via open-file event:', filePath, err);
+  }
+});
+
+app.on('open-url', (event, rawUrl) => {
+  event.preventDefault();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('open-external-url', { url: rawUrl });
+  } else {
+    pendingOpenUrl = rawUrl;
+  }
+});
 
 const MENU_STRINGS = {
   en: {
@@ -143,11 +367,12 @@ function createWindow() {
     }
   });
 
-  const urlArg = process.argv.find((a) => a.startsWith('http://') || a.startsWith('https://'));
+  const fileOrUrlArg = pendingOpenUrl || extractFileUrlFromArgs(process.argv);
   const tabsCountArg = process.argv.find((a) => a.startsWith('--tabs='));
   const query = {};
-  if (urlArg) query.openUrl = urlArg;
+  if (fileOrUrlArg) query.openUrl = fileOrUrlArg;
   if (tabsCountArg) query.tabCount = tabsCountArg.split('=')[1];
+  pendingOpenUrl = null;
 
   if (isDev) {
     const devUrl = new URL('http://localhost:3000');
@@ -252,45 +477,28 @@ function createWindow() {
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
   if (contents.getType() === 'webview') {
-    const baseUA = session.defaultSession.getUserAgent();
-    const desktopUA = baseUA
-      .replace(/\s*Electron\/\S+/g, '')
-      .replace(/\s*freedom-browser\/\S+/g, '')
-      .replace(/\s*Freedom\/\S+/g, '')
-      .trim();
-    contents.setUserAgent(desktopUA);
+    contents.setUserAgent(desktopChromeUA);
 
     contents.setWindowOpenHandler(({ url }) => {
+      // Allow Google Sign-In, account registration & OAuth popups so they can authenticate and communicate with window.opener
+      const isAuthPopup = /google\.|appleid\.apple\.|login\.microsoftonline\.|github\.com\/login\/oauth|\/oauth|\/signin|\/signup|\/auth/i.test(url || '');
+      if (isAuthPopup) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            autoHideMenuBar: true,
+            webPreferences: {
+              contextIsolation: true,
+              nodeIntegration: false,
+              javascript: true,
+            }
+          }
+        };
+      }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('webview-new-window', { url });
       }
       return { action: 'deny' };
-    });
-
-    // WebAuthn Passkey & Security Key Protection:
-    // Prevents passive/conditional passkey queries without user interaction from triggering unprompted Windows Security modals
-    const webauthnGuard = `
-      (function() {
-        if (window.__freedom_webauthn_safe) return;
-        window.__freedom_webauthn_safe = true;
-        try {
-          if (window.PublicKeyCredential && typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function') {
-            window.PublicKeyCredential.isConditionalMediationAvailable = async function() { return false; };
-          }
-          if (navigator.credentials && typeof navigator.credentials.get === 'function') {
-            const _origGet = navigator.credentials.get.bind(navigator.credentials);
-            navigator.credentials.get = function(options) {
-              if (options && options.mediation === 'conditional' && (!navigator.userActivation || !navigator.userActivation.isActive)) {
-                return Promise.reject(new DOMException('Conditional mediation is not supported in this context.', 'NotSupportedError'));
-              }
-              return _origGet(options);
-            };
-          }
-        } catch (e) {}
-      })();
-    `;
-    contents.on('dom-ready', () => {
-      contents.executeJavaScript(webauthnGuard).catch(() => {});
     });
 
     // Intercept keyboard shortcuts inside webview before page can swallow them
@@ -378,6 +586,11 @@ app.on('web-contents-created', (event, contents) => {
       if (input.key.toLowerCase() === 'j') {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'open-downloads');
+        return;
+      }
+      if (input.key.toLowerCase() === 'o') {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'open-file');
         return;
       }
       if (input.key.toLowerCase() === 'r') {
@@ -1084,27 +1297,37 @@ ipcMain.handle('relaunch_app', () => {
   app.exit(0);
 });
 
+ipcMain.handle('choose_file_to_open', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Open HTML Document',
+    properties: ['openFile'],
+    filters: [
+      { name: 'HTML Documents', extensions: ['html', 'htm', 'xhtml', 'shtml'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return null;
+  }
+  return url.pathToFileURL(result.filePaths[0]).toString();
+});
+
 // App lifecycle
 app.whenReady().then(() => {
-  // Pure standard desktop Chromium User-Agent without Electron or custom tokens
-  // Prevents websites (such as Twitch, YouTube, Google) from redirecting to mobile layouts
-  const baseUA = session.defaultSession.getUserAgent();
-  const desktopUA = baseUA
-    .replace(/\s*Electron\/\S+/g, '')
-    .replace(/\s*freedom-browser\/\S+/g, '')
-    .replace(/\s*Freedom\/\S+/g, '')
-    .trim();
-
-  app.userAgentFallback = desktopUA;
-  session.defaultSession.setUserAgent(desktopUA);
+  app.userAgentFallback = desktopChromeUA;
+  session.defaultSession.setUserAgent(desktopChromeUA);
 
   // Guarantee all outgoing HTTP/HTTPS requests advertise desktop Chrome without mobile hints
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
-    details.requestHeaders['User-Agent'] = desktopUA;
+    details.requestHeaders['User-Agent'] = desktopChromeUA;
     details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
+    details.requestHeaders['Sec-CH-UA'] = '"Chromium";v="132", "Google Chrome";v="132", "Not:A-Brand";v="99"';
+    details.requestHeaders['Sec-CH-UA-Platform'] = isPlatformWin ? '"Windows"' : isPlatformMac ? '"macOS"' : '"Linux"';
     callback({ cancel: false, requestHeaders: details.requestHeaders });
   });
 
+  registerLinuxDesktopIntegration();
   createWindow();
 
   app.on('activate', () => {

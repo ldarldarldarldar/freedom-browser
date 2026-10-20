@@ -14,6 +14,16 @@ export class SearchEngineService {
       return true;
     }
 
+    // Check local filesystem paths (Unix, Windows, Home directory)
+    if (/^(\/|[a-zA-Z]:[/\\]|~[/\\])/.test(trimmed)) {
+      return true;
+    }
+
+    // Check common local document extensions (e.g. page.html, index.htm)
+    if (/\.(html?|xhtml|shtml|xml|svg|pdf|txt)$/i.test(trimmed) && !/\s/.test(trimmed)) {
+      return true;
+    }
+
     // Check standard protocol
     if (/^[a-zA-Z]+:\/\//.test(trimmed)) {
       return true;
@@ -49,6 +59,29 @@ export class SearchEngineService {
       return trimmed;
     }
 
+    // Direct file:// URLs
+    if (trimmed.startsWith('file://')) {
+      return trimmed;
+    }
+
+    // Local filesystem paths (Unix or Windows drive letter)
+    if (/^(\/|[a-zA-Z]:[/\\])/.test(trimmed)) {
+      const normalized = trimmed.replace(/\\/g, '/');
+      return `file://${normalized.startsWith('/') ? '' : '/'}${normalized}`;
+    }
+
+    // Home directory path (~/...)
+    if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+      const normalized = trimmed.slice(1).replace(/\\/g, '/');
+      return `file://${normalized}`;
+    }
+
+    // Relative filesystem path (./... or ../...)
+    if (trimmed.startsWith('./') || trimmed.startsWith('../')) {
+      const normalized = trimmed.replace(/\\/g, '/');
+      return `file://${normalized}`;
+    }
+
     if (this.isLikelyUrl(trimmed)) {
       // Add https:// if protocol missing
       if (!/^[a-zA-Z]+:\/\//.test(trimmed)) {
@@ -72,14 +105,31 @@ export class SearchEngineService {
    */
   public static formatDisplayUrl(url: string): string {
     if (url.startsWith('freedom://')) return url;
+    if (url.startsWith('file://')) {
+      try {
+        return decodeURI(url);
+      } catch {
+        return url;
+      }
+    }
     return url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
   }
 
   /**
-   * Extract domain from URL
+   * Extract domain or filename from URL
    */
   public static extractDomain(url: string): string {
     if (url.startsWith('freedom://')) return 'Freedom Browser';
+    if (url.startsWith('file://')) {
+      try {
+        const decoded = decodeURI(url);
+        const parts = decoded.split(/[/\\]/);
+        const filename = parts.pop() || parts.pop() || 'Local File';
+        return filename || 'Local File';
+      } catch {
+        return 'Local File';
+      }
+    }
     try {
       const parsed = new URL(url);
       return parsed.hostname.replace(/^www\./, '');

@@ -23,6 +23,9 @@ export class ZoomService {
       if (url.startsWith('freedom://') || url.startsWith('about:')) {
         return url;
       }
+      if (url.startsWith('file://')) {
+        return 'local-file';
+      }
       const parsed = new URL(url);
       return parsed.hostname.toLowerCase();
     } catch {

@@ -246,7 +246,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                 {t('frc.diagnosticsTitle')}
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                FRC v0.5.4.7.2
+                FRC v0.5.4.7.3
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-0.5">
