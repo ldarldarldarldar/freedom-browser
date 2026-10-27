@@ -151,7 +151,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
 
         {/* Search */}
         <form onSubmit={handleSearch} className="w-full max-w-[460px] mx-auto mb-10">
-          <div className="flex items-center w-full h-11 px-4 rounded-[var(--fb-radius-pill)] border border-[var(--fb-border-strong)] bg-[color-mix(in_srgb,var(--fb-input)_88%,transparent)] backdrop-blur-md focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-colors shadow-[var(--fb-shadow-card)]">
+          <div className="flex items-center w-full h-11 px-4 rounded-[var(--fb-radius-pill)] border border-[var(--fb-border-strong)] bg-[var(--fb-input)] focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-colors shadow-[var(--fb-shadow-card)]">
             <Search className="w-4 h-4 text-[var(--fb-text-2)] mr-3 shrink-0" />
             <input
               type="text"

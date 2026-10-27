@@ -2027,25 +2027,50 @@ export default function App() {
 
   const isPerformanceMode = settings.browserMode === 'performance';
 
-  // Maps the active theme palette onto the design tokens declared in index.css
-  const paletteToTokens = (p?: typeof settings.palette): Record<string, string> =>
-    p
-      ? {
-          '--fb-accent': p.accentColor,
-          '--fb-focus': p.focusColor,
-          '--fb-bg': p.mainBg,
-          '--fb-chrome': p.headerBg,
-          '--fb-sidebar': p.sidebarBg,
-          '--fb-surface': p.cardBg,
-          '--fb-surface-hover': p.cardHoverBg,
-          '--fb-surface-3': p.buttonHoverBg,
-          '--fb-input': p.inputBg,
-          '--fb-text': p.textColor,
-          '--fb-text-2': p.secondaryTextColor,
-          '--fb-border': p.borderColor,
-          '--fb-scrollbar': p.scrollbarColor,
-        }
-      : {};
+  // Maps the active theme palette onto the design tokens declared in index.css.
+  // Surfaces are flattened onto the page background (some presets use translucent rgba
+  // values, which made popovers see-through), and secondary text is derived from the
+  // primary text so every preset keeps the same neutral hierarchy as the reference.
+  const paletteToTokens = (p?: typeof settings.palette): Record<string, string> => {
+    if (!p) return {};
+    const parse = (c: string): [number, number, number, number] | null => {
+      const v = c.trim();
+      const hex = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+      if (hex) {
+        const h = hex[1].length === 3 ? hex[1].replace(/./g, (x) => x + x) : hex[1];
+        return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), 1];
+      }
+      const rgb = v.match(/^rgba?\(([^)]+)\)$/i);
+      if (rgb) {
+        const [r, g, b, a = '1'] = rgb[1].split(',').map((x) => x.trim());
+        return [Number(r), Number(g), Number(b), Number(a)];
+      }
+      return null;
+    };
+    const base = parse(p.mainBg) || [12, 14, 16, 1];
+    const solid = (c: string) => {
+      const v = parse(c);
+      if (!v) return c;
+      const mix = (i: number) => Math.round(v[i] * v[3] + base[i] * (1 - v[3]));
+      return `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`;
+    };
+    return {
+      '--fb-accent': p.accentColor,
+      '--fb-focus': p.focusColor,
+      '--fb-bg': p.mainBg,
+      '--fb-chrome': solid(p.headerBg),
+      '--fb-sidebar': solid(p.sidebarBg),
+      '--fb-surface': solid(p.cardBg),
+      '--fb-surface-hover': solid(p.cardHoverBg),
+      '--fb-surface-3': `color-mix(in srgb, ${p.textColor} 8%, ${solid(p.cardHoverBg)})`,
+      '--fb-input': solid(p.inputBg),
+      '--fb-text': p.textColor,
+      '--fb-text-2': `color-mix(in srgb, ${p.textColor} 68%, ${p.mainBg})`,
+      '--fb-text-3': `color-mix(in srgb, ${p.textColor} 50%, ${p.mainBg})`,
+      '--fb-border': p.borderColor,
+      '--fb-scrollbar': p.scrollbarColor,
+    };
+  };
 
   // Keep the main process privacy filters (DNT/GPC, 3rd-party cookies, popups) in sync with Settings
   useEffect(() => {

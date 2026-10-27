@@ -238,7 +238,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
       {/* Top Header Banner */}
       <div className="px-8 py-6 bg-[var(--fb-bg)] border-b border-white/[0.08] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3.5">
-          <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-md">
+          <div className="p-3 rounded-2xl bg-[var(--fb-surface-hover)] border border-[var(--fb-border)] text-neutral-200 shadow-md">
             <Zap className="w-6 h-6" />
           </div>
           <div>
@@ -246,7 +246,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
               <h1 className="text-xl font-bold text-white tracking-tight">
                 {t('frc.diagnosticsTitle')}
               </h1>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-[var(--fb-surface-hover)] text-neutral-400 border border-[var(--fb-border)]">
                 FRC v{APP_VERSION}
               </span>
             </div>
@@ -261,7 +261,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
             type="button"
             onClick={handleCleanRam}
             disabled={isCleaning}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 font-medium text-xs active:scale-95 transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--fb-accent)] hover:bg-[var(--fb-accent-strong)] border border-transparent text-[var(--fb-on-accent)] font-medium text-xs active:scale-95 transition-all shadow-sm cursor-pointer"
           >
             <Sparkles className={`w-4 h-4 ${isCleaning ? 'animate-spin' : ''}`} />
             <span>{isCleaning ? t('frc.cleaning') : t('frc.cleanRamNow')}</span>
@@ -282,10 +282,10 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
         <div className="p-4 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
           <div className="flex items-center justify-between text-neutral-400 text-xs mb-2">
             <span className="flex items-center gap-1.5 font-medium">
-              <HardDrive className="w-4 h-4 text-emerald-400" />
+              <HardDrive className="w-4 h-4 text-neutral-400" />
               <span>{t('frc.browserRamFootprint')}</span>
             </span>
-            <span className="font-mono text-[11px] text-emerald-400">PSS Non-Dup</span>
+            <span className="font-mono text-[11px] text-neutral-500">PSS Non-Dup</span>
           </div>
           <div className="text-2xl font-bold text-white tracking-tight">
             {browserRamMb} <span className="text-sm font-normal text-neutral-400">MB</span>
@@ -500,7 +500,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                             <button
                               type="button"
                               onClick={() => onWakeTab(row.tabId!)}
-                              className="px-2 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-medium transition-colors"
+                              className="px-2 py-1 rounded-lg bg-[var(--fb-accent)] hover:bg-[var(--fb-accent-strong)] border border-transparent text-[var(--fb-on-accent)] text-[11px] font-medium transition-colors"
                             >
                               <Play className="w-3 h-3 inline mr-1" />
                               <span>Wake</span>
@@ -518,7 +518,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                               className="px-2 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-neutral-300 hover:text-white text-[11px] transition-colors"
                               title={t('frc.addToWhitelistTooltip')}
                             >
-                              <Shield className="w-3 h-3 inline mr-1 text-emerald-400" />
+                              <Shield className="w-3 h-3 inline mr-1 text-neutral-400" />
                               <span>Whitelist</span>
                             </button>
                           )}
@@ -667,7 +667,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
             {/* Timeout Sliders */}
             <div className="p-6 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
               <h3 className="font-semibold text-white text-sm mb-1 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-emerald-400" />
+                <Clock className="w-4 h-4 text-neutral-400" />
                 <span>{t('frc.tierTimeoutSliders')}</span>
               </h3>
               <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
@@ -678,7 +678,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
               <div className="mb-5">
                 <div className="flex items-center justify-between text-xs mb-1.5">
                   <span className="text-neutral-300 font-medium">State 1: Throttling (T_throttle)</span>
-                  <span className="font-mono text-emerald-400 font-bold">{Math.round(settings.tThrottleSec / 60)} min</span>
+                  <span className="font-mono text-neutral-200 font-bold">{Math.round(settings.tThrottleSec / 60)} min</span>
                 </div>
                 <input
                   type="range"
@@ -746,7 +746,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
             {/* Whitelist Domain Manager */}
             <div className="p-6 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm flex flex-col">
               <h3 className="font-semibold text-white text-sm mb-1 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <ShieldCheck className="w-4 h-4 text-neutral-400" />
                 <span>{t('frc.whitelistManager')}</span>
               </h3>
               <p className="text-xs text-neutral-400 mb-4 leading-relaxed">
@@ -764,7 +764,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                 />
                 <button
                   type="submit"
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
+                  className="px-3.5 py-2 rounded-xl bg-[var(--fb-accent)] hover:bg-[var(--fb-accent-strong)] border border-transparent text-[var(--fb-on-accent)] text-xs font-medium transition-colors flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>{t('frc.addDomain')}</span>
@@ -779,7 +779,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                     className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.025] border border-white/[0.05]"
                   >
                     <div className="flex items-center gap-2">
-                      <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                      <Shield className="w-3.5 h-3.5 text-neutral-400" />
                       <span className="font-mono text-xs text-white">{domain}</span>
                     </div>
                     <button
