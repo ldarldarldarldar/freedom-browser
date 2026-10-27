@@ -14,10 +14,12 @@ import {
   RefreshCw,
   Layers,
   ChevronRight,
+  Clock,
 } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { SystemStats } from '../taskmanager/types';
 import { frcService, FRCOperationalMode, FRCSettings } from '../services/frcService';
+import { APP_VERSION } from '../version';
 import { useTranslation } from '../i18n';
 
 interface FRCPopoverProps {
@@ -112,12 +114,12 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
     <div
       ref={popoverRef}
       id="frc-quick-access-popover"
-      className="absolute right-14 top-[94px] z-50 w-96 p-4 rounded-2xl bg-[#12141c]/98 backdrop-blur-3xl border border-white/10 shadow-[0_20px_70px_rgba(0,0,0,0.85)] text-neutral-200 text-xs font-sans animate-fade-in select-none"
+      className="absolute right-14 top-[calc(var(--fb-tabbar-h)+var(--fb-toolbar-h)+6px)] z-50 w-[420px] max-w-[calc(100vw-24px)] max-h-[calc(100vh-96px)] overflow-y-auto p-4 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] text-neutral-200 text-xs font-sans animate-fade-in select-none"
     >
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+          <div className="p-1.5 rounded-lg bg-[var(--fb-surface-hover)] border border-[var(--fb-border)] text-emerald-400">
             <Zap className="w-4 h-4" />
           </div>
           <div>
@@ -125,7 +127,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
               {t('frc.title')}
             </h3>
             <span className="text-[10px] text-neutral-400 font-mono">
-              {t('frc.subsystem')} • v0.5.4.7.3
+              {t('frc.subsystem')} • v{APP_VERSION}
             </span>
           </div>
         </div>
@@ -139,7 +141,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
       </div>
 
       {/* Real-time HUD Gauge & RAM metrics */}
-      <div className="mt-3.5 p-3 rounded-xl bg-white/[0.025] border border-white/[0.07]">
+      <div className="mt-3.5 p-3 rounded-xl bg-[var(--fb-bg)] border border-[var(--fb-border)]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[11px] text-neutral-300 font-medium flex items-center gap-1.5">
             <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
@@ -179,13 +181,13 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
         <label className="text-[11px] font-semibold text-neutral-300 block mb-1.5">
           {t('frc.operationalMode')}
         </label>
-        <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-black/40 border border-white/[0.06]">
+        <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[var(--fb-bg)] border border-[var(--fb-border)]">
           <button
             type="button"
             onClick={() => handleModeChange('balanced')}
-            className={`py-1.5 px-2 rounded-lg text-[11px] font-medium transition-all ${
+            className={`min-w-0 py-1.5 px-1 rounded-lg text-[10.5px] leading-tight font-medium transition-colors ${
               settings.mode === 'balanced'
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
+                ? 'bg-[var(--fb-surface-3)] text-[var(--fb-text)] border border-[var(--fb-border-strong)]'
                 : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
@@ -194,9 +196,9 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
           <button
             type="button"
             onClick={() => handleModeChange('aggressive')}
-            className={`py-1.5 px-2 rounded-lg text-[11px] font-medium transition-all ${
+            className={`min-w-0 py-1.5 px-1 rounded-lg text-[10.5px] leading-tight font-medium transition-colors ${
               settings.mode === 'aggressive'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs'
+                ? 'bg-[var(--fb-surface-3)] text-[var(--fb-text)] border border-[var(--fb-border-strong)]'
                 : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
             }`}
             title={t('frc.modeAggressiveTooltip')}
@@ -206,14 +208,46 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
           <button
             type="button"
             onClick={() => handleModeChange('unrestricted')}
-            className={`py-1.5 px-2 rounded-lg text-[11px] font-medium transition-all ${
+            className={`min-w-0 py-1.5 px-1 rounded-lg text-[10.5px] leading-tight font-medium transition-colors ${
               settings.mode === 'unrestricted'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-xs'
+                ? 'bg-[var(--fb-surface-3)] text-[var(--fb-text)] border border-[var(--fb-border-strong)]'
                 : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
             {t('frc.modeUnrestricted')}
           </button>
+        </div>
+      </div>
+
+      {/* Idle Freeze Timeout Selector */}
+      <div className="mt-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="text-[11px] font-semibold text-neutral-300 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-sky-400" />
+            <span>{t('frc.freezeTimeout')}</span>
+          </label>
+          <span className="text-[10px] text-sky-400 font-mono font-medium">
+            {Math.round(settings.tFreezeSec / 60)} {t('frc.min')}
+          </span>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5 p-1 rounded-xl bg-[var(--fb-bg)] border border-[var(--fb-border)]">
+          {[1, 3, 5, 15].map((mins) => (
+            <button
+              key={mins}
+              type="button"
+              onClick={() => {
+                const updated = frcService.setIdleFreezeTimeout(mins * 60);
+                setSettings(updated);
+              }}
+              className={`py-1 px-1.5 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
+                Math.round(settings.tFreezeSec / 60) === mins
+                  ? 'bg-[var(--fb-surface-3)] text-[var(--fb-text)] border border-[var(--fb-border-strong)]'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.04]'
+              }`}
+            >
+              {mins} {t('frc.min')}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -223,7 +257,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
           type="button"
           onClick={handleCleanRam}
           disabled={isCleaning}
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 font-semibold text-xs active:scale-98 transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[var(--fb-accent)] hover:bg-[var(--fb-accent-strong)] text-[var(--fb-on-accent)] font-semibold text-xs active:scale-98 transition-all disabled:opacity-50 cursor-pointer shadow-sm"
         >
           <Sparkles className={`w-4 h-4 ${isCleaning ? 'animate-spin' : ''}`} />
           <span>{isCleaning ? t('frc.cleaning') : t('frc.cleanRamNow')}</span>

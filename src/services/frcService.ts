@@ -46,9 +46,9 @@ const MAX_HISTORY_POINTS = 180; // 30 minutes at 10-second resolution
 
 export const DEFAULT_FRC_SETTINGS: FRCSettings = {
   mode: 'balanced',
-  tThrottleSec: 300, // 5 minutes
-  tFreezeSec: 900, // 15 minutes
-  tDiscardSec: 1800, // 30 minutes
+  tThrottleSec: 60, // 1 minute
+  tFreezeSec: 180, // 3 minutes (auto-freeze background tabs to reclaim 50-80 MB per tab)
+  tDiscardSec: 300, // 5 minutes (auto-hibernate)
   critMemoryPercent: 15, // <15% available RAM triggers cascade
   customMemoryCeilingMb: null,
   whitelistDomains: ['youtube.com', 'twitch.tv', 'music.youtube.com', 'github.com'],
@@ -120,17 +120,17 @@ export class FRCService {
     if (mode === 'balanced') {
       return this.saveSettings({
         mode: 'balanced',
-        tThrottleSec: 300, // 5m
-        tFreezeSec: 900, // 15m
-        tDiscardSec: 1800, // 30m
+        tThrottleSec: 60, // 1m
+        tFreezeSec: 180, // 3m
+        tDiscardSec: 300, // 5m
         enableAutoHibernation: true,
       });
     } else if (mode === 'aggressive') {
       return this.saveSettings({
         mode: 'aggressive',
-        tThrottleSec: 60, // 1m
-        tFreezeSec: 120, // 2m
-        tDiscardSec: 180, // 3m
+        tThrottleSec: 30, // 30s
+        tFreezeSec: 60, // 1m
+        tDiscardSec: 120, // 2m
         enableAutoHibernation: true,
       });
     } else if (mode === 'unrestricted') {
@@ -141,6 +141,16 @@ export class FRCService {
     } else {
       return this.saveSettings({ mode: 'custom' });
     }
+  }
+
+  /**
+   * Configure Idle Freeze Timeout directly (in seconds)
+   */
+  public setIdleFreezeTimeout(seconds: number): FRCSettings {
+    return this.saveSettings({
+      tFreezeSec: seconds,
+      tDiscardSec: Math.max(seconds + 120, this.settings.tDiscardSec),
+    });
   }
 
   /**

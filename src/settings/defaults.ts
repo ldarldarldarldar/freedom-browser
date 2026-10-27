@@ -67,8 +67,8 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
 
   // Visual Customization & Themes
   theme: 'black-space',
-  themePreset: 'midnight',
-  palette: THEME_PRESETS.midnight,
+  themePreset: 'graphite',
+  palette: THEME_PRESETS.graphite,
   backgroundColor: 'black',
   customBackgroundColor: '#0b0e17',
   applyThemeToBackground: true,

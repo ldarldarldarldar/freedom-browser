@@ -2,7 +2,7 @@
   "name": "freedom-browser",
   "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.5.4-7.3",
+  "version": "0.6.0",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
@@ -49,14 +49,15 @@
   },
   "build": {
     "appId": "org.freedom.browser",
-    "productName": "Freedom",
+    "productName": "Freedom Browser",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "package.json"
+      "package.json",
+      "build/icons/**/*"
     ],
     "fileAssociations": [
       {
@@ -101,7 +102,15 @@
         "application/xhtml+xml",
         "x-scheme-handler/http",
         "x-scheme-handler/https"
-      ]
+      ],
+      "artifactName": "Freedom-Browser-0.6-x86_64.${ext}",
+      "executableName": "freedom-browser",
+      "desktop": {
+        "entry": {
+          "Name": "Freedom Browser",
+          "StartupWMClass": "freedom-browser"
+        }
+      }
     },
     "win": {
       "target": [
@@ -123,7 +132,8 @@
           "description": "HTML Document",
           "role": "Viewer"
         }
-      ]
+      ],
+      "artifactName": "Freedom-Browser-0.6-x64.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -133,7 +143,13 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Freedom Browser",
       "uninstallDisplayName": "Freedom Browser",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Freedom-Browser-0.6-x64-Setup.${ext}"
+    },
+    "executableName": "freedom-browser",
+    "copyright": "Freedom Browser Team",
+    "portable": {
+      "artifactName": "Freedom-Browser-0.6-x64.${ext}"
     }
   }
 }

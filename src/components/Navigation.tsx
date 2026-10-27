@@ -70,6 +70,8 @@ interface NavigationProps {
   browserRamMb?: number;
   systemRamMb?: number;
   memoryPressureLevel?: 'normal' | 'moderate' | 'critical';
+  privacyToggles?: { key: string; label: string; value: boolean; icon: React.ElementType }[];
+  onTogglePrivacy?: (key: string) => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -87,7 +89,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenAbout,
   defaultSearchEngine,
   downloadsCount,
-  headerColorClass = 'bg-[#0b0e14]',
+  headerColorClass = 'bg-[var(--fb-bg)]',
   isDevToolsOpen,
   isBookmarked = false,
   onToggleBookmark,
@@ -106,6 +108,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   browserRamMb,
   systemRamMb,
   memoryPressureLevel = 'normal',
+  privacyToggles,
+  onTogglePrivacy,
 }) => {
   const { t } = useTranslation();
   const [inputValue, setInputValue] = useState('');
@@ -153,7 +157,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <header
       id="browser-nav-toolbar"
-      className={`flex items-center h-12 px-3.5 gap-2 border-b border-white/[0.08] select-none relative z-30 ${headerColorClass} app-drag-region`}
+      className={`flex items-center h-[var(--fb-toolbar-h)] px-2 gap-1.5 border-b border-[var(--fb-border)] select-none relative z-30 bg-[var(--fb-chrome)] app-drag-region`}
       onDoubleClick={(e) => {
         if (e.target === e.currentTarget || (e.target as HTMLElement).id === 'browser-nav-toolbar') {
           tauriBridge.maximizeWindow();
@@ -167,7 +171,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           type="button"
           onClick={onBack}
           disabled={!currentTab?.canGoBack}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] disabled:opacity-25 disabled:pointer-events-none active:scale-95 transition-all"
+          className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] disabled:opacity-25 disabled:pointer-events-none active:scale-95 transition-all"
           title={t('nav.back')}
         >
           <ArrowLeft className="w-4 h-4" />
@@ -177,7 +181,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           type="button"
           onClick={onForward}
           disabled={!currentTab?.canGoForward}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] disabled:opacity-25 disabled:pointer-events-none active:scale-95 transition-all"
+          className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] disabled:opacity-25 disabled:pointer-events-none active:scale-95 transition-all"
           title={t('nav.forward')}
         >
           <ArrowRight className="w-4 h-4" />
@@ -186,7 +190,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="nav-btn-reload"
           type="button"
           onClick={currentTab?.isLoading ? onStop : onReload}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+          className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
           title={currentTab?.isLoading ? t('nav.stop') : t('nav.reload')}
         >
           {currentTab?.isLoading ? <X className="w-4 h-4 text-emerald-400" /> : <RotateCcw className="w-4 h-4" />}
@@ -195,7 +199,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="nav-btn-home"
           type="button"
           onClick={onHome}
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+          className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
           title={t('nav.home')}
         >
           <Home className="w-4 h-4" />
@@ -203,13 +207,13 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Omni Address & Search Bar */}
-      <div className="flex-1 relative app-no-drag max-w-3xl mx-auto">
+      <div className="flex-1 min-w-0 relative app-no-drag">
         <form onSubmit={handleSubmit} className="w-full">
           <div
-            className={`flex items-center w-full h-8.5 px-3 rounded-xl border transition-all duration-150 ${
+            className={`flex items-center w-full h-7 px-2 rounded-[var(--fb-radius-md)] border transition-colors duration-150 ${
               isFocused
-                ? 'bg-[#0a0c12] border-emerald-500/50 ring-2 ring-emerald-500/20 text-white shadow-md'
-                : 'bg-white/[0.04] hover:bg-white/[0.06] border-white/[0.08] hover:border-white/15 text-neutral-200'
+                ? 'bg-[var(--fb-input)] border-emerald-500/50 ring-2 ring-emerald-500/15 text-white'
+                : 'bg-[var(--fb-input)] hover:bg-[var(--fb-surface-hover)] border-[var(--fb-border)] hover:border-[var(--fb-border-strong)] text-neutral-200'
             }`}
           >
             {/* Security Indicator */}
@@ -226,7 +230,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               }
             >
               {currentTab?.url.startsWith('freedom://') ? (
-                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                <Search className="w-3.5 h-3.5 text-neutral-500" />
               ) : isSecure ? (
                 <Lock className="w-3.5 h-3.5 text-emerald-400" />
               ) : (
@@ -243,11 +247,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               onChange={(e) => setInputValue(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={
-                activeEngine?.name
-                  ? t('nav.searchPlaceholder', { engine: activeEngine.name })
-                  : t('nav.searchPlaceholderEmpty')
-              }
+              placeholder={t('nav.searchPlaceholderEmpty')}
               className="w-full bg-transparent text-xs text-neutral-100 focus:outline-none placeholder-neutral-500 font-normal"
               spellCheck={false}
               autoComplete="off"
@@ -296,19 +296,12 @@ export const Navigation: React.FC<NavigationProps> = ({
                 />
               </button>
             )}
-
-            <div className="ml-2 pl-2 border-l border-white/10 flex items-center text-[11px] text-neutral-400 shrink-0">
-              <span className="opacity-75 mr-1.5">{activeEngine.icon}</span>
-              <span className="hidden md:inline text-[10px] text-neutral-500 font-mono tracking-wider uppercase">
-                {activeEngine.name}
-              </span>
-            </div>
           </div>
         </form>
 
         {/* Security / Privacy details popup */}
         {showSecurityDetails && (
-          <div className="absolute top-10.5 left-0 w-80 p-3.5 rounded-xl bg-neutral-900/98 backdrop-blur-2xl border border-white/10 shadow-2xl z-50 text-xs text-neutral-200 animate-fade-in">
+          <div className="absolute top-9 left-0 w-80 p-3.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in">
             <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-white/[0.08]">
               <Shield className="w-4 h-4 text-emerald-400" />
               <span className="font-semibold text-white tracking-tight">{t('nav.guardTitle')}</span>
@@ -345,7 +338,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-toggle-split-view"
             type="button"
             onClick={onToggleSplitView}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg active:scale-95 transition-all ${
+            className={`w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] active:scale-95 transition-all ${
               isSplitView
                 ? 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/30'
                 : 'text-neutral-400 hover:text-white hover:bg-white/[0.08]'
@@ -362,7 +355,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-toggle-find"
             type="button"
             onClick={onToggleFind}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
             title={t('nav.findInPage')}
           >
             <Search className="w-4 h-4" />
@@ -375,7 +368,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-open-bookmarks"
             type="button"
             onClick={onOpenBookmarks}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
             title={t('nav.bookmarks')}
           >
             <BookmarkIcon className="w-4 h-4" />
@@ -388,7 +381,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-open-history"
             type="button"
             onClick={onOpenHistory}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
             title={t('nav.historyTooltip')}
           >
             <HistoryIcon className="w-4 h-4" />
@@ -427,7 +420,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="btn-open-downloads"
           type="button"
           onClick={onOpenDownloads}
-          className="relative w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+          className="relative w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
           title={t('nav.downloadsTooltip')}
         >
           <Download className="w-4 h-4" />
@@ -443,7 +436,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           id="btn-toggle-devtools"
           type="button"
           onClick={onToggleDevTools}
-          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all active:scale-95 ${
+          className={`w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] transition-all active:scale-95 ${
             isDevToolsOpen
               ? 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/30'
               : 'text-neutral-400 hover:text-white hover:bg-white/[0.08]'
@@ -459,14 +452,14 @@ export const Navigation: React.FC<NavigationProps> = ({
             id="btn-main-menu"
             type="button"
             onClick={() => setShowMenu(!showMenu)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all border border-white/[0.06]"
+            className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all border border-white/[0.06]"
             title={t('nav.mainMenu')}
           >
             <Menu className="w-4 h-4" />
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-10.5 w-60 p-1.5 rounded-2xl bg-neutral-900/98 backdrop-blur-2xl border border-white/10 shadow-2xl z-50 text-xs text-neutral-200 animate-fade-in">
+            <div className="absolute right-0 top-9 w-72 p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in">
               <button
                 type="button"
                 onClick={() => {
@@ -476,7 +469,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
               >
                 <span>{t('nav.newTab')}</span>
-                <span className="text-[10px] font-mono text-neutral-500">Ctrl+T</span>
+                <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+T</span>
               </button>
 
               {/* History Item */}
@@ -490,10 +483,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                   className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <HistoryIcon className="w-3.5 h-3.5 text-emerald-400" />
+                    <HistoryIcon className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('nav.history')}</span>
                   </div>
-                  <span className="text-[10px] font-mono text-neutral-500">Ctrl+H</span>
+                  <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+H</span>
                 </button>
               )}
 
@@ -508,10 +501,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                   className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <BookmarkIcon className="w-3.5 h-3.5 text-emerald-400" />
+                    <BookmarkIcon className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('nav.bookmarksManager')}</span>
                   </div>
-                  <span className="text-[10px] font-mono text-neutral-500">Ctrl+D</span>
+                  <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+D</span>
                 </button>
               )}
 
@@ -526,10 +519,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                   className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <Search className="w-3.5 h-3.5 text-emerald-400" />
+                    <Search className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('nav.findInPage')}</span>
                   </div>
-                  <span className="text-[10px] font-mono text-neutral-500">Ctrl+F</span>
+                  <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+F</span>
                 </button>
               )}
 
@@ -580,7 +573,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     }}
                     className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
                   >
-                    <Globe className="w-3.5 h-3.5 text-blue-400" />
+                    <Globe className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('sort.groupBySite')}</span>
                   </button>
                   <button
@@ -591,7 +584,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     }}
                     className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
                   >
-                    <Cpu className="w-3.5 h-3.5 text-rose-400" />
+                    <Cpu className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('sort.byRam')}</span>
                   </button>
                   <button
@@ -602,7 +595,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     }}
                     className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
                   >
-                    <Copy className="w-3.5 h-3.5 text-amber-400" />
+                    <Copy className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('sort.groupDuplicates')}</span>
                   </button>
                   <button
@@ -613,7 +606,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                     }}
                     className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
                   >
-                    <ArrowDownAZ className="w-3.5 h-3.5 text-emerald-400" />
+                    <ArrowDownAZ className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('sort.byTitle')}</span>
                   </button>
                 </>
@@ -631,10 +624,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                   className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <Columns2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <Columns2 className="w-3.5 h-3.5 text-neutral-400" />
                     <span>{t('nav.splitView')}</span>
                   </div>
-                  <span className="text-[10px] font-mono text-neutral-500">{isSplitView ? t('nav.splitViewActive') : t('nav.splitViewOff')}</span>
+                  <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">{isSplitView ? t('nav.splitViewActive') : t('nav.splitViewOff')}</span>
                 </button>
               )}
 
@@ -647,10 +640,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                 className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  <Zap className="w-3.5 h-3.5 text-neutral-400" />
                   <span>{t('frc.menuItem')}</span>
                 </div>
-                <span className="text-[10px] font-mono text-neutral-500">RAM Control</span>
+                <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">RAM Control</span>
               </button>
 
               <button
@@ -662,10 +655,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                 className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <Activity className="w-3.5 h-3.5 text-neutral-400" />
                   <span>{t('nav.taskManager')}</span>
                 </div>
-                <span className="text-[10px] font-mono text-neutral-500">Shift+Esc</span>
+                <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Shift+Esc</span>
               </button>
 
               <button
@@ -677,10 +670,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                 className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <Download className="w-3.5 h-3.5 text-neutral-400" />
                   <span>{t('nav.downloads')}</span>
                 </div>
-                <span className="text-[10px] font-mono text-neutral-500">Ctrl+J</span>
+                <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+J</span>
               </button>
 
               <button
@@ -692,11 +685,33 @@ export const Navigation: React.FC<NavigationProps> = ({
                 className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                  <Terminal className="w-3.5 h-3.5 text-neutral-400" />
                   <span>{t('nav.devTools')}</span>
                 </div>
-                <span className="text-[10px] font-mono text-neutral-500">F12</span>
+                <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">F12</span>
               </button>
+
+              {privacyToggles && privacyToggles.length > 0 && (
+                <>
+                  <div className="my-1 border-t border-white/[0.06]" />
+                  {privacyToggles.map((toggle) => (
+                    <label
+                      key={toggle.key}
+                      className="w-full px-2.5 py-1.5 rounded-lg hover:bg-white/[0.08] flex items-center justify-between gap-3 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <toggle.icon className="w-3.5 h-3.5 text-neutral-400" />
+                        <span>{toggle.label}</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={toggle.value}
+                        onChange={() => onTogglePrivacy?.(toggle.key)}
+                      />
+                    </label>
+                  ))}
+                </>
+              )}
 
               <div className="my-1 border-t border-white/[0.06]" />
 
@@ -718,7 +733,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                   setShowMenu(false);
                   onOpenAbout();
                 }}
-                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-emerald-400 transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-200 transition-colors"
               >
                 <Zap className="w-3.5 h-3.5" />
                 <span>{t('nav.about')}</span>

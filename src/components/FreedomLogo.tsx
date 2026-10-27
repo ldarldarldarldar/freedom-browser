@@ -13,38 +13,29 @@ export const FreedomLogo: React.FC<FreedomLogoProps> = ({
 }) => {
   return (
     <div className={`inline-flex items-center gap-2.5 ${className}`}>
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 512 512"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="shrink-0 transition-transform duration-200"
-      >
-        {/* Dark Green Shield (#052e16) with subtle mint border (#10b981) */}
-        <path
-          d="M256 32 C340 32 440 64 440 64 C440 220 380 376 256 480 C132 376 72 220 72 64 C72 64 172 32 256 32 Z"
-          fill="#052e16"
-          stroke="#10b981"
-          strokeWidth="10"
-          strokeLinejoin="round"
-        />
-
-        {/* Clean Minimalist Geometric Mint Green "F" (#34d399) */}
-        <path
-          d="M180 140 H336 V196 H244 V244 H316 V300 H244 V372 H180 Z"
-          fill="#34d399"
-        />
-      </svg>
+      <FreedomMark size={size} className="text-[var(--fb-text)]" />
 
       {showText && (
-        <span className="font-semibold tracking-wide text-white text-base flex items-center gap-1.5">
-          <span>FREEDOM</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 uppercase tracking-wider">
-            Browser
-          </span>
+        <span className="text-base tracking-tight text-[var(--fb-text)]">
+          Freedom <span className="text-[var(--fb-accent-soft)]">Browser</span>
         </span>
       )}
     </div>
   );
 };
+
+/** Monochrome slanted "F" mark used in the browser chrome (original artwork). */
+export const FreedomMark: React.FC<{ size?: number; className?: string }> = ({ size = 18, className = '' }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    aria-hidden="true"
+    className={`shrink-0 ${className}`}
+  >
+    <path d="M8.6 3h12.2l-1.3 3.6H10.9z" />
+    <path d="M7.4 9.4h10.3l-1.2 3.4H8.1z" opacity="0.9" />
+    <path d="M6.2 3.9l2.9-.9-3.9 18H2z" />
+  </svg>
+);

@@ -58,7 +58,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
   return (
     <div
       id="freedom-find-in-page-bar"
-      className="absolute top-3 right-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-[#12141c]/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] text-neutral-200 text-xs animate-fade-in"
+      className="absolute top-3 right-4 z-40 flex items-center gap-2 px-3 py-1.5 bg-[var(--fb-surface)]/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.6)] text-neutral-200 text-xs animate-fade-in"
       role="search"
       aria-label={t('find.placeholder')}
     >

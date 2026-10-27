@@ -1,6 +1,31 @@
 import { ThemePalette, ThemePresetId } from './types';
 
 export const THEME_PRESETS: Record<Exclude<ThemePresetId, 'custom'>, ThemePalette> = {
+  // Reference design: neutral graphite surfaces with a muted mint accent
+  graphite: {
+    accentColor: '#57c08b',
+    mainBg: '#0c0e10',
+    secondaryBg: '#141619',
+    sidebarBg: '#111315',
+    headerBg: '#121417',
+    cardBg: '#16191c',
+    cardHoverBg: '#1e2226',
+    textColor: '#e9ebed',
+    secondaryTextColor: '#a2a8ae',
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    inputBg: '#191c20',
+    buttonBg: '#1e2226',
+    buttonHoverBg: '#262a2f',
+    focusColor: '#57c08b',
+    linkColor: '#7fd3a8',
+    selectionColor: '#2c5a43',
+    quickAccessCardBg: 'rgba(22, 25, 28, 0.85)',
+    quickAccessIconBg: 'rgba(30, 34, 38, 0.95)',
+    scrollbarColor: 'rgba(255, 255, 255, 0.1)',
+    particleColor: '#c9d1d6',
+    glowColor: 'rgba(87, 192, 139, 0.18)',
+    shadowIntensity: 20,
+  },
   midnight: {
     accentColor: '#38bdf8', // cool cyan/indigo tone
     mainBg: '#0b0e17', // deep midnight navy/slate

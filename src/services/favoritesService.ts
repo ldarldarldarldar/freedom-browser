@@ -78,6 +78,17 @@ export class FavoritesService {
     return true;
   }
 
+  /** Moves a favorite to a new position (drag & drop on the new tab page). */
+  public static moveFavorite(id: string, toIndex: number): NewTabFavorite[] {
+    const favorites = this.getFavorites();
+    const from = favorites.findIndex((f) => f.id === id);
+    if (from === -1) return favorites;
+    const [item] = favorites.splice(from, 1);
+    favorites.splice(Math.max(0, Math.min(toIndex, favorites.length)), 0, item);
+    this.save(favorites);
+    return favorites;
+  }
+
   private static save(favorites: NewTabFavorite[]): void {
     try {
       localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));

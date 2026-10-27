@@ -154,7 +154,7 @@ export const SplitViewControlBar: React.FC<SplitViewControlBarProps> = ({
   return (
     <div
       id="freedom-split-view-control-bar"
-      className="h-8.5 w-full bg-[#0d0f16]/95 backdrop-blur-md border-b border-white/[0.08] flex items-center justify-between px-3.5 select-none z-30 shrink-0 text-xs text-neutral-300"
+      className="h-8.5 w-full bg-[var(--fb-bg)]/95 backdrop-blur-md border-b border-white/[0.08] flex items-center justify-between px-3.5 select-none z-30 shrink-0 text-xs text-neutral-300"
     >
       {/* Left side: Layout presets */}
       <div className="flex items-center gap-2">

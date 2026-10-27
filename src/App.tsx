@@ -18,6 +18,8 @@ import { BrowserTab, DownloadItem, Bookmark, FindInPageState } from './browser/t
 import { SystemStats } from './taskmanager/types';
 import { BrowserSettings } from './settings/types';
 import { DEFAULT_SETTINGS } from './settings/defaults';
+import { Sidebar, SidebarSection } from './components/Sidebar';
+import { TabsOverview } from './components/TabsOverview';
 import { SearchEngineService } from './services/searchEngineService';
 import { logger } from './services/loggerService';
 import { tauriBridge } from './services/tauriBridge';
@@ -29,8 +31,11 @@ import { ZoomService } from './services/zoomService';
 import { TabSortService, TabSortMode } from './services/tabSortService';
 import { FaviconService } from './services/faviconService';
 import { SplitViewService, SplitViewState, SplitLayoutType } from './services/splitViewService';
+import { SessionRestoreService } from './services/sessionRestoreService';
+import { CloseConfirmationModal } from './components/CloseConfirmationModal';
 import { I18nProvider } from './i18n';
-import { FileCode } from 'lucide-react';
+import { FileCode, AppWindow, ShieldCheck, EyeOff } from 'lucide-react';
+import { translate, normalizeLanguage } from './i18n';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
@@ -41,19 +46,28 @@ export default function App() {
   const [settings, setSettings] = useState<BrowserSettings>(() => {
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
-      return stored ? { ...DEFAULT_SETTINGS, ...JSON.parse(stored) } : DEFAULT_SETTINGS;
+      if (!stored) return DEFAULT_SETTINGS;
+      const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+      // One-time switch to the redesigned default theme; later choices are respected
+      if (!parsed.uiDesignVersion || parsed.uiDesignVersion < 2) {
+        parsed.uiDesignVersion = 2;
+        parsed.themePreset = DEFAULT_SETTINGS.themePreset;
+        parsed.palette = DEFAULT_SETTINGS.palette;
+      }
+      return parsed;
     } catch {
       return DEFAULT_SETTINGS;
     }
   });
 
-  // Tabs State
+  // Tabs State: initialized from CLI URL argument, or restored from previous session, or fresh New Tab
   const [tabs, setTabs] = useState<BrowserTab[]>(() => {
     try {
       const params = new URLSearchParams(window.location.search);
       const openUrl = params.get('openUrl');
       const tabCount = parseInt(params.get('tabCount') || '1', 10);
 
+      // 1. Direct file/URL opening via CLI / Open With has highest priority
       if (openUrl) {
         return [
           {
@@ -75,6 +89,30 @@ export default function App() {
         ];
       }
 
+      // 2. Restore saved session from previous exit if available
+      const savedSession = SessionRestoreService.getSavedSession();
+      if (savedSession && Array.isArray(savedSession.tabs) && savedSession.tabs.length > 0) {
+        return savedSession.tabs.map((t) => ({
+          id: t.id,
+          title: t.title || (t.url === 'freedom://newtab' ? 'New Tab' : SearchEngineService.extractDomain(t.url)),
+          url: t.url,
+          displayUrl: t.displayUrl || SearchEngineService.formatDisplayUrl(t.url),
+          favicon: t.favicon,
+          isLoading: false,
+          canGoBack: (t.historyIndex || 0) > 0,
+          canGoForward: (t.historyIndex || 0) < ((t.history?.length || 1) - 1),
+          isSuspended: false,
+          lastActive: Date.now(),
+          isCrashed: false,
+          history: t.history && t.history.length > 0 ? t.history : [t.url],
+          historyIndex: typeof t.historyIndex === 'number' ? t.historyIndex : 0,
+          zoomLevel: t.zoomLevel || ZoomService.getZoomForUrl(t.url),
+          security: t.url.startsWith('https://') || t.url.startsWith('file://') ? 'secure' : (t.url.startsWith('freedom://') ? 'internal' : 'insecure'),
+          isPinned: t.isPinned,
+        }));
+      }
+
+      // 3. Demo tab count argument if specified
       if (tabCount > 1) {
         const demoUrls = [
           'https://duckduckgo.com',
@@ -128,6 +166,7 @@ export default function App() {
       }
     } catch {}
 
+    // 4. Default fresh New Tab
     return [
       {
         id: 'tab-1',
@@ -148,7 +187,26 @@ export default function App() {
     ];
   });
 
-  const [activeTabId, setActiveTabId] = useState<string>('tab-1');
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('openUrl')) return 'tab-1';
+      const saved = SessionRestoreService.getSavedSession();
+      if (saved && saved.activeTabId && saved.tabs.some((t) => t.id === saved.activeTabId)) {
+        return saved.activeTabId;
+      }
+      if (saved && saved.tabs && saved.tabs.length > 0) {
+        return saved.tabs[0].id;
+      }
+    } catch {}
+    return 'tab-1';
+  });
+
+  // Fullscreen state (F11 / HTML5 fullscreen for games/video)
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  // Close & Session Restore Confirmation Modal state
+  const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
 
   // Modals and Drawers
   const [isTaskManagerOpen, setIsTaskManagerOpen] = useState(false);
@@ -157,6 +215,19 @@ export default function App() {
   const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isTabsOverviewOpen, setIsTabsOverviewOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('freedom_sidebar_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('freedom_sidebar_collapsed', isSidebarCollapsed ? '1' : '0');
+    } catch {}
+  }, [isSidebarCollapsed]);
   const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
   const [isFRCPopoverOpen, setIsFRCPopoverOpen] = useState(false);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
@@ -344,6 +415,11 @@ export default function App() {
                 frcService.serializeTabSession(updatedTab);
                 logger.log('INFO', 'MEMORY', `FRC-LIFE: Auto-hibernated tab '${updatedTab.title}' (idle timeout exceeded).`);
                 return { ...updatedTab, lifecycleState: nextState, isSuspended: true };
+              }
+              if (nextState === 'frozen') {
+                frcService.serializeTabSession(updatedTab);
+                logger.log('INFO', 'MEMORY', `FRC-LIFE: Auto-frozen tab '${updatedTab.title}' (idle timeout exceeded, unmounting webview).`);
+                return { ...updatedTab, lifecycleState: nextState };
               }
               return { ...updatedTab, lifecycleState: nextState };
             }
@@ -537,6 +613,59 @@ export default function App() {
     [tabs, activeTabId]
   );
 
+  // Session Restore & Application Close Handlers
+  const handleAttemptClose = useCallback(() => {
+    if (SessionRestoreService.hasRestorableTabs(tabs)) {
+      setShowCloseConfirmModal(true);
+    } else {
+      SessionRestoreService.clearSavedSession();
+      tauriBridge.forceClose();
+    }
+  }, [tabs]);
+
+  const handleConfirmCloseWithoutSaving = useCallback(() => {
+    setShowCloseConfirmModal(false);
+    SessionRestoreService.clearSavedSession();
+    tauriBridge.forceClose();
+  }, []);
+
+  const handleConfirmSaveAndClose = useCallback(() => {
+    setShowCloseConfirmModal(false);
+    SessionRestoreService.saveSession(tabs, activeTabId);
+    tauriBridge.forceClose();
+  }, [tabs, activeTabId]);
+
+  const handleCancelClose = useCallback(() => {
+    setShowCloseConfirmModal(false);
+  }, []);
+
+  // Listen for native window close interception from Electron
+  useEffect(() => {
+    if ((window as any).electronAPI?.on) {
+      const unsub = (window as any).electronAPI.on('request-app-close', () => {
+        handleAttemptClose();
+      });
+      return unsub;
+    }
+  }, [handleAttemptClose]);
+
+  // Listen for native fullscreen state changes from Electron / HTML5 fullscreen API
+  useEffect(() => {
+    tauriBridge.isFullScreen().then(setIsFullScreen);
+
+    if ((window as any).electronAPI?.on) {
+      const unsubFs = (window as any).electronAPI.on('window-fullscreen-change', (fs: boolean) => {
+        setIsFullScreen(fs);
+      });
+      return unsubFs;
+    }
+  }, []);
+
+  // Clear saved session flag after startup so it's not reused unless deliberately saved upon next close
+  useEffect(() => {
+    SessionRestoreService.clearSavedSession();
+  }, []);
+
   const handleRestoreClosedTab = useCallback(() => {
     const restored = SessionService.popRecentlyClosed();
     if (!restored) return;
@@ -711,11 +840,33 @@ export default function App() {
     [activeTab, tabs]
   );
 
-  const handleBack = useCallback(() => {
+  const handleBack = useCallback(async () => {
     if (!activeTab) return;
-    if (!activeTab.url.startsWith('freedom://')) {
-      tauriBridge.goBackNative(activeTab.id);
-    }
+    if (activeTab.url.startsWith('freedom://')) return;
+    const wentBack = await tauriBridge.goBackNative(activeTab.id);
+    if (wentBack) return;
+    // Webview has no earlier entry: return to the internal page (e.g. New Tab) the site was opened from
+    const prevUrl = activeTab.history[activeTab.historyIndex - 1];
+    if (!prevUrl || !prevUrl.startsWith('freedom://')) return;
+    tauriBridge.hideNativeWebviews();
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === activeTab.id
+          ? {
+              ...t,
+              url: prevUrl,
+              displayUrl: prevUrl,
+              title: prevUrl === 'freedom://newtab' ? 'New Tab' : prevUrl === 'freedom://memory' ? 'Process Diagnostics (FRC)' : 'Freedom Tab',
+              favicon: undefined,
+              isLoading: false,
+              historyIndex: t.historyIndex - 1,
+              canGoBack: t.historyIndex - 1 > 0,
+              canGoForward: false,
+              security: 'internal',
+            }
+          : t
+      )
+    );
   }, [activeTab]);
 
   const handleForward = useCallback(() => {
@@ -1341,7 +1492,10 @@ export default function App() {
               displayUrl: url,
               title,
               favicon,
-              canGoBack: data.canGoBack,
+              // Also allow Back when the site was opened from an internal page (New Tab)
+              canGoBack:
+                data.canGoBack ||
+                (!isInternal && (t.history[t.historyIndex - 1] || '').startsWith('freedom://')),
               canGoForward: data.canGoForward,
               security: isInternal ? 'internal' : url.startsWith('https://') ? 'secure' : 'insecure',
               lastActive: Date.now(),
@@ -1737,8 +1891,23 @@ export default function App() {
         return;
       }
 
-      // Escape: Close transient UI
+      // F11: Fullscreen toggle
+      if (e.key === 'F11') {
+        e.preventDefault();
+        tauriBridge.toggleFullScreen().then((fs) => setIsFullScreen(fs));
+        return;
+      }
+
+      // Escape: Close close-confirm modal, exit fullscreen, or close transient UI
       if (e.key === 'Escape') {
+        if (showCloseConfirmModal) {
+          setShowCloseConfirmModal(false);
+          return;
+        }
+        if (isFullScreen) {
+          tauriBridge.setFullScreen(false).then(() => setIsFullScreen(false));
+          return;
+        }
         if (findState.isOpen) {
           handleCloseFind();
         } else if (isHistoryOpen) {
@@ -1763,6 +1932,8 @@ export default function App() {
     tabs,
     activeTabId,
     activeTab,
+    isFullScreen,
+    showCloseConfirmModal,
     findState.isOpen,
     isHistoryOpen,
     isBookmarksOpen,
@@ -1856,6 +2027,41 @@ export default function App() {
 
   const isPerformanceMode = settings.browserMode === 'performance';
 
+  // Maps the active theme palette onto the design tokens declared in index.css
+  const paletteToTokens = (p?: typeof settings.palette): Record<string, string> =>
+    p
+      ? {
+          '--fb-accent': p.accentColor,
+          '--fb-focus': p.focusColor,
+          '--fb-bg': p.mainBg,
+          '--fb-chrome': p.headerBg,
+          '--fb-sidebar': p.sidebarBg,
+          '--fb-surface': p.cardBg,
+          '--fb-surface-hover': p.cardHoverBg,
+          '--fb-surface-3': p.buttonHoverBg,
+          '--fb-input': p.inputBg,
+          '--fb-text': p.textColor,
+          '--fb-text-2': p.secondaryTextColor,
+          '--fb-border': p.borderColor,
+          '--fb-scrollbar': p.scrollbarColor,
+        }
+      : {};
+
+  // Keep the main process privacy filters (DNT/GPC, 3rd-party cookies, popups) in sync with Settings
+  useEffect(() => {
+    window.electronAPI?.setPrivacySettings?.({
+      doNotTrack: settings.doNotTrack,
+      blockThirdPartyCookies: settings.blockThirdPartyCookies,
+      popupsBlocked: settings.popupsBlocked,
+    });
+  }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked]);
+
+  // Portals (menus, popovers) render into <body>, so tokens also live on <html>
+  useEffect(() => {
+    const root = document.documentElement;
+    Object.entries(paletteToTokens(settings.palette)).forEach(([k, v]) => v && root.style.setProperty(k, v));
+  }, [settings.palette]);
+
   // Color theme classes & palette resolution
   const getBackgroundColor = () => {
     if (settings.applyThemeToBackground && settings.palette?.mainBg) {
@@ -1918,6 +2124,7 @@ export default function App() {
         '--theme-surface': settings.palette?.cardBg || '#12161f',
         '--theme-border': settings.palette?.borderColor || '#232b3b',
         '--theme-text': settings.palette?.textColor || '#f8fafc',
+        ...paletteToTokens(settings.palette),
       } as React.CSSProperties}
     >
       {/* Moving Subtle Stars Canvas Background (Disabled in Performance Mode or when toggled off) */}
@@ -1958,92 +2165,136 @@ export default function App() {
         />
       )}
 
-      {/* Top Chrome: Tabs Bar (with Window Drag Region & Window Controls) */}
-      <TabBar
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onSelectTab={handleSelectTab}
-        onCloseTab={handleCloseTab}
-        onNewTab={() => handleNewTab('freedom://newtab')}
-        headerColorClass={getHeaderColorClass()}
-        onRestoreClosedTab={handleRestoreClosedTab}
-        closedTabsCount={closedTabsCount}
-        onSortTabs={handleSortTabs}
-        activeSortMode={activeSortMode}
-        onDuplicateTab={handleDuplicateTab}
-        onReloadTab={handleReloadTab}
-        onSuspendTab={handleSuspendTab}
-        onSuspendTabs={handleSuspendTabs}
-        onCloseTabsFromSite={handleCloseTabsFromSite}
-        onCloseOtherTabs={handleCloseOtherTabs}
-        onCloseTabsToRight={handleCloseTabsToRight}
-        splitViewState={splitViewState}
-        onOpenInSplitView={handleOpenInSplitView}
-      />
+      {/* Top Chrome: Tabs Bar, Navigation, Bookmarks (Hidden completely in F11 Fullscreen mode) */}
+      {!isFullScreen && (
+        <>
+          <TabBar
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelectTab={handleSelectTab}
+            onCloseTab={handleCloseTab}
+            onNewTab={() => handleNewTab('freedom://newtab')}
+            headerColorClass={getHeaderColorClass()}
+            onRestoreClosedTab={handleRestoreClosedTab}
+            closedTabsCount={closedTabsCount}
+            onSortTabs={handleSortTabs}
+            activeSortMode={activeSortMode}
+            onDuplicateTab={handleDuplicateTab}
+            onReloadTab={handleReloadTab}
+            onSuspendTab={handleSuspendTab}
+            onSuspendTabs={handleSuspendTabs}
+            onCloseTabsFromSite={handleCloseTabsFromSite}
+            onCloseOtherTabs={handleCloseOtherTabs}
+            onCloseTabsToRight={handleCloseTabsToRight}
+            splitViewState={splitViewState}
+            onOpenInSplitView={handleOpenInSplitView}
+            onCloseWindow={handleAttemptClose}
+          />
 
-      {/* Navigation & Controls Bar (Below the Tab Bar) */}
-      <Navigation
-        currentTab={activeTab}
-        onNavigate={handleNavigate}
-        onBack={handleBack}
-        onForward={handleForward}
-        onReload={handleReload}
-        onStop={() => {
-          if (activeTab) {
-            tauriBridge.stopLoading(activeTab.id);
-            setTabs((prev) =>
-              prev.map((t) => (t.id === activeTab.id ? { ...t, isLoading: false } : t))
-            );
+          {/* Navigation & Controls Bar (Below the Tab Bar) */}
+          <Navigation
+            currentTab={activeTab}
+            onNavigate={handleNavigate}
+            onBack={handleBack}
+            onForward={handleForward}
+            onReload={handleReload}
+            onStop={() => {
+              if (activeTab) {
+                tauriBridge.stopLoading(activeTab.id);
+                setTabs((prev) =>
+                  prev.map((t) => (t.id === activeTab.id ? { ...t, isLoading: false } : t))
+                );
+              }
+            }}
+            onHome={() => handleNavigate('freedom://newtab')}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenTaskManager={() => setIsTaskManagerOpen(true)}
+            onOpenDownloads={() => setIsDownloadsOpen(!isDownloadsOpen)}
+            onToggleDevTools={() => setIsDevToolsOpen(!isDevToolsOpen)}
+            onOpenAbout={() => setIsAboutOpen(true)}
+            defaultSearchEngine={settings.defaultSearchEngine}
+            downloadsCount={downloads.filter((d) => d.state === 'progressing').length}
+            headerColorClass={getHeaderColorClass()}
+            isDevToolsOpen={isDevToolsOpen}
+            isBookmarked={isCurrentBookmarked}
+            onToggleBookmark={handleToggleBookmark}
+            onOpenBookmarks={() => setIsBookmarksOpen(true)}
+            onOpenHistory={() => setIsHistoryOpen(true)}
+            onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
+            zoomLevel={activeTab?.zoomLevel || 100}
+            onZoomIn={handleZoomIn}
+            onZoomOut={handleZoomOut}
+            onResetZoom={handleResetZoom}
+            onSortTabs={handleSortTabs}
+            isSplitView={splitViewState.enabled}
+            onToggleSplitView={handleToggleSplitView}
+            onToggleFRCPopover={() => setIsFRCPopoverOpen((prev) => !prev)}
+            isFRCPopoverOpen={isFRCPopoverOpen}
+            browserRamMb={frcStats ? (frcStats.totalBrowserRamMb ?? frcStats.browserRamMb ?? Math.round(frcStats.totalBrowserRamBytes / (1024 * 1024))) : 0}
+            systemRamMb={frcStats ? (frcStats.totalSystemRamMb ?? Math.round(frcStats.totalSystemRamBytes / (1024 * 1024))) : 0}
+            memoryPressureLevel={frcStats?.memoryPressureLevel || 'normal'}
+            privacyToggles={[
+              { key: 'popupsBlocked', label: translate(normalizeLanguage(settings.language), 'menu.blockPopups'), value: settings.popupsBlocked, icon: AppWindow },
+              { key: 'blockThirdPartyCookies', label: translate(normalizeLanguage(settings.language), 'menu.trackerProtection'), value: settings.blockThirdPartyCookies, icon: ShieldCheck },
+              { key: 'doNotTrack', label: translate(normalizeLanguage(settings.language), 'menu.doNotTrack'), value: settings.doNotTrack, icon: EyeOff },
+            ]}
+            onTogglePrivacy={(key) =>
+              setSettings((prev) => ({ ...prev, [key]: !prev[key as 'doNotTrack' | 'blockThirdPartyCookies' | 'popupsBlocked'] }))
+            }
+          />
+
+          {/* Freedom RAM Control Popover */}
+          <FRCPopover
+            isOpen={isFRCPopoverOpen}
+            onClose={() => setIsFRCPopoverOpen(false)}
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onHibernateTab={handleHibernateTab}
+            onNavigate={handleNavigate}
+          />
+
+          {/* Bookmarks Bar */}
+          <BookmarksBar
+            bookmarks={bookmarks}
+            onNavigate={handleNavigate}
+            onOpenBookmarksManager={() => setIsBookmarksOpen(true)}
+          />
+        </>
+      )}
+
+      {/* Sidebar + Primary Browser Content Viewport */}
+      <div className="relative flex flex-1 min-h-0 w-full">
+      {!isFullScreen && (
+        <Sidebar
+          active={
+            isTabsOverviewOpen
+              ? 'tabs'
+              : isBookmarksOpen
+              ? 'bookmarks'
+              : isHistoryOpen
+              ? 'history'
+              : isDownloadsOpen
+              ? 'downloads'
+              : activeTab?.url === 'freedom://newtab'
+              ? 'home'
+              : (null as SidebarSection)
           }
-        }}
-        onHome={() => handleNavigate('freedom://newtab')}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenTaskManager={() => setIsTaskManagerOpen(true)}
-        onOpenDownloads={() => setIsDownloadsOpen(!isDownloadsOpen)}
-        onToggleDevTools={() => setIsDevToolsOpen(!isDevToolsOpen)}
-        onOpenAbout={() => setIsAboutOpen(true)}
-        defaultSearchEngine={settings.defaultSearchEngine}
-        downloadsCount={downloads.filter((d) => d.state === 'progressing').length}
-        headerColorClass={getHeaderColorClass()}
-        isDevToolsOpen={isDevToolsOpen}
-        isBookmarked={isCurrentBookmarked}
-        onToggleBookmark={handleToggleBookmark}
-        onOpenBookmarks={() => setIsBookmarksOpen(true)}
-        onOpenHistory={() => setIsHistoryOpen(true)}
-        onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
-        zoomLevel={activeTab?.zoomLevel || 100}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        onResetZoom={handleResetZoom}
-        onSortTabs={handleSortTabs}
-        isSplitView={splitViewState.enabled}
-        onToggleSplitView={handleToggleSplitView}
-        onToggleFRCPopover={() => setIsFRCPopoverOpen((prev) => !prev)}
-        isFRCPopoverOpen={isFRCPopoverOpen}
-        browserRamMb={frcStats ? (frcStats.totalBrowserRamMb ?? frcStats.browserRamMb ?? Math.round(frcStats.totalBrowserRamBytes / (1024 * 1024))) : 0}
-        systemRamMb={frcStats ? (frcStats.totalSystemRamMb ?? Math.round(frcStats.totalSystemRamBytes / (1024 * 1024))) : 0}
-        memoryPressureLevel={frcStats?.memoryPressureLevel || 'normal'}
-      />
-
-      {/* Freedom RAM Control Popover */}
-      <FRCPopover
-        isOpen={isFRCPopoverOpen}
-        onClose={() => setIsFRCPopoverOpen(false)}
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onHibernateTab={handleHibernateTab}
-        onNavigate={handleNavigate}
-      />
-
-      {/* Bookmarks Bar */}
-      <BookmarksBar
-        bookmarks={bookmarks}
-        onNavigate={handleNavigate}
-        onOpenBookmarksManager={() => setIsBookmarksOpen(true)}
-      />
-
-      {/* Primary Browser Content Viewport */}
-      <div className="relative flex-1 w-full overflow-hidden z-10">
+          collapsed={isSidebarCollapsed}
+          tabsCount={tabs.length}
+          activeDownloads={downloads.filter((d) => d.state === 'progressing').length}
+          onHome={() => {
+            setIsTabsOverviewOpen(false);
+            handleNavigate('freedom://newtab');
+          }}
+          onTabs={() => setIsTabsOverviewOpen((v) => !v)}
+          onBookmarks={() => setIsBookmarksOpen((v) => !v)}
+          onHistory={() => setIsHistoryOpen((v) => !v)}
+          onDownloads={() => setIsDownloadsOpen((v) => !v)}
+          onSettings={() => setIsSettingsOpen(true)}
+          onToggleCollapsed={() => setIsSidebarCollapsed((v) => !v)}
+        />
+      )}
+      <div className="relative flex-1 min-w-0 overflow-hidden z-10">
         <WebviewContainer
           activeTab={activeTab}
           tabs={tabs}
@@ -2091,6 +2342,19 @@ export default function App() {
           searchText={findState.text}
           setSearchText={(text) => setFindState((prev) => ({ ...prev, text }))}
         />
+
+        {isTabsOverviewOpen && (
+          <TabsOverview
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelectTab={handleSelectTab}
+            onCloseTab={handleCloseTab}
+            onNewTab={() => handleNewTab('freedom://newtab')}
+            onSort={() => handleSortTabs('site')}
+            onClose={() => setIsTabsOverviewOpen(false)}
+          />
+        )}
+      </div>
       </div>
 
       {/* Developer Tools Drawer */}
@@ -2203,6 +2467,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Close & Session Restore Confirmation Modal */}
+      <CloseConfirmationModal
+        isOpen={showCloseConfirmModal}
+        tabsCount={tabs.length}
+        onConfirmCloseWithoutSaving={handleConfirmCloseWithoutSaving}
+        onConfirmSaveAndClose={handleConfirmSaveAndClose}
+        onCancel={handleCancelClose}
+      />
 
       {/* Freedom Mascot: Freen in bottom-right corner */}
       <FreenMascot enabled={settings.showFreenMascot} />

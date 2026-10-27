@@ -7,7 +7,6 @@ import {
   Moon,
   Volume2,
   VolumeX,
-  ShieldCheck,
   RotateCcw,
   ArrowUpDown,
   Cpu,
@@ -22,6 +21,8 @@ import { WindowControls } from './WindowControls';
 import { TabSortService, TabSortMode } from '../services/tabSortService';
 import { SplitViewState } from '../services/splitViewService';
 import { useTranslation } from '../i18n';
+import { FreedomMark } from './FreedomLogo';
+import { FaviconService } from '../services/faviconService';
 
 interface TabBarProps {
   tabs: BrowserTab[];
@@ -44,6 +45,7 @@ interface TabBarProps {
   onCloseTabsToRight?: (tabId: string) => void;
   splitViewState?: SplitViewState;
   onOpenInSplitView?: (tabId: string) => void;
+  onCloseWindow?: () => void;
 }
 
 interface ContextMenuState {
@@ -60,7 +62,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   onNewTab,
   onDuplicateTab,
   onToggleMuteTab,
-  headerColorClass = 'bg-[#090b10]',
+  headerColorClass = 'bg-[var(--fb-bg)]',
   onRestoreClosedTab,
   closedTabsCount = 0,
   onSortTabs,
@@ -73,6 +75,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   onCloseTabsToRight,
   splitViewState,
   onOpenInSplitView,
+  onCloseWindow,
 }) => {
   const { t } = useTranslation();
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -135,7 +138,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   return (
     <div
       id="browser-tab-bar"
-      className={`flex items-center h-10.5 px-2.5 select-none border-b border-white/[0.08] relative z-40 ${headerColorClass} overflow-x-auto no-scrollbar app-drag-region`}
+      className={`flex items-center h-[var(--fb-tabbar-h)] pl-3 select-none relative z-40 bg-[var(--fb-chrome)] overflow-x-auto no-scrollbar app-drag-region`}
       onDoubleClick={(e) => {
         if (
           (e.target as HTMLElement).id === 'browser-tab-bar' ||
@@ -145,6 +148,7 @@ export const TabBar: React.FC<TabBarProps> = ({
         }
       }}
     >
+      <FreedomMark size={18} className="mr-3 text-[var(--fb-text)]" />
       <div className="flex items-center flex-1 min-w-0 max-w-full space-x-1 py-1">
         {tabs.map((tab, index) => {
           const splitPaneIndex = splitViewState?.enabled
@@ -157,7 +161,7 @@ export const TabBar: React.FC<TabBarProps> = ({
           const isDomainBoundary = index > 0 && prevDomain !== domain;
           const domainColor = TabSortService.getDomainColor(domain);
           const isNewTab = tab.url === 'freedom://newtab';
-          const displayTitle = isNewTab ? 'New Tab' : (tab.title || (tab.url.startsWith('freedom://') ? 'Freedom Tab' : tab.url));
+          const displayTitle = isNewTab ? t('tab.newTab') : (tab.title || (tab.url.startsWith('freedom://') ? 'Freedom Tab' : tab.url));
 
           return (
             <React.Fragment key={tab.id}>
@@ -190,17 +194,17 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setContextMenu({ tab, x, y });
                 }}
                 title={`${displayTitle} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isInSplit ? ` [Split: Pane ${splitPaneIndex + 1}]` : ''}`}
-                className={`group relative flex items-center h-8 px-3 rounded-lg text-xs transition-all duration-150 cursor-pointer min-w-[124px] max-w-[230px] flex-1 overflow-hidden app-no-drag select-none ${
+                className={`group relative flex items-center h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 cursor-pointer min-w-[110px] max-w-[210px] flex-1 overflow-hidden app-no-drag select-none ${
                   isActive
-                    ? 'bg-[#181a24] text-white border border-white/12 shadow-[0_2px_8px_rgba(0,0,0,0.5)] font-medium'
+                    ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] border border-[var(--fb-border)] font-medium'
                     : isInSplit
                     ? 'bg-emerald-950/30 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-950/50'
                     : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.05] border border-transparent'
                 }`}
               >
                 {/* Active Tab Accent Bar */}
-                {isActive && (
-                  <div className="absolute top-0 left-2.5 right-2.5 h-[2px] bg-emerald-400 rounded-full" />
+                {isActive && tab.isLoading && (
+                  <div className="absolute bottom-0 left-2.5 right-2.5 h-[2px] bg-emerald-400/70 rounded-full" />
                 )}
 
                 {/* Split Indicator Badge */}
@@ -218,7 +222,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                   {tab.isLoading ? (
                     <div className="tab-loading-spinner shrink-0" title={t('tab.loading')} />
                   ) : tab.url.startsWith('freedom://') ? (
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <FreedomMark size={13} className="text-[var(--fb-text-2)]" />
                   ) : tab.favicon ? (
                     <img
                       src={tab.favicon}
@@ -229,7 +233,11 @@ export const TabBar: React.FC<TabBarProps> = ({
                           : 'opacity-100'
                       }`}
                       onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
+                        // Missing/broken favicon: fall back to a monogram instead of an empty gap
+                        const img = e.currentTarget;
+                        if (img.dataset.fallback) return;
+                        img.dataset.fallback = '1';
+                        img.src = FaviconService.generateMonogramSvg(tab.title || domain);
                       }}
                     />
                   ) : (
@@ -245,12 +253,12 @@ export const TabBar: React.FC<TabBarProps> = ({
                   {/* FRC Subtle Status Dot Cue */}
                   {(tab.isSuspended || tab.lifecycleState === 'hibernated' || tab.lifecycleState === 'frozen') ? (
                     <span
-                      className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-sky-400 ring-1 ring-[#12141c] shadow-[0_0_5px_rgba(56,189,248,0.9)]"
+                      className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-sky-400 ring-1 ring-[var(--fb-chrome)] shadow-[0_0_5px_rgba(56,189,248,0.9)]"
                       title={tab.lifecycleState === 'frozen' ? t('frc.frozenTabTooltip') : t('frc.hibernatedTabTooltip')}
                     />
                   ) : tab.lifecycleState === 'throttled' ? (
                     <span
-                      className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-[#12141c]"
+                      className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-[var(--fb-chrome)]"
                       title={t('frc.throttledTabTooltip')}
                     />
                   ) : null}
@@ -311,7 +319,7 @@ export const TabBar: React.FC<TabBarProps> = ({
           id="btn-new-tab"
           type="button"
           onClick={onNewTab}
-          className="flex items-center justify-center w-7.5 h-7.5 ml-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0 border border-white/[0.06]"
+          className="flex items-center justify-center w-7 h-7 ml-1 rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0"
           title={t('tab.addNewTab')}
         >
           <Plus className="w-4 h-4" />
@@ -323,7 +331,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             id="btn-restore-closed-tab"
             type="button"
             onClick={onRestoreClosedTab}
-            className="flex items-center justify-center w-7.5 h-7.5 ml-1 rounded-lg text-neutral-400 hover:text-emerald-400 hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0 border border-white/[0.06]"
+            className="flex items-center justify-center w-7 h-7 ml-1 rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-emerald-400 hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0"
             title={t('tab.restoreClosed', { count: closedTabsCount })}
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -338,10 +346,10 @@ export const TabBar: React.FC<TabBarProps> = ({
               id="btn-tab-sort"
               type="button"
               onClick={handleSortButtonClick}
-              className={`flex items-center justify-center w-7.5 h-7.5 ml-1 rounded-lg transition-all app-no-drag cursor-pointer border ${
+              className={`flex items-center justify-center w-7 h-7 ml-1 rounded-[var(--fb-radius-sm)] transition-all app-no-drag cursor-pointer border ${
                 showSortMenu || activeSortMode !== 'none'
                   ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.08] border-white/[0.06] active:scale-95'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.08] border-transparent active:scale-95'
               }`}
               title={t('sort.buttonTooltip')}
             >
@@ -355,7 +363,7 @@ export const TabBar: React.FC<TabBarProps> = ({
       </div>
 
       {/* Top-Right Frameless Window Controls */}
-      <WindowControls />
+      <WindowControls onClose={onCloseWindow} />
 
       {/* Top-Level Tab Sort Menu Portal (Rendered into document.body to avoid overflow clipping) */}
       {showSortMenu &&

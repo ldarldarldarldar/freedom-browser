@@ -136,10 +136,10 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
   return (
     <div
       id="freedom-devtools-panel"
-      className="h-64 bg-[#0e1017] border-t border-white/10 text-neutral-200 flex flex-col select-none relative z-40 text-xs font-mono"
+      className="h-64 bg-[var(--fb-bg)] border-t border-white/10 text-neutral-200 flex flex-col select-none relative z-40 text-xs font-[family-name:var(--fb-font-code)]"
     >
       {/* DevTools Toolbar */}
-      <div className="flex items-center justify-between px-3 h-8.5 bg-[#13151f] border-b border-white/[0.08] shrink-0">
+      <div className="flex items-center justify-between px-3 h-8.5 bg-[var(--fb-surface)] border-b border-white/[0.08] shrink-0">
         <div className="flex items-center space-x-1">
           <div className="flex items-center gap-1.5 mr-3 text-emerald-400 font-semibold tracking-wider text-[11px]">
             <Terminal className="w-3.5 h-3.5" />
@@ -319,7 +319,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
         {activeTabPanel === 'sources' && (
           <div className="flex-1 p-3 text-[11px] text-neutral-400">
             <div className="mb-2 text-white font-medium">Page Location:</div>
-            <div className="p-2 rounded bg-neutral-900 font-mono text-emerald-400 mb-3 break-all">
+            <div className="p-2 rounded bg-neutral-900 font-[family-name:var(--fb-font-code)] text-emerald-400 mb-3 break-all">
               {activeTab?.url}
             </div>
             <div className="text-xs text-neutral-500">

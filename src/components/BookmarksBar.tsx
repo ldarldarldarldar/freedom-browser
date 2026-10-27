@@ -25,7 +25,7 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
   return (
     <div
       id="freedom-bookmarks-bar"
-      className="flex items-center gap-1 px-3 py-1 bg-[#0d0e14]/90 backdrop-blur-md border-b border-white/[0.06] text-xs text-neutral-300 select-none overflow-x-auto no-scrollbar shrink-0"
+      className="flex items-center gap-1 px-3 py-1 bg-[var(--fb-bg)]/90 backdrop-blur-md border-b border-white/[0.06] text-xs text-neutral-300 select-none overflow-x-auto no-scrollbar shrink-0"
     >
       {barBookmarks.slice(0, 15).map((bm) => (
         <button

@@ -15,6 +15,7 @@ declare module 'react' {
           disablewebsecurity?: string;
           partition?: string;
           allowpopups?: string;
+          allowfullscreen?: string;
           webpreferences?: string;
           enableblinkfeatures?: string;
           disableblinkfeatures?: string;
@@ -45,6 +46,17 @@ declare global {
       closeApp: () => Promise<void>;
       pickCustomBackground: () => Promise<string | null>;
       setBrowserMode: (mode: 'performance' | 'quality') => Promise<boolean>;
+      setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean }) => Promise<unknown>;
+      getHardwareAcceleration?: () => Promise<boolean>;
+      setHardwareAcceleration?: (enabled: boolean) => Promise<boolean>;
+      relaunchApp?: () => Promise<void>;
+      getUserDataPath?: () => Promise<string>;
+      chooseUserDataPath?: () => Promise<string | null>;
+      migrateUserDataPath?: (options: { targetPath: string; migrateExisting: boolean }) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+      toggleFullScreen?: () => Promise<boolean>;
+      setFullScreen?: (flag: boolean) => Promise<boolean>;
+      isFullScreen?: () => Promise<boolean>;
+      forceCloseApp?: () => Promise<void>;
     };
   }
 }

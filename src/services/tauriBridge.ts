@@ -628,6 +628,47 @@ export class TauriBridge {
   }
 
   /**
+   * Toggle fullscreen state (F11)
+   */
+  public async toggleFullScreen(): Promise<boolean> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.toggleFullScreen) {
+      return (await (window as any).electronAPI.toggleFullScreen()) ?? false;
+    }
+    return false;
+  }
+
+  /**
+   * Set fullscreen state
+   */
+  public async setFullScreen(flag: boolean): Promise<boolean> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.setFullScreen) {
+      return (await (window as any).electronAPI.setFullScreen(flag)) ?? false;
+    }
+    return false;
+  }
+
+  /**
+   * Query fullscreen state
+   */
+  public async isFullScreen(): Promise<boolean> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.isFullScreen) {
+      return (await (window as any).electronAPI.isFullScreen()) ?? false;
+    }
+    return false;
+  }
+
+  /**
+   * Force close the application bypassing interception dialog
+   */
+  public async forceClose(): Promise<void> {
+    if (isElectronEnvironment() && (window as any).electronAPI?.forceCloseApp) {
+      await (window as any).electronAPI.forceCloseApp();
+    } else {
+      window.close();
+    }
+  }
+
+  /**
    * Reload tab, optionally ignoring cache (hard reload)
    */
   public reloadTab(tabId: string, ignoreCache: boolean = false): void {
