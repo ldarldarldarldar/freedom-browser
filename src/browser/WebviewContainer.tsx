@@ -257,6 +257,13 @@ const ElectronWebviewTab: React.FC<{
     el.addEventListener('new-window', handleNewWindow);
     el.addEventListener('found-in-page', handleFoundInPage);
     el.addEventListener('focus', handleFocus);
+    // Ctrl + wheel inside the page (sent by electron/webview-preload.cjs) -> browser zoom
+    const handleIpcMessage = (e: any) => {
+      if (e.channel === 'freedom-ctrl-wheel') {
+        window.dispatchEvent(new CustomEvent('freedom-ctrl-wheel', { detail: e.args?.[0] }));
+      }
+    };
+    el.addEventListener('ipc-message', handleIpcMessage);
 
     // Initial zoom application
     const initialZoom = ZoomService.getZoomForUrl(tab.url);
@@ -269,6 +276,7 @@ const ElectronWebviewTab: React.FC<{
 
     return () => {
       tauriBridge.unregisterWebview(tab.id);
+      el.removeEventListener('ipc-message', handleIpcMessage);
       el.removeEventListener('dom-ready', handleDomReady);
       el.removeEventListener('did-navigate', handleDidNavigate);
       el.removeEventListener('did-navigate-in-page', handleDidNavigateInPage);

@@ -1752,6 +1752,27 @@ export default function App() {
     activeTab,
   ]);
 
+  // Ctrl + mouse wheel over browser UI / internal pages (New Tab, FRC); web pages report it from main
+  useEffect(() => {
+    let last = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.deltaY === 0) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - last < 60) return; // touchpads emit bursts of tiny deltas
+      last = now;
+      if (e.deltaY < 0) handleZoomIn();
+      else handleZoomOut();
+    };
+    const onPageWheel = (e: Event) => ((e as CustomEvent).detail === 'in' ? handleZoomIn() : handleZoomOut());
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('freedom-ctrl-wheel', onPageWheel);
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('freedom-ctrl-wheel', onPageWheel);
+    };
+  }, [handleZoomIn, handleZoomOut]);
+
   // Full suite of Standard Browser Shortcuts (Requirement 8)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
