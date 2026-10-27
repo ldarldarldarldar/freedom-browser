@@ -2,7 +2,7 @@
   "name": "freedom-browser",
   "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",

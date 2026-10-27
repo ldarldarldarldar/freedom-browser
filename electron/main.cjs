@@ -200,7 +200,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.1-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.2-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -589,6 +589,7 @@ function createWindow() {
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
   if (contents.getType() === 'webview') {
+    configureBrowsingSession(contents.session);
     contents.setBackgroundThrottling(true); // Throttles timers/animations in background webviews to minimize CPU and RAM
     contents.setUserAgent(desktopChromeUA);
 
@@ -702,6 +703,11 @@ app.on('web-contents-created', (event, contents) => {
       if (input.key.toLowerCase() === 't' && !input.shift) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'new-tab');
+        return;
+      }
+      if (input.key.toLowerCase() === 'n' && input.shift) {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'new-private-tab');
         return;
       }
       if (input.key.toLowerCase() === 'w') {
@@ -1546,13 +1552,14 @@ ipcMain.handle('choose_file_to_open', async () => {
   return url.pathToFileURL(result.filePaths[0]).toString();
 });
 
-// App lifecycle
-app.whenReady().then(() => {
-  app.userAgentFallback = desktopChromeUA;
-  session.defaultSession.setUserAgent(desktopChromeUA);
-
+// Request hooks shared by the default profile and in-memory incognito partitions
+const configuredSessions = new WeakSet();
+function configureBrowsingSession(ses) {
+  if (!ses || configuredSessions.has(ses)) return;
+  configuredSessions.add(ses);
+  ses.setUserAgent(desktopChromeUA);
   // Guarantee all outgoing HTTP/HTTPS requests advertise desktop Chrome without mobile hints
-  session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
     details.requestHeaders['User-Agent'] = desktopChromeUA;
     details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
     details.requestHeaders['Sec-CH-UA'] = '"Chromium";v="132", "Google Chrome";v="132", "Not:A-Brand";v="99"';
@@ -1568,7 +1575,7 @@ app.whenReady().then(() => {
   });
 
   // Third-party cookie blocking: drop Set-Cookie on cross-site subresource responses
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+  ses.webRequest.onHeadersReceived((details, callback) => {
     if (details.responseHeaders && isThirdPartyRequest(details)) {
       for (const name of Object.keys(details.responseHeaders)) {
         if (name.toLowerCase() === 'set-cookie') delete details.responseHeaders[name];
@@ -1576,6 +1583,18 @@ app.whenReady().then(() => {
     }
     callback({ cancel: false, responseHeaders: details.responseHeaders });
   });
+  if (ses !== session.defaultSession) {
+    // Incognito downloads go through the same download manager (files are kept, like other browsers)
+    ses.on('will-download', (...args) => session.defaultSession.emit('will-download', ...args));
+  }
+}
+
+// App lifecycle
+app.whenReady().then(() => {
+  app.userAgentFallback = desktopChromeUA;
+  session.defaultSession.setUserAgent(desktopChromeUA);
+
+  configureBrowsingSession(session.defaultSession);
 
   registerLinuxDesktopIntegration();
   createWindow();

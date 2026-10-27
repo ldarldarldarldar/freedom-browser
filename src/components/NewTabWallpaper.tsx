@@ -87,7 +87,7 @@ export const NewTabWallpaper: React.FC<NewTabWallpaperProps> = ({ id, isStatic =
     <div className={`newtab-art ${className}`} aria-hidden="true">
       <div className="newtab-art__beam" />
       <svg className="absolute bottom-0 left-0 w-full h-[46%]" viewBox="0 0 1200 400" preserveAspectRatio="none">
-        <path d="M0 250 L140 170 L260 230 L380 120 L520 210 L600 60 L690 200 L820 140 L960 230 L1080 160 L1200 220 V400 H0Z" fill="var(--fb-surface)" opacity="0.55" />
+        <path d="M0 250 L140 170 L260 230 L380 120 L520 210 L640 150 L760 210 L936 60 L1030 200 L1120 150 L1200 220 V400 H0Z" fill="var(--fb-surface)" opacity="0.55" />
         <path d="M0 310 L180 250 L330 300 L470 240 L600 290 L760 230 L900 300 L1050 250 L1200 290 V400 H0Z" fill="var(--fb-bg)" opacity="0.9" />
       </svg>
     </div>
