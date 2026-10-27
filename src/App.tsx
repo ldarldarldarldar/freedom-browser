@@ -17,9 +17,11 @@ import { FRCPopover } from './components/FRCPopover';
 import { BrowserTab, DownloadItem, Bookmark, FindInPageState } from './browser/types';
 import { SystemStats } from './taskmanager/types';
 import { BrowserSettings } from './settings/types';
-import { DEFAULT_SETTINGS } from './settings/defaults';
+import { DEFAULT_SETTINGS, SEARCH_ENGINES } from './settings/defaults';
 import { Sidebar, SidebarSection } from './components/Sidebar';
 import { TabsOverview } from './components/TabsOverview';
+import { DockDropOverlay, nearestEdge } from './components/DockDropOverlay';
+import { DockEdge } from './settings/types';
 import { SearchEngineService } from './services/searchEngineService';
 import { logger } from './services/loggerService';
 import { tauriBridge } from './services/tauriBridge';
@@ -39,6 +41,10 @@ import { translate, normalizeLanguage } from './i18n';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 const TABS_KEY = 'freedom_browser_tabs';
+
+// Layout-independent letter shortcuts (physical key), so Ctrl+T/W/... work on Cyrillic layouts too
+const keyIs = (e: KeyboardEvent, letter: string) =>
+  e.code === `Key${letter.toUpperCase()}` || e.key.toLowerCase() === letter;
 const DOWNLOADS_KEY = 'freedom_browser_downloads_v2';
 
 export default function App() {
@@ -48,6 +54,10 @@ export default function App() {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (!stored) return DEFAULT_SETTINGS;
       const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+      // Bing and Ecosia were removed in 0.6.3: fall back to the default engine
+      if (!SEARCH_ENGINES.some((engine) => engine.id === parsed.defaultSearchEngine) && parsed.defaultSearchEngine !== 'custom') {
+        parsed.defaultSearchEngine = DEFAULT_SETTINGS.defaultSearchEngine;
+      }
       // One-time switch to the redesigned default theme; later choices are respected
       if (!parsed.uiDesignVersion || parsed.uiDesignVersion < 2) {
         parsed.uiDesignVersion = 2;
@@ -1779,7 +1789,7 @@ export default function App() {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
       // Ctrl+L: Focus address bar
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'l') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'l')) {
         e.preventDefault();
         const omnibar = document.getElementById('browser-omnibar-input');
         omnibar?.focus();
@@ -1788,28 +1798,28 @@ export default function App() {
       }
 
       // Ctrl+T: New tab
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 't') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 't')) {
         e.preventDefault();
         handleNewTab('freedom://newtab');
         return;
       }
 
       // Ctrl+Shift+N: New incognito tab
-      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'n') {
+      if (isCtrlOrCmd && e.shiftKey && keyIs(e, 'n')) {
         e.preventDefault();
         handleNewTab('freedom://newtab', { isPrivate: true });
         return;
       }
 
       // Ctrl+Shift+T: Restore recently closed tab
-      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 't') {
+      if (isCtrlOrCmd && e.shiftKey && keyIs(e, 't')) {
         e.preventDefault();
         handleRestoreClosedTab();
         return;
       }
 
       // Ctrl+W: Close current tab
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'w') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'w')) {
         e.preventDefault();
         if (activeTabId) handleCloseTab(activeTabId);
         return;
@@ -1834,42 +1844,42 @@ export default function App() {
       }
 
       // Ctrl+F: Find in page
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'f') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'f')) {
         e.preventDefault();
         setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }));
         return;
       }
 
       // Ctrl+D: Toggle Bookmark
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'd') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'd')) {
         e.preventDefault();
         handleToggleBookmark();
         return;
       }
 
       // Ctrl+H: History
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'h') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'h')) {
         e.preventDefault();
         setIsHistoryOpen((prev) => !prev);
         return;
       }
 
       // Ctrl+J: Downloads
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'j') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'j')) {
         e.preventDefault();
         setIsDownloadsOpen((prev) => !prev);
         return;
       }
 
       // Ctrl+R: Reload active tab
-      if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 'r') {
+      if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'r')) {
         e.preventDefault();
         handleReload();
         return;
       }
 
       // Ctrl+Shift+R: Hard reload
-      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'r') {
+      if (isCtrlOrCmd && e.shiftKey && keyIs(e, 'r')) {
         e.preventDefault();
         if (activeTab) tauriBridge.reloadTab(activeTab.id, true);
         return;
@@ -1918,7 +1928,7 @@ export default function App() {
       }
 
       // F12 or Ctrl+Shift+I: DevTools
-      if (e.key === 'F12' || (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'i')) {
+      if (e.key === 'F12' || (isCtrlOrCmd && e.shiftKey && keyIs(e, 'i'))) {
         e.preventDefault();
         setIsDevToolsOpen((prev) => !prev);
         return;
@@ -1932,7 +1942,7 @@ export default function App() {
       }
 
       // Ctrl+O: Open File
-      if (isCtrlOrCmd && e.key.toLowerCase() === 'o') {
+      if (isCtrlOrCmd && keyIs(e, 'o')) {
         e.preventDefault();
         handleOpenFile();
         return;
@@ -2179,6 +2189,124 @@ export default function App() {
     }
   };
 
+  // ---- Dockable panels (drag the grip of the sidebar / toolbar to another window edge) ----
+  const sidebarDock = settings.sidebarDock ?? 'left';
+  const toolbarDock = settings.toolbarDock ?? 'top';
+  const [dockDrag, setDockDrag] = useState<{ target: 'sidebar' | 'toolbar'; edge: DockEdge } | null>(null);
+  const startDockDrag = (target: 'sidebar' | 'toolbar', e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+    const onMove = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+      moved = true;
+      setDockDrag({ target, edge: nearestEdge(ev.clientX, ev.clientY) });
+    };
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      setDockDrag(null);
+      if (!moved) return;
+      const edge = nearestEdge(ev.clientX, ev.clientY);
+      setSettings((prev) => ({ ...prev, [target === 'sidebar' ? 'sidebarDock' : 'toolbarDock']: edge }));
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  const navigationBar = (
+    <Navigation
+      dock={toolbarDock}
+      onDockDragStart={(e) => startDockDrag('toolbar', e)}
+      currentTab={activeTab}
+      onNavigate={handleNavigate}
+      onBack={handleBack}
+      onForward={handleForward}
+      onReload={handleReload}
+      onStop={() => {
+        if (activeTab) {
+          tauriBridge.stopLoading(activeTab.id);
+          setTabs((prev) =>
+            prev.map((t) => (t.id === activeTab.id ? { ...t, isLoading: false } : t))
+          );
+        }
+      }}
+      onHome={() => handleNavigate('freedom://newtab')}
+      onNewPrivateTab={() => handleNewTab('freedom://newtab', { isPrivate: true })}
+      onOpenSettings={() => setIsSettingsOpen(true)}
+      onOpenTaskManager={() => setIsTaskManagerOpen(true)}
+      onOpenDownloads={() => setIsDownloadsOpen(!isDownloadsOpen)}
+      onToggleDevTools={() => setIsDevToolsOpen(!isDevToolsOpen)}
+      onOpenAbout={() => setIsAboutOpen(true)}
+      defaultSearchEngine={settings.defaultSearchEngine}
+      downloadsCount={downloads.filter((d) => d.state === 'progressing').length}
+      headerColorClass={getHeaderColorClass()}
+      isDevToolsOpen={isDevToolsOpen}
+      isBookmarked={isCurrentBookmarked}
+      onToggleBookmark={handleToggleBookmark}
+      onOpenBookmarks={() => setIsBookmarksOpen(true)}
+      onOpenHistory={() => setIsHistoryOpen(true)}
+      onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
+      zoomLevel={activeTab?.zoomLevel || 100}
+      onZoomIn={handleZoomIn}
+      onZoomOut={handleZoomOut}
+      onResetZoom={handleResetZoom}
+      onSortTabs={handleSortTabs}
+      isSplitView={splitViewState.enabled}
+      onToggleSplitView={handleToggleSplitView}
+      onToggleFRCPopover={() => setIsFRCPopoverOpen((prev) => !prev)}
+      isFRCPopoverOpen={isFRCPopoverOpen}
+      browserRamMb={frcStats ? (frcStats.totalBrowserRamMb ?? frcStats.browserRamMb ?? Math.round(frcStats.totalBrowserRamBytes / (1024 * 1024))) : 0}
+      systemRamMb={frcStats ? (frcStats.totalSystemRamMb ?? Math.round(frcStats.totalSystemRamBytes / (1024 * 1024))) : 0}
+      memoryPressureLevel={frcStats?.memoryPressureLevel || 'normal'}
+      privacyToggles={[
+        { key: 'popupsBlocked', label: translate(normalizeLanguage(settings.language), 'menu.blockPopups'), value: settings.popupsBlocked, icon: AppWindow },
+        { key: 'blockThirdPartyCookies', label: translate(normalizeLanguage(settings.language), 'menu.trackerProtection'), value: settings.blockThirdPartyCookies, icon: ShieldCheck },
+        { key: 'doNotTrack', label: translate(normalizeLanguage(settings.language), 'menu.doNotTrack'), value: settings.doNotTrack, icon: EyeOff },
+      ]}
+      onTogglePrivacy={(key) =>
+        setSettings((prev) => ({ ...prev, [key]: !prev[key as 'doNotTrack' | 'blockThirdPartyCookies' | 'popupsBlocked'] }))
+      }
+    />
+  );
+
+  const sidebarRail = (
+    <Sidebar
+      dock={sidebarDock}
+      onDockDragStart={(e) => startDockDrag('sidebar', e)}
+      active={
+        isTabsOverviewOpen
+          ? 'tabs'
+          : isBookmarksOpen
+          ? 'bookmarks'
+          : isHistoryOpen
+          ? 'history'
+          : isDownloadsOpen
+          ? 'downloads'
+          : activeTab?.url === 'freedom://newtab'
+          ? 'home'
+          : (null as SidebarSection)
+      }
+      collapsed={isSidebarCollapsed}
+      tabsCount={tabs.length}
+      activeDownloads={downloads.filter((d) => d.state === 'progressing').length}
+      onHome={() => {
+        setIsTabsOverviewOpen(false);
+        handleNavigate('freedom://newtab');
+      }}
+      onTabs={() => setIsTabsOverviewOpen((v) => !v)}
+      onBookmarks={() => setIsBookmarksOpen((v) => !v)}
+      onHistory={() => setIsHistoryOpen((v) => !v)}
+      onDownloads={() => setIsDownloadsOpen((v) => !v)}
+      onSettings={() => setIsSettingsOpen(true)}
+      onToggleCollapsed={() => setIsSidebarCollapsed((v) => !v)}
+    />
+  );
+
   return (
     <I18nProvider
       currentLanguage={settings.language}
@@ -2202,6 +2330,8 @@ export default function App() {
         '--theme-border': settings.palette?.borderColor || '#232b3b',
         '--theme-text': settings.palette?.textColor || '#f8fafc',
         ...paletteToTokens(settings.palette),
+        // Height of the chrome above the page (tab strip + docked toolbar / sidebar) for drawers & popovers
+        '--fb-top-chrome': `calc(var(--fb-tabbar-h) + ${(settings.toolbarDock ?? 'top') === 'top' ? 'var(--fb-toolbar-h)' : '0px'} + ${(settings.sidebarDock ?? 'left') === 'top' ? '40px' : '0px'})`,
       } as React.CSSProperties}
     >
       {/* Moving Subtle Stars Canvas Background (Disabled in Performance Mode or when toggled off) */}
@@ -2270,58 +2400,7 @@ export default function App() {
             onCloseWindow={handleAttemptClose}
           />
 
-          {/* Navigation & Controls Bar (Below the Tab Bar) */}
-          <Navigation
-            currentTab={activeTab}
-            onNavigate={handleNavigate}
-            onBack={handleBack}
-            onForward={handleForward}
-            onReload={handleReload}
-            onStop={() => {
-              if (activeTab) {
-                tauriBridge.stopLoading(activeTab.id);
-                setTabs((prev) =>
-                  prev.map((t) => (t.id === activeTab.id ? { ...t, isLoading: false } : t))
-                );
-              }
-            }}
-            onHome={() => handleNavigate('freedom://newtab')}
-            onNewPrivateTab={() => handleNewTab('freedom://newtab', { isPrivate: true })}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onOpenTaskManager={() => setIsTaskManagerOpen(true)}
-            onOpenDownloads={() => setIsDownloadsOpen(!isDownloadsOpen)}
-            onToggleDevTools={() => setIsDevToolsOpen(!isDevToolsOpen)}
-            onOpenAbout={() => setIsAboutOpen(true)}
-            defaultSearchEngine={settings.defaultSearchEngine}
-            downloadsCount={downloads.filter((d) => d.state === 'progressing').length}
-            headerColorClass={getHeaderColorClass()}
-            isDevToolsOpen={isDevToolsOpen}
-            isBookmarked={isCurrentBookmarked}
-            onToggleBookmark={handleToggleBookmark}
-            onOpenBookmarks={() => setIsBookmarksOpen(true)}
-            onOpenHistory={() => setIsHistoryOpen(true)}
-            onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
-            zoomLevel={activeTab?.zoomLevel || 100}
-            onZoomIn={handleZoomIn}
-            onZoomOut={handleZoomOut}
-            onResetZoom={handleResetZoom}
-            onSortTabs={handleSortTabs}
-            isSplitView={splitViewState.enabled}
-            onToggleSplitView={handleToggleSplitView}
-            onToggleFRCPopover={() => setIsFRCPopoverOpen((prev) => !prev)}
-            isFRCPopoverOpen={isFRCPopoverOpen}
-            browserRamMb={frcStats ? (frcStats.totalBrowserRamMb ?? frcStats.browserRamMb ?? Math.round(frcStats.totalBrowserRamBytes / (1024 * 1024))) : 0}
-            systemRamMb={frcStats ? (frcStats.totalSystemRamMb ?? Math.round(frcStats.totalSystemRamBytes / (1024 * 1024))) : 0}
-            memoryPressureLevel={frcStats?.memoryPressureLevel || 'normal'}
-            privacyToggles={[
-              { key: 'popupsBlocked', label: translate(normalizeLanguage(settings.language), 'menu.blockPopups'), value: settings.popupsBlocked, icon: AppWindow },
-              { key: 'blockThirdPartyCookies', label: translate(normalizeLanguage(settings.language), 'menu.trackerProtection'), value: settings.blockThirdPartyCookies, icon: ShieldCheck },
-              { key: 'doNotTrack', label: translate(normalizeLanguage(settings.language), 'menu.doNotTrack'), value: settings.doNotTrack, icon: EyeOff },
-            ]}
-            onTogglePrivacy={(key) =>
-              setSettings((prev) => ({ ...prev, [key]: !prev[key as 'doNotTrack' | 'blockThirdPartyCookies' | 'popupsBlocked'] }))
-            }
-          />
+          {toolbarDock === 'top' && navigationBar}
 
           {/* Freedom RAM Control Popover */}
           <FRCPopover
@@ -2344,36 +2423,11 @@ export default function App() {
 
       {/* Sidebar + Primary Browser Content Viewport */}
       <div className="relative flex flex-1 min-h-0 w-full">
-      {!isFullScreen && (
-        <Sidebar
-          active={
-            isTabsOverviewOpen
-              ? 'tabs'
-              : isBookmarksOpen
-              ? 'bookmarks'
-              : isHistoryOpen
-              ? 'history'
-              : isDownloadsOpen
-              ? 'downloads'
-              : activeTab?.url === 'freedom://newtab'
-              ? 'home'
-              : (null as SidebarSection)
-          }
-          collapsed={isSidebarCollapsed}
-          tabsCount={tabs.length}
-          activeDownloads={downloads.filter((d) => d.state === 'progressing').length}
-          onHome={() => {
-            setIsTabsOverviewOpen(false);
-            handleNavigate('freedom://newtab');
-          }}
-          onTabs={() => setIsTabsOverviewOpen((v) => !v)}
-          onBookmarks={() => setIsBookmarksOpen((v) => !v)}
-          onHistory={() => setIsHistoryOpen((v) => !v)}
-          onDownloads={() => setIsDownloadsOpen((v) => !v)}
-          onSettings={() => setIsSettingsOpen(true)}
-          onToggleCollapsed={() => setIsSidebarCollapsed((v) => !v)}
-        />
-      )}
+      {!isFullScreen && toolbarDock === 'left' && navigationBar}
+      <div className="relative flex flex-col flex-1 min-w-0 min-h-0">
+      {!isFullScreen && sidebarDock === 'top' && sidebarRail}
+      <div className="relative flex flex-1 min-h-0 w-full">
+      {!isFullScreen && sidebarDock === 'left' && sidebarRail}
       <div className="relative flex-1 min-w-0 overflow-hidden z-10">
         <WebviewContainer
           activeTab={activeTab}
@@ -2436,7 +2490,20 @@ export default function App() {
           />
         )}
       </div>
+      {!isFullScreen && sidebarDock === 'right' && sidebarRail}
       </div>
+      {!isFullScreen && sidebarDock === 'bottom' && sidebarRail}
+      </div>
+      {!isFullScreen && toolbarDock === 'right' && navigationBar}
+      </div>
+      {!isFullScreen && toolbarDock === 'bottom' && navigationBar}
+
+      {dockDrag && (
+        <DockDropOverlay
+          activeEdge={dockDrag.edge}
+          edges={['top', 'bottom', 'left', 'right']}
+        />
+      )}
 
       {/* Developer Tools Drawer */}
       {isDevToolsOpen && (

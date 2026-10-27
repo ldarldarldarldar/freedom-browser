@@ -1,5 +1,6 @@
 import React from 'react';
-import { House, PanelsTopLeft, Bookmark, History, Download, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { House, PanelsTopLeft, Bookmark, History, Download, Settings, PanelLeftClose, PanelLeftOpen, GripVertical, GripHorizontal } from 'lucide-react';
+import { DockEdge } from '../settings/types';
 import { useTranslation } from '../i18n';
 
 export type SidebarSection = 'home' | 'tabs' | 'bookmarks' | 'history' | 'downloads' | null;
@@ -16,6 +17,9 @@ interface SidebarProps {
   onDownloads: () => void;
   onSettings: () => void;
   onToggleCollapsed: () => void;
+  /** Edge the rail is docked to; top/bottom render it as a horizontal bar */
+  dock?: DockEdge;
+  onDockDragStart?: (e: React.PointerEvent) => void;
 }
 
 /** Left navigation rail from the reference layout (full or icon-only). */
@@ -31,7 +35,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDownloads,
   onSettings,
   onToggleCollapsed,
+  dock = 'left',
+  onDockDragStart,
 }) => {
+  const horizontal = dock === 'top' || dock === 'bottom';
+  const edgeBorder = { left: 'border-r', right: 'border-l', top: 'border-b', bottom: 'border-t' }[dock];
   const { t } = useTranslation();
 
   const items: { id: Exclude<SidebarSection, null>; icon: React.ElementType; label: string; onClick: () => void; badge?: number }[] = [
@@ -49,14 +57,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <nav
       id="browser-sidebar"
       aria-label="Sidebar"
-      className="relative z-20 flex flex-col shrink-0 py-2 border-r border-[var(--fb-border)] bg-[var(--fb-sidebar)] select-none transition-[width] duration-150"
-      style={{ width: collapsed ? 'var(--fb-sidebar-w-collapsed)' : 'var(--fb-sidebar-w)' }}
+      data-dock={dock}
+      className={`relative z-20 flex shrink-0 ${edgeBorder} border-[var(--fb-border)] bg-[var(--fb-sidebar)] select-none ${
+        horizontal ? 'flex-row items-center h-10 px-1.5 gap-1' : 'flex-col py-2 transition-[width] duration-150'
+      }`}
+      style={horizontal ? undefined : { width: collapsed ? 'var(--fb-sidebar-w-collapsed)' : 'var(--fb-sidebar-w)' }}
     >
-      <ul className={`flex flex-col gap-0.5 ${collapsed ? 'items-center px-1' : 'px-1.5'}`}>
+      {onDockDragStart && (
+        <button
+          id="sidebar-dock-grip"
+          type="button"
+          onPointerDown={onDockDragStart}
+          title={t('layout.dockHint')}
+          aria-label={t('layout.dockHint')}
+          className={`flex items-center justify-center rounded-[var(--fb-radius-sm)] text-[var(--fb-text-3)] hover:text-[var(--fb-text)] hover:bg-[var(--fb-surface-hover)] cursor-grab touch-none ${
+            horizontal ? 'w-5 h-7 shrink-0' : 'h-5 mx-auto mb-1 w-8'
+          }`}
+        >
+          {horizontal ? <GripVertical className="w-3.5 h-3.5" /> : <GripHorizontal className="w-3.5 h-3.5" />}
+        </button>
+      )}
+      <ul className={`flex gap-0.5 ${horizontal ? 'flex-row items-center' : `flex-col ${collapsed ? 'items-center px-1' : 'px-1.5'}`}`}>
         {items.map(({ id, icon: Icon, label, onClick, badge }) => {
           const isActive = active === id;
           return (
-            <li key={id} className={collapsed ? '' : 'w-full'}>
+            <li key={id} className={collapsed || horizontal ? '' : 'w-full'}>
               <button
                 id={`sidebar-${id}`}
                 type="button"
@@ -64,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 title={label}
                 aria-current={isActive ? 'page' : undefined}
                 className={`relative flex items-center h-8 rounded-[var(--fb-radius-md)] text-[12px] transition-colors ${
-                  collapsed ? 'w-8 justify-center' : 'w-full gap-2.5 px-2.5'
+                  collapsed ? 'w-8 justify-center' : horizontal ? 'gap-2 px-2.5' : 'w-full gap-2.5 px-2.5'
                 } ${
                   isActive
                     ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] font-medium shadow-[inset_0_0_0_1px_var(--fb-border)]'
@@ -90,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         })}
       </ul>
 
-      <div className={`mt-auto flex flex-col gap-1 ${collapsed ? 'items-center' : 'px-2.5'}`}>
+      <div className={horizontal ? 'ml-auto flex flex-row items-center gap-1' : `mt-auto flex flex-col gap-1 ${collapsed ? 'items-center' : 'px-2.5'}`}>
         <button
           id="sidebar-collapse"
           type="button"

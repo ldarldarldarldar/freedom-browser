@@ -298,7 +298,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.2-2-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.3-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -785,57 +785,57 @@ app.on('web-contents-created', (event, contents) => {
       }
 
       // Essential browser navigation shortcuts forwarded to main window
-      if (input.key.toLowerCase() === 't' && !input.shift) {
+      if (keyIs(input, 't') && !input.shift) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'new-tab');
         return;
       }
-      if (input.key.toLowerCase() === 'n' && input.shift) {
+      if (keyIs(input, 'n') && input.shift) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'new-private-tab');
         return;
       }
-      if (input.key.toLowerCase() === 'w') {
+      if (keyIs(input, 'w')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'close-tab');
         return;
       }
-      if (input.key.toLowerCase() === 't' && input.shift) {
+      if (keyIs(input, 't') && input.shift) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'restore-tab');
         return;
       }
-      if (input.key.toLowerCase() === 'l') {
+      if (keyIs(input, 'l')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'focus-url');
         return;
       }
-      if (input.key.toLowerCase() === 'f') {
+      if (keyIs(input, 'f')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'find-in-page');
         return;
       }
-      if (input.key.toLowerCase() === 'h') {
+      if (keyIs(input, 'h')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'open-history');
         return;
       }
-      if (input.key.toLowerCase() === 'd') {
+      if (keyIs(input, 'd')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'toggle-bookmark');
         return;
       }
-      if (input.key.toLowerCase() === 'j') {
+      if (keyIs(input, 'j')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'open-downloads');
         return;
       }
-      if (input.key.toLowerCase() === 'o') {
+      if (keyIs(input, 'o')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'open-file');
         return;
       }
-      if (input.key.toLowerCase() === 'r') {
+      if (keyIs(input, 'r')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', input.shift ? 'hard-reload' : 'reload');
         return;
@@ -1672,6 +1672,12 @@ function configureBrowsingSession(ses) {
     // Incognito downloads go through the same download manager (files are kept, like other browsers)
     ses.on('will-download', (...args) => session.defaultSession.emit('will-download', ...args));
   }
+}
+
+// Layout-independent letter shortcuts: match the physical key (KeyT) so Ctrl+T/W/... also work
+// with Cyrillic and other layouts, where input.key would be 'е', 'ц', ...
+function keyIs(input, letter) {
+  return input.code === `Key${letter.toUpperCase()}` || (input.key || '').toLowerCase() === letter;
 }
 
 // App lifecycle

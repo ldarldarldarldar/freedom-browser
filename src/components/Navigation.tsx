@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { DockEdge } from '../settings/types';
 import {
+  GripVertical,
   VenetianMask,
   ArrowLeft,
   ArrowRight,
@@ -72,6 +74,9 @@ interface NavigationProps {
   systemRamMb?: number;
   memoryPressureLevel?: 'normal' | 'moderate' | 'critical';
   onNewPrivateTab?: () => void;
+  /** Window edge the toolbar is docked to; left/right render it as a vertical panel */
+  dock?: DockEdge;
+  onDockDragStart?: (e: React.PointerEvent) => void;
   privacyToggles?: { key: string; label: string; value: boolean; icon: React.ElementType }[];
   onTogglePrivacy?: (key: string) => void;
 }
@@ -113,7 +118,12 @@ export const Navigation: React.FC<NavigationProps> = ({
   privacyToggles,
   onTogglePrivacy,
   onNewPrivateTab,
+  dock = 'top',
+  onDockDragStart,
 }) => {
+  const vertical = dock === 'left' || dock === 'right';
+  // Popups open upward when the toolbar sits at the bottom of the window
+  const popUp = dock === 'bottom';
   const { t } = useTranslation();
   const [inputValue, setInputValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -160,15 +170,32 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <header
       id="browser-nav-toolbar"
-      className={`flex items-center h-[var(--fb-toolbar-h)] px-2 gap-1.5 border-b border-[var(--fb-border)] select-none relative z-30 bg-[var(--fb-chrome)] app-drag-region`}
+      data-dock={dock}
+      className={`flex select-none relative z-30 bg-[var(--fb-chrome)] border-[var(--fb-border)] app-drag-region ${
+        vertical
+          ? `flex-col items-stretch w-[264px] shrink-0 p-2 gap-2 ${dock === 'left' ? 'border-r' : 'border-l'}`
+          : `items-center h-[var(--fb-toolbar-h)] px-2 gap-1.5 ${dock === 'bottom' ? 'border-t' : 'border-b'}`
+      }`}
       onDoubleClick={(e) => {
         if (e.target === e.currentTarget || (e.target as HTMLElement).id === 'browser-nav-toolbar') {
           tauriBridge.maximizeWindow();
         }
       }}
     >
-      {/* Navigation History Controls */}
+      {/* Navigation History Controls (+ dock grip) */}
       <div className="flex items-center gap-0.5 app-no-drag">
+        {onDockDragStart && (
+          <button
+            id="toolbar-dock-grip"
+            type="button"
+            onPointerDown={onDockDragStart}
+            title={t('layout.dockHint')}
+            aria-label={t('layout.dockHint')}
+            className="w-5 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-500 hover:text-white hover:bg-white/[0.08] cursor-grab touch-none"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        )}
         <button
           id="nav-btn-back"
           type="button"
@@ -210,7 +237,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Omni Address & Search Bar */}
-      <div className="flex-1 min-w-0 relative app-no-drag">
+      <div className={`${vertical ? 'flex-none' : 'flex-1 min-w-0'} relative app-no-drag`}>
         <form onSubmit={handleSubmit} className="w-full">
           <div
             className={`flex items-center w-full h-7 px-2 rounded-[var(--fb-radius-md)] border transition-colors duration-150 ${
@@ -304,7 +331,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
         {/* Security / Privacy details popup */}
         {showSecurityDetails && (
-          <div className="absolute top-9 left-0 w-80 p-3.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in">
+          <div className={`absolute ${popUp ? 'bottom-9' : 'top-9'} left-0 w-80 max-w-[calc(100vw-24px)] p-3.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}>
             <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-white/[0.08]">
               <Shield className="w-4 h-4 text-emerald-400" />
               <span className="font-semibold text-white tracking-tight">{t('nav.guardTitle')}</span>
@@ -334,7 +361,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Right Controls: Split View, Find, History, Bookmarks, Task Manager, Downloads, DevTools, Menu */}
-      <div className="flex items-center gap-0.5 shrink-0 app-no-drag" ref={menuRef}>
+      <div className={`flex items-center gap-0.5 shrink-0 app-no-drag ${vertical ? 'flex-wrap' : ''}`} ref={menuRef}>
         {/* Split View Toggle Button */}
         {onToggleSplitView && (
           <button
@@ -462,7 +489,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-9 w-72 p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in">
+            <div className={`absolute ${dock === 'left' ? 'left-0' : 'right-0'} ${popUp ? 'bottom-9' : 'top-9'} w-72 max-h-[calc(100vh-80px)] overflow-y-auto p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}>
               <button
                 type="button"
                 onClick={() => {

@@ -83,7 +83,7 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   };
 
   return (
-    <div className="fixed top-[calc(var(--fb-tabbar-h)+var(--fb-toolbar-h))] bottom-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[var(--fb-surface)] border-l border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] flex flex-col text-neutral-200 animate-slide-left">
+    <div className="fixed top-[calc(var(--fb-top-chrome))] bottom-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[var(--fb-surface)] border-l border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] flex flex-col text-neutral-200 animate-slide-left">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] bg-[var(--fb-bg)]/80">
         <div className="flex items-center gap-2.5">

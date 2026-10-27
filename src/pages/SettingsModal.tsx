@@ -29,6 +29,7 @@ import { useTranslation, TranslationKey } from '../i18n';
 import { FreedomMark } from '../components/FreedomLogo';
 import { APP_VERSION } from '../version';
 import { NewTabWallpaper, NEW_TAB_WALLPAPERS } from '../components/NewTabWallpaper';
+import { RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -680,6 +681,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Reset drag & drop layout */}
+                <div className="border-t border-white/10 pt-4 flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-xs font-semibold text-white mb-0.5">{t('layout.reset')}</div>
+                    <div className="text-[11px] text-neutral-400">{t('layout.resetDesc')}</div>
+                  </div>
+                  <button
+                    id="reset-layout"
+                    type="button"
+                    onClick={() => {
+                      onUpdateSettings({ sidebarDock: 'left', toolbarDock: 'top' });
+                      window.dispatchEvent(new Event(RESET_LAYOUT_EVENT));
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-white shrink-0"
+                  >
+                    {t('layout.reset')}
+                  </button>
                 </div>
 
                 {/* Custom Background Image (Strictly Local) */}

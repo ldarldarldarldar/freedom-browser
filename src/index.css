@@ -42,6 +42,7 @@
   --fb-radius-pill: 9999px;
   --fb-tabbar-h: 38px;
   --fb-toolbar-h: 38px;
+  --fb-top-chrome: calc(var(--fb-tabbar-h) + var(--fb-toolbar-h));
   --fb-sidebar-w: 128px;
   --fb-sidebar-w-collapsed: 48px;
 

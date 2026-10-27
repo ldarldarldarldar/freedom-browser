@@ -1,4 +1,4 @@
-export type SearchEngineId = 'duckduckgo' | 'google' | 'bing' | 'brave' | 'ecosia' | 'custom';
+export type SearchEngineId = 'duckduckgo' | 'google' | 'brave' | 'custom';
 
 export interface SearchEngine {
   id: SearchEngineId;
@@ -55,10 +55,15 @@ export interface ThemePalette {
   shadowIntensity: number; // 0 - 100
 }
 
+export type DockEdge = 'top' | 'bottom' | 'left' | 'right';
+
 export type NewTabWallpaperId = 'ridges' | 'theme' | 'space' | 'freedom';
 
 export interface BrowserSettings {
   newTabWallpaper?: NewTabWallpaperId;
+  /** Where the left navigation rail and the address toolbar are docked (drag & drop) */
+  sidebarDock?: DockEdge;
+  toolbarDock?: DockEdge;
   /** Shared cap for all active downloads in KB/s; 0 = unlimited */
   downloadSpeedLimitKBps?: number;
   uiDesignVersion?: number;

@@ -4,6 +4,7 @@ import { FreedomMark } from '../components/FreedomLogo';
 import { HistoryService } from '../services/historyService';
 import { SearchEngineId, ThemePalette, NewTabWallpaperId } from '../settings/types';
 import { NewTabWallpaper } from '../components/NewTabWallpaper';
+import { useDragOffset, RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { FaviconService } from '../services/faviconService';
@@ -204,6 +205,18 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
     if (pos) saveClockPos(pos);
   };
 
+  useEffect(() => {
+    const onReset = () => saveClockPos(null);
+    window.addEventListener(RESET_LAYOUT_EVENT, onReset);
+    return () => window.removeEventListener(RESET_LAYOUT_EVENT, onReset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Draggable New Tab blocks (translate offsets kept inside the wallpaper area)
+  const titleDrag = useDragOffset('freedom_newtab_offset_title', pageRef);
+  const searchDrag = useDragOffset('freedom_newtab_offset_search', pageRef);
+  const linksDrag = useDragOffset('freedom_newtab_offset_links', pageRef);
+
   const [brandFirst, ...brandRest] = 'Freedom Browser'.split(' ');
 
   return (
@@ -227,8 +240,15 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           </div>
         )}
 
-        {/* Hero */}
-        <header className="mb-[9vh]">
+        {/* Hero (draggable within the wallpaper) */}
+        <header
+          id="newtab-title"
+          ref={titleDrag.ref}
+          {...titleDrag.handlers}
+          style={titleDrag.style}
+          title={t('layout.dragHint')}
+          className={`mb-[9vh] self-start w-fit touch-none ${titleDrag.isDragging ? 'relative z-30 cursor-grabbing' : 'cursor-grab'}`}
+        >
           <h1 className="text-[clamp(28px,4vw,var(--fb-fs-title))] font-normal tracking-tight leading-tight">
             {brandFirst}{' '}
             <span className="text-[var(--fb-accent-soft)]">{brandRest.join(' ')}</span>
@@ -237,7 +257,14 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         </header>
 
         {/* Search */}
-        <form onSubmit={handleSearch} className="w-full max-w-[460px] mx-auto mb-10">
+        <div
+          id="newtab-search"
+          ref={searchDrag.ref}
+          {...searchDrag.handlers}
+          style={searchDrag.style}
+          className={`w-full max-w-[460px] mx-auto mb-10 touch-none ${searchDrag.isDragging ? 'relative z-30 cursor-grabbing' : 'cursor-grab'}`}
+        >
+        <form onSubmit={handleSearch} className="w-full">
           <div className="flex items-center w-full h-11 px-4 rounded-[var(--fb-radius-pill)] border border-[var(--fb-border-strong)] bg-[var(--fb-input)] focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-colors shadow-[var(--fb-shadow-card)]">
             <Search className="w-4 h-4 text-[var(--fb-text-2)] mr-3 shrink-0" />
             <input
@@ -261,8 +288,16 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           </div>
         </form>
 
-        {/* Favorites (speed dial) */}
-        <div className="flex flex-wrap justify-center gap-x-5 gap-y-4 max-w-[560px] mx-auto">
+        </div>
+
+        {/* Favorites (speed dial) + Add button: drag the group by the Add button or the gaps */}
+        <div
+          id="newtab-links"
+          ref={linksDrag.ref}
+          {...linksDrag.handlers}
+          style={linksDrag.style}
+          className={`flex flex-wrap justify-center gap-x-5 gap-y-4 max-w-[560px] mx-auto touch-none ${linksDrag.isDragging ? 'relative z-30 cursor-grabbing' : ''}`}
+        >
           {favorites.map((fav, index) => {
             const iconUrl = FaviconService.getFaviconSync(fav.url);
             return (
@@ -330,6 +365,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           })}
           <button
             type="button"
+            id="newtab-add"
             onClick={handleOpenAddModal}
             className="group flex flex-col items-center w-16"
             title={t('newtab.addFavorite')}

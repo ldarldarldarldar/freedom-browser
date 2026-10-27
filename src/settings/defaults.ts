@@ -17,22 +17,10 @@ export const SEARCH_ENGINES: SearchEngine[] = [
     icon: '🔍',
   },
   {
-    id: 'bing',
-    name: 'Bing',
-    searchUrl: 'https://www.bing.com/search?q=%s',
-    icon: '🌐',
-  },
-  {
     id: 'brave',
     name: 'Brave Search',
     searchUrl: 'https://search.brave.com/search?q=%s',
     icon: '🦁',
-  },
-  {
-    id: 'ecosia',
-    name: 'Ecosia',
-    searchUrl: 'https://www.ecosia.org/search?q=%s',
-    icon: '🌲',
   },
 ];
 
@@ -68,6 +56,8 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   // Visual Customization & Themes
   theme: 'black-space',
   newTabWallpaper: 'ridges',
+  sidebarDock: 'left',
+  toolbarDock: 'top',
   downloadSpeedLimitKBps: 0,
   themePreset: 'graphite',
   palette: THEME_PRESETS.graphite,
