@@ -144,7 +144,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
       <div className="mt-3.5 p-3 rounded-xl bg-[var(--fb-bg)] border border-[var(--fb-border)]">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[11px] text-neutral-300 font-medium flex items-center gap-1.5">
-            <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+            <HardDrive className="w-3.5 h-3.5 text-neutral-400" />
             <span>{t('frc.browserRam')}</span>
           </span>
           <span className="font-mono text-xs font-bold text-white">
@@ -264,7 +264,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
         </button>
 
         {cleanedFeedback && (
-          <div className="mt-2 p-2 rounded-lg bg-emerald-950/70 border border-emerald-500/30 text-emerald-300 text-[11px] font-medium text-center animate-fade-in flex items-center justify-center gap-1.5">
+          <div className="mt-2 p-2 rounded-lg bg-[var(--fb-surface-hover)] border border-[var(--fb-border)] text-neutral-200 text-[11px] font-medium text-center animate-fade-in flex items-center justify-center gap-1.5">
             <Check className="w-3.5 h-3.5 shrink-0" />
             <span>{cleanedFeedback}</span>
           </div>
@@ -301,7 +301,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
                   <div className="text-[10px] text-neutral-400 font-mono flex items-center gap-2">
                     <span>{candidate.domain}</span>
                     <span>•</span>
-                    <span className="text-emerald-400 font-semibold">{candidate.privateMemoryMb} MB</span>
+                    <span className="text-neutral-200 font-semibold">{candidate.privateMemoryMb} MB</span>
                     <span>•</span>
                     <span>{candidate.idleTimeMinutes}m idle</span>
                   </div>
@@ -333,7 +333,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
           className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-neutral-300 hover:text-white transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2 text-[11px] font-medium">
-            <Sliders className="w-3.5 h-3.5 text-emerald-400" />
+            <Sliders className="w-3.5 h-3.5 text-neutral-400" />
             <span>{t('frc.openDiagnostics')} (freedom://memory)</span>
           </div>
           <ChevronRight className="w-4 h-4 text-neutral-400" />

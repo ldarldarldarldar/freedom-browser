@@ -104,7 +104,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
       case 'network-service':
         return <Activity className="w-3.5 h-3.5 text-amber-400" />;
       default:
-        return <Server className="w-3.5 h-3.5 text-emerald-400" />;
+        return <Server className="w-3.5 h-3.5 text-neutral-400" />;
     }
   };
 
@@ -145,7 +145,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 bg-[var(--fb-bg)] border-b border-white/[0.08]">
           <div className="flex items-center gap-2.5">
-            <Activity className="w-5 h-5 text-emerald-400" />
+            <Activity className="w-5 h-5 text-neutral-400" />
             <div>
               <h2 className="text-sm font-semibold text-white tracking-wide">
                 {t('taskmgr.title')}
@@ -182,13 +182,13 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-black/20 border-b border-white/[0.08] text-xs font-mono">
           <div className="p-3.5 rounded-2xl bg-white/[0.025] border border-white/[0.07]">
             <div className="text-[10px] text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-              <HardDrive className="w-3.5 h-3.5 text-emerald-400" />
+              <HardDrive className="w-3.5 h-3.5 text-neutral-400" />
               <span>{t('taskmgr.physicalRam')}</span>
             </div>
             <div className="text-lg font-bold text-white mt-0.5">
               {stats ? `${stats.totalBrowserRamMb} MB` : '...'}
             </div>
-            <div className="text-[10px] text-emerald-400 flex items-center gap-1">
+            <div className="text-[10px] text-neutral-400 flex items-center gap-1">
               <span>{stats?.privateRamMb ? t('taskmgr.private', { amount: stats.privateRamMb }) : t('taskmgr.proportional')}</span>
             </div>
           </div>
@@ -208,10 +208,10 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
 
           <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <div className="text-[10px] text-neutral-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+              <Cpu className="w-3.5 h-3.5 text-neutral-400" />
               <span>{t('taskmgr.browserCpu')}</span>
             </div>
-            <div className="text-lg font-bold text-emerald-400 mt-0.5">
+            <div className="text-lg font-bold text-neutral-100 mt-0.5">
               {stats ? `${stats.totalBrowserCpuPercent}%` : '0.5%'}
             </div>
             <div className="text-[10px] text-neutral-400">
@@ -227,7 +227,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
             <div className="text-lg font-bold text-white mt-0.5">
               {tabs.length}
             </div>
-            <div className="text-[10px] text-emerald-400">
+            <div className="text-[10px] text-neutral-400">
               {t('taskmgr.hibernatedCount', { count: tabs.filter((t) => t.isSuspended).length })}
             </div>
           </div>
@@ -248,7 +248,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                 >
                   <div className="flex items-center gap-1">
                     <span>{t('taskmgr.thRam')}</span>
-                    <ArrowUpDown className="w-3 h-3 text-emerald-400" />
+                    <ArrowUpDown className="w-3 h-3 text-neutral-400" />
                   </div>
                 </th>
                 <th
@@ -301,7 +301,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                     <td className="py-2 px-2 text-[11px] text-neutral-500">
                       {proc.pid}
                     </td>
-                    <td className="py-2 px-3 font-semibold text-emerald-300">
+                    <td className="py-2 px-3 font-semibold text-neutral-100">
                       {formatBytes(proc.ramUsageBytes)}
                     </td>
                     <td className="py-2 px-3 text-neutral-400">
@@ -363,7 +363,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
                   onClick={() => {
                     if (selectedProcess.tabId) onSuspendTab(selectedProcess.tabId);
                   }}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 flex items-center gap-1.5 transition-colors text-xs font-medium cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl bg-[var(--fb-accent)] hover:bg-[var(--fb-accent-strong)] border border-transparent text-[var(--fb-on-accent)] flex items-center gap-1.5 transition-colors text-xs font-medium cursor-pointer"
                   title="Suspend tab to instantly reclaim RAM"
                 >
                   <Moon className="w-3.5 h-3.5" />
