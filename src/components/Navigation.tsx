@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  VenetianMask,
   ArrowLeft,
   ArrowRight,
   RotateCcw,
@@ -70,6 +71,7 @@ interface NavigationProps {
   browserRamMb?: number;
   systemRamMb?: number;
   memoryPressureLevel?: 'normal' | 'moderate' | 'critical';
+  onNewPrivateTab?: () => void;
   privacyToggles?: { key: string; label: string; value: boolean; icon: React.ElementType }[];
   onTogglePrivacy?: (key: string) => void;
 }
@@ -110,6 +112,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   memoryPressureLevel = 'normal',
   privacyToggles,
   onTogglePrivacy,
+  onNewPrivateTab,
 }) => {
   const { t } = useTranslation();
   const [inputValue, setInputValue] = useState('');
@@ -471,6 +474,24 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <span>{t('nav.newTab')}</span>
                 <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+T</span>
               </button>
+
+              {onNewPrivateTab && (
+                <button
+                  id="menu-new-private-tab"
+                  type="button"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onNewPrivateTab();
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <VenetianMask className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>{t('incognito.newTab')}</span>
+                  </span>
+                  <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+Shift+N</span>
+                </button>
+              )}
 
               {/* History Item */}
               {onOpenHistory && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Globe, Plus, Pencil, X, Settings, ArrowRight, Clock, ShieldCheck, EyeOff, SlidersHorizontal } from 'lucide-react';
+import { VenetianMask, Search, Globe, Plus, Pencil, X, Settings, ArrowRight, Clock, ShieldCheck, EyeOff, SlidersHorizontal } from 'lucide-react';
 import { FreedomMark } from '../components/FreedomLogo';
 import { HistoryService } from '../services/historyService';
 import { SearchEngineId, ThemePalette, NewTabWallpaperId } from '../settings/types';
@@ -19,6 +19,7 @@ interface NewTabPageProps {
   showSettingsIcon?: boolean;
   showFreedomIcon?: boolean;
   wallpaper?: NewTabWallpaperId;
+  isPrivate?: boolean;
 }
 
 export const NewTabPage: React.FC<NewTabPageProps> = ({
@@ -27,6 +28,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   palette,
   isPerformanceMode = false,
   wallpaper = 'ridges',
+  isPrivate = false,
   onOpenSettings,
 }) => {
   const { t, language } = useTranslation();
@@ -142,6 +144,16 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       />
 
       <div className="relative flex-1 min-w-0 flex flex-col px-[7%] pt-[9vh] pb-8">
+        {isPrivate && (
+          <div id="incognito-banner" className="mb-6 max-w-[560px] flex gap-3 p-3.5 rounded-[var(--fb-radius-lg)] border border-[var(--fb-border-strong)] bg-[var(--fb-surface)]">
+            <VenetianMask className="w-5 h-5 shrink-0 text-[var(--fb-text)]" strokeWidth={1.75} />
+            <div>
+              <div className="text-[13px] font-medium">{t('incognito.title')}</div>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--fb-text-2)]">{t('incognito.desc')}</p>
+            </div>
+          </div>
+        )}
+
         {/* Hero */}
         <header className="mb-[9vh]">
           <h1 className="text-[clamp(28px,4vw,var(--fb-fs-title))] font-normal tracking-tight leading-tight">

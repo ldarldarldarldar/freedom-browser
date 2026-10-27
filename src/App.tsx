@@ -501,10 +501,26 @@ export default function App() {
     );
   }, []);
 
-  const handleNewTab = useCallback((targetUrl: string = 'freedom://newtab') => {
+  // Incognito partition: in-memory (no "persist:" prefix), regenerated after the last private tab closes
+  const incognitoPartitionRef = React.useRef<string | null>(null);
+  const getIncognitoPartition = () => {
+    if (!incognitoPartitionRef.current) {
+      incognitoPartitionRef.current = `freedom-incognito-${Date.now().toString(36)}`;
+    }
+    return incognitoPartitionRef.current;
+  };
+  useEffect(() => {
+    if (!tabs.some((t) => t.isPrivate)) incognitoPartitionRef.current = null;
+  }, [tabs]);
+
+  const handleNewTab = useCallback((targetUrl: string = 'freedom://newtab', options?: { isPrivate?: boolean }) => {
     const newId = `tab-${Date.now()}`;
+    const isPrivate = Boolean(options?.isPrivate);
     const newTab: BrowserTab = {
       id: newId,
+      isPrivate,
+      // One shared in-memory session per incognito run; a fresh one once all private tabs are closed
+      privatePartition: isPrivate ? getIncognitoPartition() : undefined,
       title: targetUrl === 'freedom://newtab' ? 'New Tab' : SearchEngineService.extractDomain(targetUrl),
       url: targetUrl,
       displayUrl: targetUrl,
@@ -596,7 +612,7 @@ export default function App() {
 
       const tabToClose = tabs.find((t) => t.id === id);
       if (tabToClose) {
-        SessionService.recordClosedTab(tabToClose, false);
+        SessionService.recordClosedTab(tabToClose, Boolean(tabToClose.isPrivate));
         setClosedTabsCount(SessionService.getRecentlyClosed().length);
       }
 
@@ -1008,7 +1024,7 @@ export default function App() {
         const [keepTab, ...closeTabs] = matchingTabs;
         closeTabs.forEach((t) => {
           tauriBridge.closeNativeTab(t.id);
-          SessionService.recordClosedTab(t, false);
+          SessionService.recordClosedTab(t, Boolean(t.isPrivate));
         });
         setClosedTabsCount(SessionService.getRecentlyClosed().length);
 
@@ -1483,7 +1499,7 @@ export default function App() {
 
             // Record history for external pages
             if (!isInternal && url) {
-              HistoryService.addEntry(title, url, favicon, false);
+              HistoryService.addEntry(title, url, favicon, Boolean(t.isPrivate));
             }
 
             return {
@@ -1543,7 +1559,7 @@ export default function App() {
       prev.map((t) => {
         if (t.id === tabId) {
           if (!isLoading && t.url && !t.url.startsWith('freedom://')) {
-            HistoryService.addEntry(t.title, t.url, t.favicon, false);
+            HistoryService.addEntry(t.title, t.url, t.favicon, Boolean(t.isPrivate));
           }
           return { ...t, isLoading };
         }
@@ -1668,6 +1684,9 @@ export default function App() {
           case 'new-tab':
             handleNewTab('freedom://newtab');
             break;
+          case 'new-private-tab':
+            handleNewTab('freedom://newtab', { isPrivate: true });
+            break;
           case 'open-file':
             handleOpenFile();
             break;
@@ -1751,6 +1770,13 @@ export default function App() {
       if (isCtrlOrCmd && !e.shiftKey && e.key.toLowerCase() === 't') {
         e.preventDefault();
         handleNewTab('freedom://newtab');
+        return;
+      }
+
+      // Ctrl+Shift+N: New incognito tab
+      if (isCtrlOrCmd && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNewTab('freedom://newtab', { isPrivate: true });
         return;
       }
 
@@ -2234,6 +2260,7 @@ export default function App() {
               }
             }}
             onHome={() => handleNavigate('freedom://newtab')}
+            onNewPrivateTab={() => handleNewTab('freedom://newtab', { isPrivate: true })}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenTaskManager={() => setIsTaskManagerOpen(true)}
             onOpenDownloads={() => setIsDownloadsOpen(!isDownloadsOpen)}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  VenetianMask,
   Plus,
   X,
   Globe,
@@ -193,8 +194,8 @@ export const TabBar: React.FC<TabBarProps> = ({
                   const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuHeight - 8));
                   setContextMenu({ tab, x, y });
                 }}
-                title={`${displayTitle} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isInSplit ? ` [Split: Pane ${splitPaneIndex + 1}]` : ''}`}
-                className={`group relative flex items-center h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 cursor-pointer min-w-[110px] max-w-[210px] flex-1 overflow-hidden app-no-drag select-none ${
+                title={`${tab.isPrivate ? `[${t('incognito.badge')}] ` : ''}${displayTitle} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isInSplit ? ` [Split: Pane ${splitPaneIndex + 1}]` : ''}`}
+                className={`group relative flex items-center h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 cursor-pointer min-w-[110px] max-w-[210px] flex-1 overflow-hidden app-no-drag select-none ${tab.isPrivate ? 'outline outline-1 outline-dashed outline-[var(--fb-border-strong)] -outline-offset-1 ' : ''}${
                   isActive
                     ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] border border-[var(--fb-border)] font-medium'
                     : isInSplit
@@ -219,7 +220,9 @@ export const TabBar: React.FC<TabBarProps> = ({
 
                 {/* Favicon Container with FRC Status Dot */}
                 <div className="relative mr-2 shrink-0 flex items-center justify-center w-4 h-4">
-                  {tab.isLoading ? (
+                  {tab.isPrivate && !tab.isLoading ? (
+                    <VenetianMask className="w-3.5 h-3.5 text-[var(--fb-text)]" aria-label={t('incognito.badge')} />
+                  ) : tab.isLoading ? (
                     <div className="tab-loading-spinner shrink-0" title={t('tab.loading')} />
                   ) : tab.url.startsWith('freedom://') ? (
                     <FreedomMark size={13} className="text-[var(--fb-text-2)]" />

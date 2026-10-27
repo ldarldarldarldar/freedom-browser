@@ -34,6 +34,9 @@ export interface BrowserTab {
   isMuted?: boolean;
   security: 'secure' | 'insecure' | 'internal';
   isPinned?: boolean;
+  /** Incognito: in-memory session partition, never written to history/session restore */
+  isPrivate?: boolean;
+  privatePartition?: string;
   accessCount?: number;
   privateMemoryBytes?: number;
   rssMemoryBytes?: number;

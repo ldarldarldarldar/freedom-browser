@@ -221,12 +221,13 @@ html, body {
 /* New-tab backdrop art (pure CSS, no bitmap): vertical light beam + horizon glow */
 .newtab-art {
   background:
-    radial-gradient(ellipse 60% 45% at 50% 62%, color-mix(in srgb, var(--fb-text) 7%, transparent), transparent 70%),
+    radial-gradient(ellipse 45% 45% at 78% 62%, color-mix(in srgb, var(--fb-text) 7%, transparent), transparent 70%),
     radial-gradient(ellipse 120% 80% at 50% 0%, transparent 40%, color-mix(in srgb, black 55%, transparent));
 }
 .newtab-art__beam {
   position: absolute;
-  left: 50%;
+  /* Off-centre so it never crosses the search bar and quick links */
+  left: 78%;
   top: 8%;
   bottom: 22%;
   width: 2px;

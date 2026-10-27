@@ -25,7 +25,8 @@ export class SessionRestoreService {
    * Check if there are active tabs worth preserving (non-empty tabs or >1 tabs)
    */
   public static hasRestorableTabs(tabs: BrowserTab[]): boolean {
-    if (!tabs || tabs.length === 0) return false;
+    tabs = (tabs || []).filter((t) => !t.isPrivate);
+    if (tabs.length === 0) return false;
     // If more than 1 tab, always restorable
     if (tabs.length > 1) return true;
     // If 1 tab, check if it's not a plain empty new tab
@@ -38,7 +39,7 @@ export class SessionRestoreService {
    */
   public static saveSession(tabs: BrowserTab[], activeTabId: string): void {
     try {
-      const restorableTabs: SavedTabSession[] = tabs.map((t) => ({
+      const restorableTabs: SavedTabSession[] = tabs.filter((t) => !t.isPrivate).map((t) => ({
         id: t.id,
         title: t.title,
         url: t.url,
