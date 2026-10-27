@@ -93,10 +93,10 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
   return (
     <div
       id="freedom-downloads-drawer"
-      className="absolute top-13 right-3 w-[400px] max-h-[75vh] bg-[#11131a]/98 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden text-neutral-200 animate-fade-in"
+      className="absolute top-[calc(var(--fb-tabbar-h)+var(--fb-toolbar-h)+6px)] right-3 w-[400px] max-w-[calc(100vw-24px)] max-h-[75vh] bg-[var(--fb-surface)] border border-[var(--fb-border)] rounded-[var(--fb-radius-lg)] shadow-[var(--fb-shadow-pop)] z-50 flex flex-col overflow-hidden text-neutral-200 animate-fade-in"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4.5 py-3.5 bg-[#0c0d13]/80 border-b border-white/[0.08] select-none">
+      <div className="flex items-center justify-between px-4.5 py-3.5 bg-[var(--fb-bg)]/80 border-b border-white/[0.08] select-none">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
             <Download className="w-3.5 h-3.5" />

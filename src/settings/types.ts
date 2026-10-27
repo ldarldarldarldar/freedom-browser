@@ -17,6 +17,7 @@ export type AnimationIntensity = 'subtle' | 'normal' | 'energetic' | 'paused';
 export type BackgroundImageScale = 'cover' | 'contain' | 'stretch' | 'center';
 
 export type ThemePresetId =
+  | 'graphite'
   | 'midnight'
   | 'forest'
   | 'ocean'
@@ -55,6 +56,7 @@ export interface ThemePalette {
 }
 
 export interface BrowserSettings {
+  uiDesignVersion?: number;
   // Main Settings
   defaultSearchEngine: SearchEngineId;
   customSearchUrl: string;

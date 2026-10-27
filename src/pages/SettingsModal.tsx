@@ -14,6 +14,10 @@ import {
   Layers,
   Activity,
   Flame,
+  Cpu,
+  AlertTriangle,
+  Info,
+  ChevronRight,
 } from 'lucide-react';
 import { BrowserSettings, BrowserMode, ThemePresetId, ThemePalette, BackgroundImageScale } from '../settings/types';
 import { SEARCH_ENGINES } from '../settings/defaults';
@@ -22,6 +26,8 @@ import { logger } from '../services/loggerService';
 import { tauriBridge } from '../services/tauriBridge';
 import freenImg from '../assets/freen-mascot.png';
 import { useTranslation, TranslationKey } from '../i18n';
+import { FreedomMark } from '../components/FreedomLogo';
+import { APP_VERSION } from '../version';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -31,7 +37,7 @@ interface SettingsModalProps {
   onClearBrowsingData: () => void;
 }
 
-type SettingsTab = 'main' | 'privacy' | 'telemetry' | 'visual' | 'performance';
+type SettingsTab = 'main' | 'privacy' | 'telemetry' | 'visual' | 'performance' | 'about';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -41,7 +47,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearBrowsingData,
 }) => {
   const { t, language, setLanguage } = useTranslation();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('performance');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('main');
   const [dataCleared, setDataCleared] = useState(false);
   const [viewingLogs, setViewingLogs] = useState(false);
   const [showDetailedColors, setShowDetailedColors] = useState(false);
@@ -49,6 +55,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [userDataPath, setUserDataPath] = useState<string>('');
   const [isMigratingStorage, setIsMigratingStorage] = useState(false);
   const [storageStatusMsg, setStorageStatusMsg] = useState<string | null>(null);
+  const [hardwareAcc, setHardwareAcc] = useState<boolean>(settings.hardwareAcceleration ?? true);
+  const [showRestartBanner, setShowRestartBanner] = useState<boolean>(false);
+
+  useEffect(() => {
+    if ((window as any).electronAPI?.getHardwareAcceleration) {
+      (window as any).electronAPI.getHardwareAcceleration().then((enabled: boolean) => {
+        if (typeof enabled === 'boolean') {
+          setHardwareAcc(enabled);
+        }
+      });
+    }
+  }, []);
+
+  const handleToggleHardwareAcc = async (enabled: boolean) => {
+    setHardwareAcc(enabled);
+    if ((window as any).electronAPI?.setHardwareAcceleration) {
+      await (window as any).electronAPI.setHardwareAcceleration(enabled);
+    }
+    onUpdateSettings({ hardwareAcceleration: enabled });
+    setShowRestartBanner(true);
+  };
 
   useEffect(() => {
     if (activeTab === 'main' && (window as any).electronAPI?.getUserDataPath) {
@@ -237,82 +264,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex flex-1 min-h-0">
           {/* Navigation Sidebar */}
           <div
-            className="w-56 border-r border-white/[0.08] p-3 space-y-1.5 text-xs transition-colors shrink-0"
-            style={{
-              backgroundColor:
-                settings.applyThemeToBackground && settings.palette?.sidebarBg
-                  ? settings.palette.sidebarBg
-                  : 'rgba(10, 11, 16, 0.75)',
-            }}
+            className="w-64 border-r border-[var(--fb-border)] p-3 space-y-0.5 text-xs shrink-0 bg-[var(--fb-sidebar)]"
           >
-            <div className="px-3 pt-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-neutral-500 font-semibold">
-              {t('settings.title')}
+            <div className="flex flex-col items-center gap-1 pt-3 pb-4">
+              <FreedomMark size={34} className="text-[var(--fb-text)]" />
+              <span className="mt-1 text-[13px] text-[var(--fb-text)]">Freedom Browser</span>
+              <span className="text-[10px] text-[var(--fb-text-3)]">v{APP_VERSION}</span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('performance')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
-                activeTab === 'performance'
-                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
-              }`}
-            >
-              <Zap className="w-4 h-4 text-emerald-400" />
-              <span>{t('settings.tabPerformance')}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('visual')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
-                activeTab === 'visual'
-                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
-              }`}
-            >
-              <Palette className="w-4 h-4 text-emerald-400" />
-              <span>{t('settings.tabVisual')}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('main')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
-                activeTab === 'main'
-                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
-              }`}
-            >
-              <Settings className="w-4 h-4 text-emerald-400" />
-              <span>{t('settings.tabMain')}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('privacy')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
-                activeTab === 'privacy'
-                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
-              }`}
-            >
-              <Shield className="w-4 h-4 text-emerald-400" />
-              <span>{t('settings.tabPrivacy')}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('telemetry')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-left text-xs ${
-                activeTab === 'telemetry'
-                  ? 'bg-white/[0.08] text-white font-semibold border border-white/[0.08] shadow-xs'
-                  : 'text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.04] border border-transparent'
-              }`}
-            >
-              <Activity className="w-4 h-4 text-emerald-400" />
-              <span>{t('settings.tabTelemetry')}</span>
-            </button>
+            {(
+              [
+                { id: 'main', icon: Settings, label: t('settings.tabMain') },
+                { id: 'visual', icon: Palette, label: t('settings.tabVisual') },
+                { id: 'privacy', icon: Shield, label: t('settings.tabPrivacy') },
+                { id: 'performance', icon: Zap, label: t('settings.tabPerformance') },
+                { id: 'telemetry', icon: Activity, label: t('settings.tabTelemetry') },
+                { id: 'about', icon: Info, label: t('nav.about') },
+              ] as { id: SettingsTab; icon: React.ElementType; label: string }[]
+            ).map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                aria-current={activeTab === id ? 'page' : undefined}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[var(--fb-radius-md)] transition-colors text-left text-xs ${
+                  activeTab === id
+                    ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] font-medium'
+                    : 'text-[var(--fb-text-2)] hover:text-[var(--fb-text)] hover:bg-[var(--fb-surface)]'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                <span className="flex-1 truncate">{label}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-[var(--fb-text-3)]" />
+              </button>
+            ))}
           </div>
 
           {/* Tab Content Panes */}
@@ -477,6 +462,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                     />
                   </div>
+
+                  {/* Hardware Acceleration (GPU) Toggle & Restart Notification */}
+                  <div className="pt-3 border-t border-white/[0.06]">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                          <Cpu className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>{t('settings.hardwareAccTitle')}</span>
+                        </div>
+                        <div className="text-[11px] text-neutral-400 leading-relaxed mt-0.5">
+                          {t('settings.hardwareAccDesc')}
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={hardwareAcc}
+                        onChange={(e) => handleToggleHardwareAcc(e.target.checked)}
+                        className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                      />
+                    </div>
+
+                    {showRestartBanner && (
+                      <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-2 text-[11px] text-amber-300">
+                          <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                          <span>{t('settings.restartToApply')}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if ((window as any).electronAPI?.relaunchApp) {
+                              (window as any).electronAPI.relaunchApp();
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[11px] font-medium transition-colors shrink-0 cursor-pointer"
+                        >
+                          {t('settings.restartNow')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -503,7 +529,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       const p = THEME_PRESETS[presetKey as keyof typeof THEME_PRESETS];
                       const isSelected = settings.themePreset === presetKey;
                       const themeName =
-                        presetKey === 'midnight'
+                        presetKey === 'graphite'
+                          ? t('settings.theme.graphite')
+                          : presetKey === 'midnight'
                           ? t('settings.theme.midnight')
                           : presetKey === 'forest'
                           ? t('settings.theme.forest')
@@ -974,6 +1002,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {dataCleared ? t('settings.clearedSuccess') : t('settings.clearAllData')}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'about' && (
+              <div className="flex flex-col items-center text-center gap-3 pt-6 animate-fade-in">
+                <FreedomMark size={56} className="text-[var(--fb-text)]" />
+                <h3 className="text-lg font-medium text-white tracking-tight">Freedom Browser</h3>
+                <p className="text-xs text-neutral-400">{t('about.version', { version: APP_VERSION })}</p>
+                <p className="max-w-md text-xs text-neutral-300 leading-relaxed">{t('about.description')}</p>
+                <div className="flex flex-wrap justify-center gap-2 pt-2 text-[11px] text-neutral-400">
+                  <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08]">{t('about.engine')}</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08]">{t('about.runtime')}</span>
+                  <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08]">{t('about.backend')}</span>
+                </div>
+                <p className="pt-4 text-[11px] text-neutral-500">{t('about.license')}</p>
               </div>
             )}
 

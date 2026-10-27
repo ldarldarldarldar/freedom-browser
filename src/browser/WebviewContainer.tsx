@@ -312,6 +312,7 @@ const ElectronWebviewTab: React.FC<{
         src={tab.url}
         className="w-full h-full border-none outline-none bg-neutral-950"
         allowpopups="true"
+        allowfullscreen="true"
         webpreferences="contextIsolation=yes, javascript=yes, allowRunningInsecureContent=no"
         preload={(window as any).electronAPI?.webviewPreload || undefined}
       />
@@ -536,9 +537,14 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
 
     const isNewTab = activeTab.url === 'freedom://newtab';
     const isMemoryPage = activeTab.url === 'freedom://memory';
-    // Collect all open external tabs that are not suspended or hibernated
+    // Collect all open external tabs that are not suspended, hibernated, or frozen (unless it is the active tab)
+    // Unmounting frozen and hibernated background tabs releases their Chromium renderer processes and textures
     const externalTabs = tabs.length > 0
-      ? tabs.filter((t) => !t.url.startsWith('freedom://') && !t.isSuspended && t.lifecycleState !== 'hibernated')
+      ? tabs.filter(
+          (t) =>
+            !t.url.startsWith('freedom://') &&
+            ((!t.isSuspended && t.lifecycleState !== 'hibernated' && t.lifecycleState !== 'frozen') || t.id === activeTab.id)
+        )
       : (!isNewTab && !isMemoryPage ? [activeTab] : []);
 
     return (

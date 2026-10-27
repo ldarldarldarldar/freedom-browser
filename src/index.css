@@ -1,12 +1,118 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   Freedom Design Tokens — single source of truth for the UI (see REDESIGN_REPORT.md)
+   Defaults = "Graphite" reference theme. App.tsx overrides the palette-driven
+   tokens at runtime from settings.palette, so other theme presets keep working.
+   ========================================================================== */
 :root {
-  --fb-accent: #10b981;
-  --fb-surface-base: #0b0c10;
-  --fb-surface-chrome: #12141a;
-  --fb-surface-card: #181b24;
-  --fb-surface-border: rgba(255, 255, 255, 0.08);
+  /* Palette */
+  --fb-accent: #57c08b;
+  --fb-accent-strong: color-mix(in srgb, var(--fb-accent) 78%, black);
+  --fb-accent-soft: color-mix(in srgb, var(--fb-accent) 62%, white);
+  --fb-on-accent: #07120c;
+  --fb-bg: #0c0e10;            /* window / page backdrop */
+  --fb-chrome: #121417;        /* tab strip + toolbar */
+  --fb-sidebar: #111315;       /* left rail */
+  --fb-surface: #16191c;       /* cards, panels, menus */
+  --fb-surface-hover: #1e2226; /* hovered cards / active nav item */
+  --fb-surface-3: #262a2f;     /* pressed / raised controls */
+  --fb-input: #191c20;         /* omnibox, search fields */
+  --fb-text: #e9ebed;          /* primary text  (15.6:1 on bg) */
+  --fb-text-2: #a2a8ae;        /* secondary     (7.9:1 on bg)  */
+  --fb-text-3: #7d848b;        /* tertiary/meta (4.9:1 on bg)  */
+  --fb-border: rgba(255, 255, 255, 0.07);
+  --fb-border-strong: rgba(255, 255, 255, 0.13);
+  --fb-focus: var(--fb-accent);
+  --fb-danger: #e5605a;
+
+  /* Typography */
+  --fb-font: "Inter", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, "Noto Sans", sans-serif;
+  --fb-font-code: "JetBrains Mono", "Cascadia Code", ui-monospace, "DejaVu Sans Mono", monospace;
+  --fb-fs-xs: 11px;
+  --fb-fs-sm: 12px;
+  --fb-fs-md: 13px;
+  --fb-fs-title: 44px;
+
+  /* Geometry */
+  --fb-radius-sm: 6px;
+  --fb-radius-md: 8px;
+  --fb-radius-lg: 12px;
+  --fb-radius-xl: 16px;
+  --fb-radius-pill: 9999px;
+  --fb-tabbar-h: 38px;
+  --fb-toolbar-h: 38px;
+  --fb-sidebar-w: 128px;
+  --fb-sidebar-w-collapsed: 48px;
+
+  /* Effects */
+  --fb-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--fb-border);
+  --fb-shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --fb-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --fb-dur: 140ms;
+
+  /* Legacy aliases kept for existing code */
+  --fb-surface-base: var(--fb-bg);
+  --fb-surface-chrome: var(--fb-chrome);
+  --fb-surface-card: var(--fb-surface);
+  --fb-surface-border: var(--fb-border);
   --fb-surface-border-subtle: rgba(255, 255, 255, 0.04);
+}
+
+/* Re-point Tailwind's neutral + emerald scales (used across all components) to the
+   tokens, so every screen follows the active theme without per-file hex values. */
+@theme inline {
+  --font-sans: var(--fb-font);
+  /* Reference uses one sans family; numbers keep alignment via tabular-nums below */
+  --font-mono: var(--fb-font);
+  --color-neutral-50: var(--fb-text);
+  --color-neutral-100: var(--fb-text);
+  --color-neutral-200: var(--fb-text);
+  --color-neutral-300: color-mix(in srgb, var(--fb-text) 60%, var(--fb-text-2));
+  --color-neutral-400: var(--fb-text-2);
+  --color-neutral-500: var(--fb-text-3);
+  --color-neutral-600: color-mix(in srgb, var(--fb-text-3) 70%, var(--fb-surface));
+  --color-neutral-700: var(--fb-surface-3);
+  --color-neutral-800: var(--fb-surface-hover);
+  --color-neutral-900: var(--fb-surface);
+  --color-neutral-950: var(--fb-bg);
+  --color-emerald-200: var(--fb-accent-soft);
+  --color-emerald-300: var(--fb-accent-soft);
+  --color-emerald-400: var(--fb-accent);
+  --color-emerald-500: var(--fb-accent);
+  --color-emerald-600: var(--fb-accent-strong);
+  --color-emerald-700: var(--fb-accent-strong);
+  --color-emerald-800: color-mix(in srgb, var(--fb-accent) 35%, var(--fb-bg));
+  --color-emerald-900: color-mix(in srgb, var(--fb-accent) 22%, var(--fb-bg));
+  --color-emerald-950: color-mix(in srgb, var(--fb-accent) 12%, var(--fb-bg));
+  /* Secondary hues collapse into the monochrome reference palette */
+  --color-sky-300: var(--fb-text);
+  --color-sky-400: var(--fb-text-2);
+  --color-sky-500: var(--fb-text-2);
+  --color-blue-400: var(--fb-text-2);
+  --color-purple-300: var(--fb-text);
+  --color-purple-400: var(--fb-text-2);
+  --color-purple-500: var(--fb-text-2);
+  --color-amber-300: #e3c27a;
+  --color-amber-400: #d9b25f;
+  --color-amber-500: #c9a04b;
+  --color-rose-400: var(--fb-danger);
+  --color-rose-500: var(--fb-danger);
+  /* Moderate rounding from the reference */
+  --radius-xl: var(--fb-radius-lg);
+  --radius-2xl: var(--fb-radius-lg);
+  --radius-3xl: var(--fb-radius-xl);
+}
+
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Visible keyboard focus (text fields draw their own focus ring) */
+:focus-visible:not(input[type="text"], input[type="search"], input[type="url"], input:not([type]), textarea) {
+  outline: 2px solid var(--fb-focus);
+  outline-offset: 2px;
+  border-radius: var(--fb-radius-sm);
 }
 
 /* Typography & Rendering Smoothing */
@@ -14,9 +120,10 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--fb-font);
+  font-size: var(--fb-fs-md);
   background-color: var(--fb-surface-base);
-  color: #ededed;
+  color: var(--fb-text);
 }
 
 /* Performance Mode: Completely eliminates CSS transitions, keyframe animations, and expensive backdrop filters to minimize GPU/CPU */
@@ -41,7 +148,7 @@ html, body {
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 1.5px solid var(--theme-accent, #10b981);
+  border: 1.5px solid var(--fb-accent);
   border-top-color: transparent !important;
   border-radius: 9999px;
   animation: tab-spin 0.65s linear infinite !important;
@@ -68,8 +175,8 @@ html, body {
 }
 
 ::selection {
-  background: var(--fb-accent, #10b981);
-  color: #000000;
+  background: color-mix(in srgb, var(--fb-accent) 45%, transparent);
+  color: var(--fb-text);
 }
 
 /* Frameless Window Draggable Regions */
@@ -98,4 +205,79 @@ html, body {
 
 .animate-slide-left {
   animation: slideLeft 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Layout: Home, Find, Bookmarks, History and Downloads moved from the toolbar to the
+   sidebar (#browser-sidebar) and the main menu, matching the reference. The buttons stay
+   mounted so their keyboard shortcuts and logic are untouched. */
+#nav-btn-home,
+#btn-toggle-find,
+#btn-open-bookmarks,
+#btn-open-history,
+#btn-open-downloads {
+  display: none;
+}
+
+/* New-tab backdrop art (pure CSS, no bitmap): vertical light beam + horizon glow */
+.newtab-art {
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 62%, color-mix(in srgb, var(--fb-text) 7%, transparent), transparent 70%),
+    radial-gradient(ellipse 120% 80% at 50% 0%, transparent 40%, color-mix(in srgb, black 55%, transparent));
+}
+.newtab-art__beam {
+  position: absolute;
+  left: 50%;
+  top: 8%;
+  bottom: 22%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--fb-text) 85%, transparent) 35%, var(--fb-text) 70%, transparent);
+  box-shadow: 0 0 18px 4px color-mix(in srgb, var(--fb-text) 22%, transparent), 0 0 60px 12px color-mix(in srgb, var(--fb-text) 6%, transparent);
+  opacity: 0.75;
+}
+
+/* Checkboxes render as toggle switches (reference: settings / main menu toggles) */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex-shrink: 0;
+  width: 30px;
+  height: 17px;
+  margin: 0;
+  border-radius: var(--fb-radius-pill);
+  background: var(--fb-surface-3);
+  box-shadow: inset 0 0 0 1px var(--fb-border-strong);
+  cursor: pointer;
+  transition: background var(--fb-dur) var(--fb-ease);
+}
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--fb-text-2);
+  transition: transform var(--fb-dur) var(--fb-ease), background var(--fb-dur) var(--fb-ease);
+}
+input[type="checkbox"]:checked {
+  background: var(--fb-accent);
+  box-shadow: none;
+}
+input[type="checkbox"]:checked::after {
+  transform: translateX(13px);
+  background: var(--fb-on-accent);
+}
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Native selects follow the tokens */
+select {
+  background-color: var(--fb-input);
+  color: var(--fb-text);
+  border-color: var(--fb-border-strong);
 }

@@ -4,22 +4,41 @@ const os = require('os');
 const fs = require('fs');
 const url = require('url');
 
-// User Data Storage Path Configuration
+// User Data Storage Path & System Configuration
 // Separates application binaries (e.g. Program Files\Freedom Browser) from user data (profiles, history, bookmarks, cookies).
 // Defaults to user-writable %APPDATA%\Freedom Browser\User Data on Windows or ~/.config/freedom-browser/User Data on Linux.
 const storageConfigFile = path.join(app.getPath('appData'), 'Freedom Browser', 'storage-config.json');
 let activeUserDataDir = path.join(app.getPath('appData'), 'Freedom Browser', 'User Data');
 
-try {
-  if (fs.existsSync(storageConfigFile)) {
-    const raw = fs.readFileSync(storageConfigFile, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.userDataPath && typeof parsed.userDataPath === 'string') {
-      activeUserDataDir = parsed.userDataPath;
+function readStorageConfig() {
+  try {
+    if (fs.existsSync(storageConfigFile)) {
+      const raw = fs.readFileSync(storageConfigFile, 'utf8');
+      return JSON.parse(raw) || {};
     }
+  } catch (err) {
+    console.warn('Failed to parse storage-config.json:', err);
   }
-} catch (err) {
-  console.warn('Failed to parse storage-config.json, using default user data path:', err);
+  return {};
+}
+
+function writeStorageConfig(updates) {
+  try {
+    const configDir = path.dirname(storageConfigFile);
+    fs.mkdirSync(configDir, { recursive: true });
+    const current = readStorageConfig();
+    const next = { ...current, ...updates, updatedAt: Date.now() };
+    fs.writeFileSync(storageConfigFile, JSON.stringify(next, null, 2), 'utf8');
+    return next;
+  } catch (err) {
+    console.warn('Failed to write storage-config.json:', err);
+    return null;
+  }
+}
+
+const initialStorageConfig = readStorageConfig();
+if (initialStorageConfig.userDataPath && typeof initialStorageConfig.userDataPath === 'string') {
+  activeUserDataDir = initialStorageConfig.userDataPath;
 }
 
 try {
@@ -27,6 +46,25 @@ try {
   app.setPath('userData', activeUserDataDir);
 } catch (err) {
   console.warn('Failed to set custom userData path, falling back:', err);
+}
+
+// Hardware Acceleration control: If disabled by user in Settings, disable Chromium GPU process entirely
+// This saves ~150-200 MB RAM on low-spec PCs by running rendering purely in CPU mode
+const isHardwareAccelerationEnabled = initialStorageConfig.hardwareAcceleration !== false;
+if (!isHardwareAccelerationEnabled) {
+  app.disableHardwareAcceleration();
+}
+
+// Expose V8 GC isolate hook in main process for deterministic memory reclamation
+const v8 = require('v8');
+const vm = require('vm');
+try {
+  v8.setFlagsFromString('--expose-gc');
+  if (!global.gc) {
+    global.gc = vm.runInNewContext('gc');
+  }
+} catch (err) {
+  console.warn('Failed to expose V8 gc in main process:', err);
 }
 
 // 1. Performance & Memory Optimization Command-Line Switches
@@ -39,14 +77,26 @@ app.commandLine.appendSwitch('disable-speech-api'); // Disables speech recogniti
 app.commandLine.appendSwitch('disable-background-networking'); // Eliminates background idle pinging
 app.commandLine.appendSwitch('disable-client-side-phishing-detection'); // Disables remote heuristic scraping
 app.commandLine.appendSwitch('disable-default-apps');
-app.commandLine.appendSwitch('no-default-browser-check');
-app.commandLine.appendSwitch('disable-features', 'MediaRouter,OptimizationHints,InterestFeedContentSuggestions,Translate,CalculateNativeWinOcclusion');
+const disableFeaturesList = process.platform === 'linux'
+  ? 'Vulkan,MediaRouter,OptimizationHints,InterestFeedContentSuggestions,Translate,CalculateNativeWinOcclusion'
+  : 'MediaRouter,OptimizationHints,InterestFeedContentSuggestions,Translate,CalculateNativeWinOcclusion';
+app.commandLine.appendSwitch('disable-features', disableFeaturesList);
+app.commandLine.appendSwitch('enable-features', 'V8FlushBaselineCode,V8FlushBytecode,V8MemoryReducer');
 app.commandLine.appendSwitch('renderer-process-limit', '6'); // Prevents runaway process explosion
 app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache (keeps working set lean)
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512'); // Ensure sufficient V8 heap for modern complex WebApps and Google Sign-in
+app.commandLine.appendSwitch('js-flags', '--expose-gc --max-old-space-size=512'); // Ensure sufficient V8 heap for modern WebApps & enable V8 GC
+
+// GPU optimizations & Linux Wayland/Vulkan conflict fix (saves 60-90 MB GPU process memory)
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('disable-vulkan'); // Fixes ozone-platform=wayland Vulkan conflict
+  app.commandLine.appendSwitch('disable-vulkan-surface');
+}
+app.commandLine.appendSwitch('disable-gpu-memory-buffer-video-frames');
+app.commandLine.appendSwitch('force-color-profile', 'srgb');
 
 const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 let mainWindow = null;
+let isForceQuitting = false;
 const activeDownloads = new Map();
 let activeDownloadsLocation = '';
 let currentAppLanguage = 'en';
@@ -150,7 +200,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-0.5.4-7.3.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -339,7 +389,7 @@ function createWindow() {
     height: 840,
     minWidth: 720,
     minHeight: 500,
-    backgroundColor: '#06080b',
+    backgroundColor: '#0c0e10',
     title: 'Freedom Browser',
     icon: iconPath,
     frame: false, // Completely eliminates OS title bar and native borders (Frameless window)
@@ -367,6 +417,44 @@ function createWindow() {
     }
   });
 
+  mainWindow.on('enter-full-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-fullscreen-change', true);
+    }
+  });
+
+  mainWindow.on('leave-full-screen', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('window-fullscreen-change', false);
+    }
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!isForceQuitting) {
+      event.preventDefault();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('request-app-close');
+      }
+    }
+  });
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    if (input.key === 'F11') {
+      event.preventDefault();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const next = !mainWindow.isFullScreen();
+        mainWindow.setFullScreen(next);
+      }
+      return;
+    }
+    if (input.key === 'Escape' && mainWindow && !mainWindow.isDestroyed() && mainWindow.isFullScreen()) {
+      event.preventDefault();
+      mainWindow.setFullScreen(false);
+      return;
+    }
+  });
+
   const fileOrUrlArg = pendingOpenUrl || extractFileUrlFromArgs(process.argv);
   const tabsCountArg = process.argv.find((a) => a.startsWith('--tabs='));
   const query = {};
@@ -381,6 +469,30 @@ function createWindow() {
     mainWindow.loadURL(devUrl.toString());
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), { query });
+  }
+
+  // CI smoke test (`--smoke-test`): verify the renderer UI mounted, then exit with a status code
+  if (process.argv.includes('--smoke-test')) {
+    const finish = (ok, info) => {
+      console.log(`[smoke-test] ${ok ? 'PASS' : 'FAIL'} ${info || ''}`);
+      app.exit(ok ? 0 : 1);
+    };
+    const timer = setTimeout(() => finish(false, 'timeout'), 45000);
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(async () => {
+        try {
+          const result = await mainWindow.webContents.executeJavaScript(
+            "JSON.stringify({ title: document.title, sidebar: !!document.getElementById('browser-sidebar'), omnibox: !!document.getElementById('browser-omnibar-input') })"
+          );
+          const parsed = JSON.parse(result);
+          clearTimeout(timer);
+          finish(parsed.sidebar && parsed.omnibox, result);
+        } catch (err) {
+          clearTimeout(timer);
+          finish(false, String(err));
+        }
+      }, 3000);
+    });
   }
 
   mainWindow.on('closed', () => {
@@ -477,9 +589,10 @@ function createWindow() {
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
   if (contents.getType() === 'webview') {
+    contents.setBackgroundThrottling(true); // Throttles timers/animations in background webviews to minimize CPU and RAM
     contents.setUserAgent(desktopChromeUA);
 
-    contents.setWindowOpenHandler(({ url }) => {
+    contents.setWindowOpenHandler(({ url, disposition }) => {
       // Allow Google Sign-In, account registration & OAuth popups so they can authenticate and communicate with window.opener
       const isAuthPopup = /google\.|appleid\.apple\.|login\.microsoftonline\.|github\.com\/login\/oauth|\/oauth|\/signin|\/signup|\/auth/i.test(url || '');
       if (isAuthPopup) {
@@ -495,15 +608,53 @@ app.on('web-contents-created', (event, contents) => {
           }
         };
       }
+      // Popup blocking: script-opened windows with window features ("new-window") are dropped;
+      // regular link targets (_blank, middle click) still open as tabs
+      if (privacyState.popupsBlocked && disposition === 'new-window') {
+        return { action: 'deny' };
+      }
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('webview-new-window', { url });
       }
       return { action: 'deny' };
     });
 
+    // Handle HTML5 Fullscreen API requests from games or video players inside webviews
+    contents.on('enter-html-full-screen', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setFullScreen(true);
+        mainWindow.webContents.send('window-fullscreen-change', true);
+      }
+    });
+
+    contents.on('leave-html-full-screen', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setFullScreen(false);
+        mainWindow.webContents.send('window-fullscreen-change', false);
+      }
+    });
+
     // Intercept keyboard shortcuts inside webview before page can swallow them
     contents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return;
+
+      // Fullscreen Toggle (F11 / Escape)
+      if (input.key === 'F11') {
+        event.preventDefault();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          const next = !mainWindow.isFullScreen();
+          mainWindow.setFullScreen(next);
+        }
+        return;
+      }
+
+      if (input.key === 'Escape') {
+        if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFullScreen()) {
+          event.preventDefault();
+          mainWindow.setFullScreen(false);
+          return;
+        }
+      }
 
       const isCtrl = process.platform === 'darwin' ? input.meta : input.control;
       if (!isCtrl) return;
@@ -983,12 +1134,22 @@ ipcMain.handle('clean_ram', async () => {
       }
     }
 
-    // 1. Invoke V8 isolate GC in main process if exposed
+    // 1. Invoke V8 isolate GC in main process
     if (global.gc) {
       try { global.gc(); } catch {}
     }
 
-    // 2. Clear Chromium caches across all active webContents and defaultSession
+    // 2. Invoke V8 isolate GC across all active webContents (renderers & main window)
+    const allWebContents = webContents.getAllWebContents();
+    for (const wc of allWebContents) {
+      if (!wc.isDestroyed()) {
+        try {
+          wc.executeJavaScript('if (typeof window.gc === "function") { window.gc(); }').catch(() => {});
+        } catch {}
+      }
+    }
+
+    // 3. Clear Chromium caches across all active webContents and defaultSession
     try {
       await session.defaultSession.clearCache();
       await session.defaultSession.clearHostResolverCache();
@@ -999,8 +1160,7 @@ ipcMain.handle('clean_ram', async () => {
       console.warn('Cache clearing notice:', e);
     }
 
-    // 3. Trim renderer working sets
-    const allWebContents = webContents.getAllWebContents();
+    // 4. Trim renderer working sets
     for (const wc of allWebContents) {
       if (!wc.isDestroyed()) {
         try {
@@ -1010,6 +1170,9 @@ ipcMain.handle('clean_ram', async () => {
         } catch {}
       }
     }
+
+    // Short await for asynchronous GC cycles to settle
+    await new Promise((res) => setTimeout(res, 200));
 
     // Measure after
     const afterMetrics = app.getAppMetrics();
@@ -1064,6 +1227,40 @@ ipcMain.handle('pick_custom_background', async () => {
     return null;
   }
 });
+
+// Privacy settings mirrored from the renderer (Settings → Privacy). Defaults match src/settings/defaults.ts
+const privacyState = { doNotTrack: true, blockThirdPartyCookies: true, popupsBlocked: true };
+ipcMain.handle('set_privacy_settings', (event, next) => {
+  if (next && typeof next === 'object') {
+    for (const key of Object.keys(privacyState)) {
+      if (typeof next[key] === 'boolean') privacyState[key] = next[key];
+    }
+  }
+  return { ...privacyState };
+});
+
+// Approximate registrable domain ("sub.example.co.uk" -> "example.co.uk") for first/third-party checks
+function siteOf(rawUrl) {
+  try {
+    const { hostname, protocol } = new URL(rawUrl);
+    if (!/^https?:$/.test(protocol) || !hostname) return '';
+    if (/^[\d.]+$/.test(hostname) || hostname.includes(':')) return hostname;
+    const parts = hostname.split('.');
+    const twoLevelSuffix = parts.length > 2 && /^(co|com|net|org|gov|edu|ac)$/.test(parts[parts.length - 2]) && parts[parts.length - 1].length === 2;
+    return parts.slice(twoLevelSuffix ? -3 : -2).join('.');
+  } catch {
+    return '';
+  }
+}
+
+function isThirdPartyRequest(details) {
+  if (!privacyState.blockThirdPartyCookies || details.resourceType === 'mainFrame') return false;
+  let topUrl = '';
+  try { topUrl = details.webContents ? details.webContents.getURL() : ''; } catch {}
+  const topSite = siteOf(topUrl);
+  const reqSite = siteOf(details.url);
+  return Boolean(topSite && reqSite && topSite !== reqSite);
+}
 
 // Performance mode notification to main process
 ipcMain.handle('set_browser_mode', (event, mode) => {
@@ -1276,14 +1473,8 @@ ipcMain.handle('migrate_user_data_path', async (event, { targetPath, migrateExis
       fs.cpSync(currentPath, targetPath, { recursive: true, errorOnExist: false });
     }
 
-    // Persist configuration
-    const configDir = path.dirname(storageConfigFile);
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.writeFileSync(
-      storageConfigFile,
-      JSON.stringify({ userDataPath: targetPath, updatedAt: Date.now() }, null, 2),
-      'utf8'
-    );
+    // Persist configuration while preserving other flags like hardwareAcceleration
+    writeStorageConfig({ userDataPath: targetPath });
 
     return { success: true, newPath: targetPath };
   } catch (err) {
@@ -1292,9 +1483,51 @@ ipcMain.handle('migrate_user_data_path', async (event, { targetPath, migrateExis
   }
 });
 
+// Hardware Acceleration IPC Handlers
+ipcMain.handle('get_hardware_acceleration', () => {
+  const config = readStorageConfig();
+  return config.hardwareAcceleration !== false;
+});
+
+ipcMain.handle('set_hardware_acceleration', (event, enabled) => {
+  writeStorageConfig({ hardwareAcceleration: Boolean(enabled) });
+  return true;
+});
+
 ipcMain.handle('relaunch_app', () => {
   app.relaunch();
   app.exit(0);
+});
+
+// Fullscreen Window Management IPC Handlers
+ipcMain.handle('window_fullscreen_toggle', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const next = !mainWindow.isFullScreen();
+    mainWindow.setFullScreen(next);
+    return next;
+  }
+  return false;
+});
+
+ipcMain.handle('window_fullscreen_set', (event, flag) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setFullScreen(Boolean(flag));
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
+ipcMain.handle('window_is_fullscreen', () => {
+  return mainWindow && !mainWindow.isDestroyed() ? mainWindow.isFullScreen() : false;
+});
+
+ipcMain.handle('force_close_app', () => {
+  isForceQuitting = true;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
+  } else {
+    app.quit();
+  }
 });
 
 ipcMain.handle('choose_file_to_open', async () => {
@@ -1324,7 +1557,24 @@ app.whenReady().then(() => {
     details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
     details.requestHeaders['Sec-CH-UA'] = '"Chromium";v="132", "Google Chrome";v="132", "Not:A-Brand";v="99"';
     details.requestHeaders['Sec-CH-UA-Platform'] = isPlatformWin ? '"Windows"' : isPlatformMac ? '"macOS"' : '"Linux"';
+    if (privacyState.doNotTrack) {
+      details.requestHeaders['DNT'] = '1';
+      details.requestHeaders['Sec-GPC'] = '1';
+    }
+    if (isThirdPartyRequest(details)) {
+      delete details.requestHeaders['Cookie'];
+    }
     callback({ cancel: false, requestHeaders: details.requestHeaders });
+  });
+
+  // Third-party cookie blocking: drop Set-Cookie on cross-site subresource responses
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (details.responseHeaders && isThirdPartyRequest(details)) {
+      for (const name of Object.keys(details.responseHeaders)) {
+        if (name.toLowerCase() === 'set-cookie') delete details.responseHeaders[name];
+      }
+    }
+    callback({ cancel: false, responseHeaders: details.responseHeaders });
   });
 
   registerLinuxDesktopIntegration();

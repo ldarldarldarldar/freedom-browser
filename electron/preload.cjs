@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeApp: () => ipcRenderer.invoke('close_app'),
   pickCustomBackground: () => ipcRenderer.invoke('pick_custom_background'),
   setBrowserMode: (mode) => ipcRenderer.invoke('set_browser_mode', mode),
+  setPrivacySettings: (settings) => ipcRenderer.invoke('set_privacy_settings', settings),
   minimizeWindow: () => ipcRenderer.invoke('window_minimize'),
   maximizeWindow: () => ipcRenderer.invoke('window_maximize'),
   closeWindow: () => ipcRenderer.invoke('window_close'),
@@ -48,6 +49,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   migrateUserDataPath: (options) => ipcRenderer.invoke('migrate_user_data_path', options),
   relaunchApp: () => ipcRenderer.invoke('relaunch_app'),
   chooseFileToOpen: () => ipcRenderer.invoke('choose_file_to_open'),
+  getHardwareAcceleration: () => ipcRenderer.invoke('get_hardware_acceleration'),
+  setHardwareAcceleration: (enabled) => ipcRenderer.invoke('set_hardware_acceleration', enabled),
+  toggleFullScreen: () => ipcRenderer.invoke('window_fullscreen_toggle'),
+  setFullScreen: (flag) => ipcRenderer.invoke('window_fullscreen_set', flag),
+  isFullScreen: () => ipcRenderer.invoke('window_is_fullscreen'),
+  forceCloseApp: () => ipcRenderer.invoke('force_close_app'),
   webviewPreload: (() => {
     const p = require('path').join(__dirname, 'webview-preload.cjs');
     return process.platform === 'win32'

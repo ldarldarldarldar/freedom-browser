@@ -140,10 +140,10 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
       <div
         id="freedom-task-manager-dialog"
-        className="w-full max-w-4xl bg-[#12141c]/98 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col max-h-[85vh] text-neutral-200 font-sans"
+        className="w-full max-w-4xl bg-[var(--fb-surface)]/98 backdrop-blur-3xl border border-white/10 rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col max-h-[85vh] text-neutral-200 font-sans"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-[#0d0f15] border-b border-white/[0.08]">
+        <div className="flex items-center justify-between px-6 py-4 bg-[var(--fb-bg)] border-b border-white/[0.08]">
           <div className="flex items-center gap-2.5">
             <Activity className="w-5 h-5 text-emerald-400" />
             <div>
@@ -333,7 +333,7 @@ export const TaskManagerModal: React.FC<TaskManagerModalProps> = ({
         </div>
 
         {/* Footer with Controls */}
-        <div className="px-6 py-3.5 bg-[#0d0f15] border-t border-white/[0.08] flex items-center justify-between">
+        <div className="px-6 py-3.5 bg-[var(--fb-bg)] border-t border-white/[0.08] flex items-center justify-between">
           <div className="text-neutral-400 text-xs">
             {selectedProcess ? (
               <span>

@@ -25,6 +25,7 @@ import { BrowserTab, TabLifecycleState } from '../browser/types';
 import { ProcessMetric, SystemStats } from '../taskmanager/types';
 import { frcService, FRCSettings, FRCMemoryDataPoint } from '../services/frcService';
 import { tauriBridge } from '../services/tauriBridge';
+import { APP_VERSION } from '../version';
 import { useTranslation } from '../i18n';
 
 interface FRCMemoryDiagnosticsPageProps {
@@ -232,10 +233,10 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
   return (
     <div
       id="freedom-memory-diagnostics-page"
-      className="w-full h-full bg-[#0b0c10] text-neutral-200 overflow-y-auto no-scrollbar font-sans select-none flex flex-col"
+      className="w-full h-full bg-[var(--fb-bg)] text-neutral-200 overflow-y-auto no-scrollbar font-sans select-none flex flex-col"
     >
       {/* Top Header Banner */}
-      <div className="px-8 py-6 bg-[#0f1118] border-b border-white/[0.08] flex items-center justify-between shrink-0">
+      <div className="px-8 py-6 bg-[var(--fb-bg)] border-b border-white/[0.08] flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3.5">
           <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-md">
             <Zap className="w-6 h-6" />
@@ -246,7 +247,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                 {t('frc.diagnosticsTitle')}
               </h1>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                FRC v0.5.4.7.3
+                FRC v{APP_VERSION}
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-0.5">
@@ -278,7 +279,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
       {/* Metric Cards Grid */}
       <div className="px-8 py-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
         {/* Card 1: Browser RAM Footprint */}
-        <div className="p-4 rounded-2xl bg-[#12141c]/90 border border-white/[0.08] shadow-sm">
+        <div className="p-4 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
           <div className="flex items-center justify-between text-neutral-400 text-xs mb-2">
             <span className="flex items-center gap-1.5 font-medium">
               <HardDrive className="w-4 h-4 text-emerald-400" />
@@ -295,7 +296,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
         </div>
 
         {/* Card 2: System Available Memory */}
-        <div className="p-4 rounded-2xl bg-[#12141c]/90 border border-white/[0.08] shadow-sm">
+        <div className="p-4 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
           <div className="flex items-center justify-between text-neutral-400 text-xs mb-2">
             <span className="flex items-center gap-1.5 font-medium">
               <Activity className="w-4 h-4 text-sky-400" />
@@ -312,7 +313,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
         </div>
 
         {/* Card 3: Memory Pressure State */}
-        <div className="p-4 rounded-2xl bg-[#12141c]/90 border border-white/[0.08] shadow-sm">
+        <div className="p-4 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
           <div className="flex items-center justify-between text-neutral-400 text-xs mb-2">
             <span className="flex items-center gap-1.5 font-medium">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -331,7 +332,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
         </div>
 
         {/* Card 4: Tabs In Memory */}
-        <div className="p-4 rounded-2xl bg-[#12141c]/90 border border-white/[0.08] shadow-sm">
+        <div className="p-4 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
           <div className="flex items-center justify-between text-neutral-400 text-xs mb-2">
             <span className="flex items-center gap-1.5 font-medium">
               <Layers className="w-4 h-4 text-purple-400" />
@@ -394,7 +395,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
       <div className="px-8 py-6 flex-1">
         {/* SECTION 1: DATA TABLE */}
         {activeTabSection === 'table' && (
-          <div className="rounded-2xl bg-[#12141c]/90 border border-white/[0.08] overflow-hidden shadow-sm">
+          <div className="rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
@@ -545,7 +546,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
 
         {/* SECTION 2: TELEMETRY GRAPH */}
         {activeTabSection === 'graph' && (
-          <div className="p-6 rounded-2xl bg-[#12141c]/90 border border-white/[0.08] shadow-sm">
+          <div className="p-6 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-semibold text-white text-sm">
@@ -664,7 +665,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
         {activeTabSection === 'config' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Timeout Sliders */}
-            <div className="p-6 rounded-2xl bg-[#12141c]/90 border border-white/[0.08] shadow-sm">
+            <div className="p-6 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm">
               <h3 className="font-semibold text-white text-sm mb-1 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-emerald-400" />
                 <span>{t('frc.tierTimeoutSliders')}</span>
@@ -698,8 +699,8 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                 </div>
                 <input
                   type="range"
-                  min="5"
-                  max="60"
+                  min="1"
+                  max="30"
                   step="1"
                   value={Math.round(settings.tFreezeSec / 60)}
                   onChange={(e) => handleSettingChange('tFreezeSec', parseInt(e.target.value, 10) * 60)}
@@ -715,9 +716,9 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
                 </div>
                 <input
                   type="range"
-                  min="10"
-                  max="120"
-                  step="5"
+                  min="2"
+                  max="60"
+                  step="1"
                   value={Math.round(settings.tDiscardSec / 60)}
                   onChange={(e) => handleSettingChange('tDiscardSec', parseInt(e.target.value, 10) * 60)}
                   className="w-full accent-purple-400"
@@ -743,7 +744,7 @@ export const FRCMemoryDiagnosticsPage: React.FC<FRCMemoryDiagnosticsPageProps> =
             </div>
 
             {/* Whitelist Domain Manager */}
-            <div className="p-6 rounded-2xl bg-[#12141c]/90 border border-white/[0.08] shadow-sm flex flex-col">
+            <div className="p-6 rounded-2xl bg-[var(--fb-surface)]/90 border border-white/[0.08] shadow-sm flex flex-col">
               <h3 className="font-semibold text-white text-sm mb-1 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <span>{t('frc.whitelistManager')}</span>

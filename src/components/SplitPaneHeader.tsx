@@ -102,8 +102,8 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
       onClick={onSelect}
       className={`h-9 w-full flex items-center px-2.5 select-none border-b transition-all z-30 shrink-0 relative ${
         isActive
-          ? 'bg-[#151722] border-emerald-500/40 text-white shadow-xs'
-          : 'bg-[#0d0f16]/90 border-white/[0.06] text-neutral-400 hover:text-neutral-200'
+          ? 'bg-[var(--fb-surface)] border-emerald-500/40 text-white shadow-xs'
+          : 'bg-[var(--fb-bg)]/90 border-white/[0.06] text-neutral-400 hover:text-neutral-200'
       }`}
     >
       {/* Active Pane Accent Line */}
@@ -175,7 +175,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
         onClick={(e) => e.stopPropagation()}
         className={`flex-1 min-w-0 flex items-center h-7 px-2.5 rounded-lg border text-xs text-neutral-200 transition-all ${
           isFocused
-            ? 'bg-[#090a0f] border-emerald-500/40 ring-1 ring-emerald-500/20 text-white'
+            ? 'bg-[var(--fb-bg)] border-emerald-500/40 ring-1 ring-emerald-500/20 text-white'
             : 'bg-white/[0.035] hover:bg-white/[0.06] border-white/[0.08]'
         }`}
       >

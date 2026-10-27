@@ -121,9 +121,9 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[#11131a]/98 backdrop-blur-3xl border-l border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col text-neutral-200 animate-slide-left">
+    <div className="fixed top-[calc(var(--fb-tabbar-h)+var(--fb-toolbar-h))] bottom-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[var(--fb-surface)] border-l border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] flex flex-col text-neutral-200 animate-slide-left">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] bg-[#0c0d13]/80">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] bg-[var(--fb-bg)]/80">
         <div className="flex items-center gap-2.5">
           <BookmarkIcon className="w-4 h-4 text-emerald-400" />
           <h2 className="text-sm font-semibold text-white tracking-wide">{t('bookmarks.title')}</h2>
