@@ -102,30 +102,10 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
       onClick={onSelect}
       className={`h-9 w-full flex items-center px-2.5 select-none border-b transition-all z-30 shrink-0 relative ${
         isActive
-          ? 'bg-[var(--fb-surface)] border-emerald-500/40 text-white shadow-xs'
-          : 'bg-[var(--fb-bg)]/90 border-white/[0.06] text-neutral-400 hover:text-neutral-200'
+          ? 'bg-[var(--fb-surface)] border-[var(--fb-border)] text-white'
+          : 'bg-[var(--fb-bg)] border-[var(--fb-border)] text-neutral-400 hover:text-neutral-200'
       }`}
     >
-      {/* Active Pane Accent Line */}
-      {isActive && (
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-emerald-400" />
-      )}
-
-      {/* Pane Index Badge */}
-      <div className="flex items-center gap-1 shrink-0 mr-1.5">
-        <span
-          className={`flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border transition-colors ${
-            isActive
-              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-              : 'bg-white/[0.04] text-neutral-400 border-white/10'
-          }`}
-          title={t('split.pane', { index: paneIndex })}
-        >
-          {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
-          P{paneIndex}
-        </span>
-      </div>
-
       {/* Navigation Controls: Back, Forward, Reload */}
       <div className="flex items-center gap-0.5 shrink-0 mr-1.5">
         <button
