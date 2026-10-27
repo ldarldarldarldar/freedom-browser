@@ -2128,6 +2128,11 @@ export default function App() {
     });
   }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked]);
 
+  // Download speed cap is enforced by the main-process download governor
+  useEffect(() => {
+    window.electronAPI?.setDownloadSpeedLimit?.(settings.downloadSpeedLimitKBps ?? 0);
+  }, [settings.downloadSpeedLimitKBps]);
+
   // Portals (menus, popovers) render into <body>, so tokens also live on <html>
   useEffect(() => {
     const root = document.documentElement;

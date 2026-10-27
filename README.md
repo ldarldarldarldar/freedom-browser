@@ -14,12 +14,12 @@
 2. **Programming** — Integrated developer console, network inspector, WebAssembly & DOM inspection.
 3. **Speed** — Low RAM usage, idle tab hibernation, hardware acceleration, and rapid startup.
 
-> **Freedom Browser 0.6.2.1** — redesigned graphite UI with a new logo, built on **Electron + Chromium** (the Tauri/Rust notes below are historical).
+> **Freedom Browser 0.6.2-2** — redesigned graphite UI with a new logo, built on **Electron + Chromium** (the Tauri/Rust notes below are historical).
 >
 > ```bash
 > npm ci
-> npm run build:appimage   # release/Freedom-Browser-0.6.2.1-x86_64.AppImage
-> npm run build:win        # release/Freedom-Browser-0.6.2.1-x64.exe (needs Windows or wine; CI builds it on windows-latest)
+> npm run build:appimage   # release/Freedom-Browser-0.6.2-2-x86_64.AppImage
+> npm run build:win        # release/Freedom-Browser-0.6.2-2-x64.exe (needs Windows or wine; CI builds it on windows-latest)
 > ```
 > Design tokens and the redesign notes: [REDESIGN_REPORT.md](REDESIGN_REPORT.md).
 

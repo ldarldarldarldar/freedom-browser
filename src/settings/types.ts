@@ -59,6 +59,8 @@ export type NewTabWallpaperId = 'ridges' | 'theme' | 'space' | 'freedom';
 
 export interface BrowserSettings {
   newTabWallpaper?: NewTabWallpaperId;
+  /** Shared cap for all active downloads in KB/s; 0 = unlimited */
+  downloadSpeedLimitKBps?: number;
   uiDesignVersion?: number;
   // Main Settings
   defaultSearchEngine: SearchEngineId;

@@ -198,8 +198,6 @@ export const TabBar: React.FC<TabBarProps> = ({
                 className={`group relative flex items-center h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 cursor-pointer min-w-[110px] max-w-[210px] flex-1 overflow-hidden app-no-drag select-none ${tab.isPrivate ? 'outline outline-1 outline-dashed outline-[var(--fb-border-strong)] -outline-offset-1 ' : ''}${
                   isActive
                     ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] border border-[var(--fb-border)] font-medium'
-                    : isInSplit
-                    ? 'bg-emerald-950/30 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-950/50'
                     : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.05] border border-transparent'
                 }`}
               >
@@ -208,15 +206,6 @@ export const TabBar: React.FC<TabBarProps> = ({
                   <div className="absolute bottom-0 left-2.5 right-2.5 h-[2px] bg-emerald-400/70 rounded-full" />
                 )}
 
-                {/* Split Indicator Badge */}
-                {isInSplit && (
-                  <span
-                    className="mr-1.5 px-1 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0"
-                    title={t('split.pane', { index: splitPaneIndex + 1 })}
-                  >
-                    P{splitPaneIndex + 1}
-                  </span>
-                )}
 
                 {/* Favicon Container with FRC Status Dot */}
                 <div className="relative mr-2 shrink-0 flex items-center justify-center w-4 h-4">

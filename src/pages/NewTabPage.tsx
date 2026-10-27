@@ -345,7 +345,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         <div className="mt-auto pt-10 flex items-end justify-between gap-6">
           <p className="max-w-[300px] text-[11px] leading-relaxed text-[var(--fb-text-3)]">
             {t('newtab.quote')}
-            <span className="block mt-1">—</span>
+            <span className="block mt-1">— {t('newtab.quoteAuthor')}</span>
           </p>
         </div>
       </div>

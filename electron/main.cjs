@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, clipboard, webContents } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, clipboard, webContents, net } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -99,6 +99,104 @@ let mainWindow = null;
 let isForceQuitting = false;
 const activeDownloads = new Map();
 let activeDownloadsLocation = '';
+
+// ---- Download speed limit (Settings → Main → Download speed limit) ----
+// Chromium keeps reading the network while a DownloadItem is paused, so pausing cannot cap
+// bandwidth. With a limit set, downloads are fetched by the main process instead (net.request
+// on the same session, with its cookies) and piped through a shared token bucket. The stream
+// is only read when there is credit, so TCP backpressure slows the server down for real.
+let downloadSpeedLimitBps = 0; // 0 = unlimited (native Chromium downloads)
+const limiter = { tokens: 0, last: Date.now() };
+
+function takeDownloadCredit(bytes) {
+  // Returns ms to wait before `bytes` may be written under the shared limit
+  const now = Date.now();
+  limiter.tokens = Math.min(limiter.tokens + (downloadSpeedLimitBps * (now - limiter.last)) / 1000, downloadSpeedLimitBps * 0.25);
+  limiter.last = now;
+  limiter.tokens -= bytes;
+  return limiter.tokens >= 0 ? 0 : Math.ceil((-limiter.tokens / downloadSpeedLimitBps) * 1000);
+}
+
+function startThrottledDownload({ url, ses, savePath, downloadId, referrer }) {
+  const startTime = Date.now();
+  let received = 0;
+  let total = 0;
+  let finished = false;
+  let lastProgress = 0;
+  const send = (channel, extra) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(channel, {
+        id: downloadId,
+        filename: path.basename(savePath),
+        url,
+        filepath: savePath,
+        receivedBytes: received,
+        totalBytes: total || received,
+        startTime,
+        speedBps: Math.round(received / Math.max((Date.now() - startTime) / 1000, 0.001)),
+        ...extra,
+      });
+    }
+  };
+  const out = fs.createWriteStream(savePath);
+  const request = net.request({ url, session: ses, useSessionCookies: true, redirect: 'follow' });
+  if (referrer) request.setHeader('Referer', referrer);
+
+  const finish = (state) => {
+    if (finished) return;
+    finished = true;
+    activeDownloads.delete(downloadId);
+    out.end(() => {
+      if (state !== 'completed') fs.rm(savePath, { force: true }, () => {});
+      send('download-completed', { state, speedBps: 0, totalBytes: state === 'completed' ? received : total || received });
+    });
+  };
+
+  // Same surface the IPC handlers use for native DownloadItems
+  activeDownloads.set(downloadId, {
+    cancel: () => { try { request.abort(); } catch {} finish('cancelled'); },
+    getReceivedBytes: () => received,
+    isDestroyed: () => finished,
+  });
+
+  send('download-start', { state: 'progressing', receivedBytes: 0, speedBps: 0 });
+
+  request.on('response', (response) => {
+    if (response.statusCode >= 400) {
+      finish('interrupted');
+      return;
+    }
+    total = Number(response.headers['content-length']) || 0;
+    response.on('data', (chunk) => {
+      if (finished) return;
+      received += chunk.length;
+      const wait = downloadSpeedLimitBps > 0 ? takeDownloadCredit(chunk.length) : 0;
+      const canContinue = out.write(chunk);
+      if (wait > 0 || !canContinue) {
+        response.pause();
+        const resume = () => setTimeout(() => !finished && response.resume(), wait);
+        if (canContinue) resume(); else out.once('drain', resume);
+      }
+      if (Date.now() - lastProgress > 400) {
+        lastProgress = Date.now();
+        send('download-progress', { state: 'progressing' });
+      }
+    });
+    response.on('end', () => finish(total && received < total ? 'interrupted' : 'completed'));
+    response.on('error', () => finish('interrupted'));
+    response.on('aborted', () => finish('cancelled'));
+  });
+  request.on('error', () => finish('interrupted'));
+  request.end();
+}
+
+ipcMain.handle('set_download_speed_limit', (event, kbps) => {
+  const value = Number(kbps);
+  downloadSpeedLimitBps = Number.isFinite(value) && value > 0 ? Math.round(value * 1024) : 0;
+  limiter.tokens = 0;
+  limiter.last = Date.now();
+  return downloadSpeedLimitBps;
+});
 let currentAppLanguage = 'en';
 let pendingOpenUrl = null;
 
@@ -200,7 +298,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.2.1-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.2-2-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -521,6 +619,20 @@ function createWindow() {
     item.setSavePath(finalDownloadPath);
 
     const downloadId = 'dl-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    // Speed limit active: hand plain http(s) downloads to the throttled downloader
+    const itemUrl = item.getURL();
+    if (downloadSpeedLimitBps > 0 && /^https?:/i.test(itemUrl)) {
+      event.preventDefault();
+      startThrottledDownload({
+        url: itemUrl,
+        ses: webContents?.session || session.defaultSession,
+        savePath: finalDownloadPath,
+        downloadId,
+        referrer: webContents && !webContents.isDestroyed() ? webContents.getURL() : '',
+      });
+      return;
+    }
+
     activeDownloads.set(downloadId, item);
 
     const startTime = Date.now();

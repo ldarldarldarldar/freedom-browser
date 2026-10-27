@@ -68,6 +68,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   // Visual Customization & Themes
   theme: 'black-space',
   newTabWallpaper: 'ridges',
+  downloadSpeedLimitKBps: 0,
   themePreset: 'graphite',
   palette: THEME_PRESETS.graphite,
   backgroundColor: 'black',

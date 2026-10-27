@@ -410,7 +410,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               ? 'text-amber-400'
               : 'text-emerald-400'
           }`} />
-          <span className="font-mono text-[11px] font-semibold text-white">
+          <span className="font-mono text-[11px] font-normal text-neutral-200">
             {browserRamMb !== undefined && browserRamMb > 0 ? browserRamMb : '...'} MB
           </span>
           <span className="hidden xl:inline text-[10px] text-neutral-400 font-mono">

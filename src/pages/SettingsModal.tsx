@@ -958,6 +958,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div>
+                  <label htmlFor="download-speed-limit" className="text-xs font-medium text-neutral-300 block mb-1.5">
+                    {t('settings.downloadSpeedLimit')}
+                  </label>
+                  <select
+                    id="download-speed-limit"
+                    value={settings.downloadSpeedLimitKBps ?? 0}
+                    onChange={(e) => onUpdateSettings({ downloadSpeedLimitKBps: Number(e.target.value) })}
+                    className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+                  >
+                    {[0, 256, 512, 1024, 2048, 5120, 10240, 25600].map((kbps) => (
+                      <option key={kbps} value={kbps}>
+                        {kbps === 0
+                          ? t('settings.downloadSpeedUnlimited')
+                          : kbps >= 1024
+                          ? `${kbps / 1024} ${t('settings.mbps')}`
+                          : `${kbps} ${t('settings.kbps')}`}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-neutral-500 mt-1">{t('settings.downloadSpeedLimitDesc')}</p>
+                </div>
+
+                <div>
                   <label className="text-xs font-medium text-neutral-300 block mb-1.5">
                     {t('settings.storageTitle')}
                   </label>
