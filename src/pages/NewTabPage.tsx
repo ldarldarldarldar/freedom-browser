@@ -131,10 +131,83 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
     { icon: SlidersHorizontal, title: t('newtab.featSettings'), sub: t('newtab.featSettingsSub') },
   ];
 
+  // ---- Draggable clock widget ----
+  const CLOCK_POS_KEY = 'freedom_newtab_clock_pos';
+  const pageRef = React.useRef<HTMLDivElement | null>(null);
+  const clockRef = React.useRef<HTMLDivElement | null>(null);
+  const dragOffset = React.useRef<{ dx: number; dy: number } | null>(null);
+  const [isDraggingClock, setIsDraggingClock] = useState(false);
+  const [clockPos, setClockPos] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(CLOCK_POS_KEY) || 'null');
+      return v && typeof v.x === 'number' && typeof v.y === 'number' ? v : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const saveClockPos = (pos: { x: number; y: number } | null) => {
+    setClockPos(pos);
+    try {
+      if (pos) localStorage.setItem(CLOCK_POS_KEY, JSON.stringify(pos));
+      else localStorage.removeItem(CLOCK_POS_KEY);
+    } catch {}
+  };
+
+  // Converts a top-left pixel point to % of the page, keeping the widget fully inside it
+  const clampToPage = (left: number, top: number) => {
+    const page = pageRef.current;
+    const clock = clockRef.current;
+    if (!page || !clock) return null;
+    const pw = page.clientWidth;
+    const ph = page.clientHeight;
+    const x = Math.min(Math.max(0, left), Math.max(0, pw - clock.offsetWidth));
+    const y = Math.min(Math.max(0, top), Math.max(0, ph - clock.offsetHeight));
+    return { x: (x / pw) * 100, y: (y / ph) * 100 };
+  };
+
+  const handleClockPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !clockRef.current) return;
+    const rect = clockRef.current.getBoundingClientRect();
+    dragOffset.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    clockRef.current.setPointerCapture(e.pointerId);
+    setIsDraggingClock(true);
+  };
+
+  const handleClockPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragOffset.current || !pageRef.current) return;
+    const pageRect = pageRef.current.getBoundingClientRect();
+    const pos = clampToPage(e.clientX - pageRect.left - dragOffset.current.dx, e.clientY - pageRect.top - dragOffset.current.dy);
+    if (pos) setClockPos(pos);
+  };
+
+  const handleClockPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragOffset.current) return;
+    dragOffset.current = null;
+    setIsDraggingClock(false);
+    clockRef.current?.releasePointerCapture?.(e.pointerId);
+    if (clockPos) saveClockPos(clockPos);
+  };
+
+  const handleClockKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 10 : 2;
+    const deltas: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    const d = deltas[e.key];
+    if (!d || !pageRef.current || !clockRef.current) return;
+    e.preventDefault();
+    const page = pageRef.current;
+    const cur = clockPos ?? {
+      x: (clockRef.current.offsetLeft / page.clientWidth) * 100,
+      y: (clockRef.current.offsetTop / page.clientHeight) * 100,
+    };
+    const pos = clampToPage(((cur.x + d[0]) / 100) * page.clientWidth, ((cur.y + d[1]) / 100) * page.clientHeight);
+    if (pos) saveClockPos(pos);
+  };
+
   const [brandFirst, ...brandRest] = 'Freedom Browser'.split(' ');
 
   return (
-    <div className="relative flex min-h-full text-[var(--fb-text)] select-none z-10">
+    <div ref={pageRef} className="relative flex min-h-full text-[var(--fb-text)] select-none z-10">
       {/* Decorative backdrop (Settings → Themes → New Tab wallpaper) */}
       <NewTabWallpaper
         id={wallpaper}
@@ -274,13 +347,36 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             {t('newtab.quote')}
             <span className="block mt-1">—</span>
           </p>
-          <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--fb-radius-lg)] border border-[var(--fb-border)] bg-[color-mix(in_srgb,var(--fb-surface)_80%,transparent)] backdrop-blur-md">
-            <Clock className="w-4.5 h-4.5 text-[var(--fb-text-2)]" strokeWidth={1.5} />
-            <div className="leading-tight">
-              <div className="text-[13px] tabular-nums">{time || '00:00'}</div>
-              <div className="text-[10px] text-[var(--fb-text-3)]">{date}</div>
-            </div>
-          </div>
+        </div>
+      </div>
+
+      {/* Clock & date widget: drag anywhere over the wallpaper (position saved in % of the page) */}
+      <div
+        ref={clockRef}
+        id="newtab-clock"
+        role="button"
+        tabIndex={0}
+        aria-label={t('clock.dragHint')}
+        title={t('clock.dragHint')}
+        onPointerDown={handleClockPointerDown}
+        onPointerMove={handleClockPointerMove}
+        onPointerUp={handleClockPointerUp}
+        onPointerCancel={handleClockPointerUp}
+        onDoubleClick={() => saveClockPos(null)}
+        onKeyDown={handleClockKeyDown}
+        className={`absolute z-20 flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--fb-radius-lg)] border border-[var(--fb-border)] bg-[color-mix(in_srgb,var(--fb-surface)_80%,transparent)] backdrop-blur-md touch-none ${
+          isDraggingClock ? 'cursor-grabbing shadow-[var(--fb-shadow-pop)]' : 'cursor-grab'
+        }`}
+        style={
+          clockPos
+            ? { left: `${clockPos.x}%`, top: `${clockPos.y}%` }
+            : { right: '7%', bottom: '32px' }
+        }
+      >
+        <Clock className="w-4.5 h-4.5 text-[var(--fb-text-2)] pointer-events-none" strokeWidth={1.5} />
+        <div className="leading-tight pointer-events-none">
+          <div className="text-[13px] tabular-nums">{time || '00:00'}</div>
+          <div className="text-[10px] text-[var(--fb-text-3)]">{date}</div>
         </div>
       </div>
 

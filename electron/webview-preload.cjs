@@ -138,6 +138,17 @@
       } catch {}
     };
 
+    // Ctrl + mouse wheel: the page must not zoom itself; the browser applies per-site zoom
+    let lastWheelZoom = 0;
+    window.addEventListener('wheel', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.deltaY === 0) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastWheelZoom < 60) return;
+      lastWheelZoom = now;
+      ipcRenderer.sendToHost('freedom-ctrl-wheel', e.deltaY < 0 ? 'in' : 'out');
+    }, { capture: true, passive: false });
+
     document.addEventListener('play', checkMediaState, true);
     document.addEventListener('pause', checkMediaState, true);
     document.addEventListener('ended', checkMediaState, true);

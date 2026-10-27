@@ -200,7 +200,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.2-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.2.1-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -590,35 +590,8 @@ function createWindow() {
 app.on('web-contents-created', (event, contents) => {
   if (contents.getType() === 'webview') {
     configureBrowsingSession(contents.session);
-    contents.setBackgroundThrottling(true); // Throttles timers/animations in background webviews to minimize CPU and RAM
-    contents.setUserAgent(desktopChromeUA);
+    contents.setBackgroundThrottling(true);
 
-    contents.setWindowOpenHandler(({ url, disposition }) => {
-      // Allow Google Sign-In, account registration & OAuth popups so they can authenticate and communicate with window.opener
-      const isAuthPopup = /google\.|appleid\.apple\.|login\.microsoftonline\.|github\.com\/login\/oauth|\/oauth|\/signin|\/signup|\/auth/i.test(url || '');
-      if (isAuthPopup) {
-        return {
-          action: 'allow',
-          overrideBrowserWindowOptions: {
-            autoHideMenuBar: true,
-            webPreferences: {
-              contextIsolation: true,
-              nodeIntegration: false,
-              javascript: true,
-            }
-          }
-        };
-      }
-      // Popup blocking: script-opened windows with window features ("new-window") are dropped;
-      // regular link targets (_blank, middle click) still open as tabs
-      if (privacyState.popupsBlocked && disposition === 'new-window') {
-        return { action: 'deny' };
-      }
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('webview-new-window', { url });
-      }
-      return { action: 'deny' };
-    });
 
     // Handle HTML5 Fullscreen API requests from games or video players inside webviews
     contents.on('enter-html-full-screen', () => {
