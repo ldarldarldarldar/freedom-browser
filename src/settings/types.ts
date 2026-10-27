@@ -55,7 +55,10 @@ export interface ThemePalette {
   shadowIntensity: number; // 0 - 100
 }
 
+export type NewTabWallpaperId = 'ridges' | 'theme' | 'space' | 'freedom';
+
 export interface BrowserSettings {
+  newTabWallpaper?: NewTabWallpaperId;
   uiDesignVersion?: number;
   // Main Settings
   defaultSearchEngine: SearchEngineId;

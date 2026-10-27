@@ -28,6 +28,7 @@ import freenImg from '../assets/freen-mascot.png';
 import { useTranslation, TranslationKey } from '../i18n';
 import { FreedomMark } from '../components/FreedomLogo';
 import { APP_VERSION } from '../version';
+import { NewTabWallpaper, NEW_TAB_WALLPAPERS } from '../components/NewTabWallpaper';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -647,6 +648,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* New Tab wallpaper picker */}
+                <div className="border-t border-white/10 pt-4 space-y-3">
+                  <div>
+                    <div className="text-xs font-semibold text-white mb-0.5">{t('wallpaper.title')}</div>
+                    <div className="text-[11px] text-neutral-400">{t('wallpaper.desc')}</div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2.5">
+                    {NEW_TAB_WALLPAPERS.map(({ id, labelKey }) => {
+                      const selected = (settings.newTabWallpaper ?? 'ridges') === id;
+                      return (
+                        <button
+                          key={id}
+                          id={`wallpaper-${id}`}
+                          type="button"
+                          onClick={() => onUpdateSettings({ newTabWallpaper: id })}
+                          aria-pressed={selected}
+                          className="flex flex-col gap-1.5 text-left"
+                        >
+                          <span
+                            className={`relative block h-16 rounded-[var(--fb-radius-md)] overflow-hidden bg-[var(--fb-bg)] border ${
+                              selected ? 'border-emerald-400 ring-2 ring-emerald-500/30' : 'border-[var(--fb-border)] hover:border-[var(--fb-border-strong)]'
+                            }`}
+                          >
+                            <NewTabWallpaper id={id} isStatic />
+                          </span>
+                          <span className={`text-[11px] ${selected ? 'text-white' : 'text-neutral-400'}`}>{t(labelKey)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Custom Background Image (Strictly Local) */}

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Globe, Plus, Pencil, X, Settings, ArrowRight, Clock, ShieldCheck, EyeOff, SlidersHorizontal } from 'lucide-react';
 import { FreedomMark } from '../components/FreedomLogo';
 import { HistoryService } from '../services/historyService';
-import { SearchEngineId, ThemePalette } from '../settings/types';
+import { SearchEngineId, ThemePalette, NewTabWallpaperId } from '../settings/types';
+import { NewTabWallpaper } from '../components/NewTabWallpaper';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { FaviconService } from '../services/faviconService';
@@ -17,6 +18,7 @@ interface NewTabPageProps {
   onOpenSettings?: () => void;
   showSettingsIcon?: boolean;
   showFreedomIcon?: boolean;
+  wallpaper?: NewTabWallpaperId;
 }
 
 export const NewTabPage: React.FC<NewTabPageProps> = ({
@@ -24,6 +26,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   defaultSearchEngine,
   palette,
   isPerformanceMode = false,
+  wallpaper = 'ridges',
   onOpenSettings,
 }) => {
   const { t, language } = useTranslation();
@@ -130,14 +133,13 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
 
   return (
     <div className="relative flex min-h-full text-[var(--fb-text)] select-none z-10">
-      {/* Decorative backdrop: original CSS/SVG art (light beam over dark ridges) */}
-      <div className="newtab-art pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="newtab-art__beam" />
-        <svg className="absolute bottom-0 left-0 w-full h-[46%]" viewBox="0 0 1200 400" preserveAspectRatio="none">
-          <path d="M0 250 L140 170 L260 230 L380 120 L520 210 L600 60 L690 200 L820 140 L960 230 L1080 160 L1200 220 V400 H0Z" fill="var(--fb-surface)" opacity="0.55" />
-          <path d="M0 310 L180 250 L330 300 L470 240 L600 290 L760 230 L900 300 L1050 250 L1200 290 V400 H0Z" fill="var(--fb-bg)" opacity="0.9" />
-        </svg>
-      </div>
+      {/* Decorative backdrop (Settings → Themes → New Tab wallpaper) */}
+      <NewTabWallpaper
+        id={wallpaper}
+        isStatic={isPerformanceMode}
+        particleColor={palette?.particleColor}
+        className="pointer-events-none"
+      />
 
       <div className="relative flex-1 min-w-0 flex flex-col px-[7%] pt-[9vh] pb-8">
         {/* Hero */}
@@ -269,64 +271,6 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Right info panel (hidden on narrow windows) */}
-      <aside className="relative hidden xl:flex flex-col self-start w-[260px] shrink-0 m-3 ml-0 p-4 rounded-[var(--fb-radius-lg)] border border-[var(--fb-border)] bg-[color-mix(in_srgb,var(--fb-surface)_92%,transparent)] backdrop-blur-md">
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          title={t('newtab.openSettings')}
-          className="flex items-center gap-2.5 -mx-1 px-1 py-1 rounded-[var(--fb-radius-md)] hover:bg-[var(--fb-surface-hover)] text-left"
-        >
-          <FreedomMark size={16} className="text-[var(--fb-text)]" />
-          <span className="text-[13px] font-medium">Freedom</span>
-          <Settings className="ml-auto w-3.5 h-3.5 text-[var(--fb-text-3)]" />
-        </button>
-        <p className="mt-2 text-[11px] leading-relaxed text-[var(--fb-text-2)]">{t('newtab.aboutTitle')}</p>
-
-        <ul className="mt-5 space-y-4">
-          {features.map(({ icon: Icon, title, sub }) => (
-            <li key={title} className="flex gap-3">
-              <span className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full border border-[var(--fb-border-strong)]">
-                <Icon className="w-3.5 h-3.5 text-[var(--fb-text-2)]" strokeWidth={1.75} />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[12px]">{title}</span>
-                <span className="block text-[10.5px] text-[var(--fb-text-3)]">{sub}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-
-        {recent.length > 0 && (
-          <>
-            <h2 className="mt-7 mb-2.5 text-[11px] text-[var(--fb-text-2)]">{t('newtab.recent')}</h2>
-            <ul className="space-y-1">
-              {recent.map((h) => (
-                <li key={h.id}>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate(h.url)}
-                    className="w-full flex items-center gap-2.5 -mx-1 px-1 py-1 rounded-[var(--fb-radius-md)] hover:bg-[var(--fb-surface-hover)] text-left"
-                  >
-                    <img
-                      src={h.favicon || FaviconService.getFaviconSync(h.url) || FaviconService.generateMonogramSvg(h.title)}
-                      alt=""
-                      className="w-3.5 h-3.5 shrink-0 rounded-sm"
-                    />
-                    <span className="min-w-0">
-                      <span className="block truncate text-[12px]">{h.title || h.url}</span>
-                      <span className="block truncate text-[10px] text-[var(--fb-text-3)]">
-                        {SearchEngineService.extractDomain(h.url)}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </aside>
 
       {/* Add / Edit Favorite Modal */}
       {isModalOpen && (

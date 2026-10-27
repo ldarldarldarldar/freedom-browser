@@ -2158,7 +2158,9 @@ export default function App() {
           !isPerformanceMode &&
           settings.starAnimationEnabled &&
           settings.backgroundParticlesEnabled &&
-          activeTab?.url === 'freedom://newtab'
+          activeTab?.url === 'freedom://newtab' &&
+          // Opaque wallpapers draw their own background; only "ridges" shows the app-level stars
+          (settings.newTabWallpaper ?? 'ridges') === 'ridges'
         }
         density={settings.starDensity}
         intensity={settings.animationIntensity}
@@ -2339,6 +2341,7 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           showNewTabSettingsIcon={settings.showNewTabSettingsIcon}
           showFreedomIcon={settings.showFreedomIcon}
+          newTabWallpaper={settings.newTabWallpaper ?? 'ridges'}
           onFoundInPage={handleFoundInPage}
           onTabZoomChange={handleTabZoomChange}
           splitViewState={splitViewState}

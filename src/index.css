@@ -281,3 +281,86 @@ select {
   color: var(--fb-text);
   border-color: var(--fb-border-strong);
 }
+
+/* ---- New Tab wallpapers (src/components/NewTabWallpaper.tsx) ----
+   All CSS/SVG. Animations only run with .wp-animated (quality mode); the global
+   .performance-mode rule also disables them. */
+.wp {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.wp-theme {
+  background: var(--fb-bg);
+}
+.wp-theme::before {
+  content: "";
+  position: absolute;
+  inset: -15%;
+  background:
+    radial-gradient(45% 40% at 22% 25%, color-mix(in srgb, var(--fb-accent) 22%, transparent), transparent 70%),
+    radial-gradient(40% 40% at 80% 80%, color-mix(in srgb, var(--fb-accent) 14%, transparent), transparent 70%),
+    radial-gradient(30% 30% at 70% 18%, color-mix(in srgb, var(--fb-text) 6%, transparent), transparent 70%);
+}
+
+.wp-space {
+  background:
+    radial-gradient(45% 35% at 75% 30%, rgba(98, 76, 160, 0.22), transparent 70%),
+    radial-gradient(40% 30% at 20% 70%, color-mix(in srgb, var(--fb-accent) 14%, transparent), transparent 70%),
+    #05060a;
+}
+.wp-space__stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 32% 72%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 54% 28%, #fff, transparent),
+    radial-gradient(1px 1px at 68% 84%, #fff, transparent),
+    radial-gradient(1px 1px at 82% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 91% 56%, #fff, transparent),
+    radial-gradient(1px 1px at 7% 92%, #fff, transparent),
+    radial-gradient(1px 1px at 44% 48%, #fff, transparent);
+  background-size: 340px 340px;
+  opacity: 0.55;
+}
+.wp-space__planet {
+  position: absolute;
+  right: -12vmin;
+  bottom: -30vmin;
+  width: 70vmin;
+  height: 70vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #2a2f3a, #0b0d12 65%);
+  box-shadow: -8px -10px 60px rgba(160, 190, 255, 0.12), inset 6px 8px 30px rgba(170, 200, 255, 0.12);
+}
+
+.wp-freedom {
+  background: linear-gradient(to bottom, #0b1220 0%, #1c2236 38%, #4a3b3f 56%, #8a6248 62%, #1a1d24 63%, var(--fb-bg) 100%);
+}
+.wp-freedom__sun {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: 34vmin;
+  height: 34vmin;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 224, 170, 0.75) 0%, rgba(255, 190, 130, 0.25) 35%, transparent 70%);
+}
+.wp-animated .wp-freedom__bird {
+  animation: wp-glide 7s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.wp-animated .wp-freedom__birds {
+  animation: wp-flock 60s linear infinite alternate;
+}
+@keyframes wp-glide {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  50% { transform: translateY(-3px) scaleY(0.75); }
+}
+@keyframes wp-flock {
+  from { transform: translateX(-4%); }
+  to { transform: translateX(4%); }
+}

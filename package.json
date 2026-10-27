@@ -2,7 +2,7 @@
   "name": "freedom-browser",
   "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
@@ -103,7 +103,7 @@
         "x-scheme-handler/http",
         "x-scheme-handler/https"
       ],
-      "artifactName": "Freedom-Browser-0.6-x86_64.${ext}",
+      "artifactName": "Freedom-Browser-${version}-x86_64.${ext}",
       "executableName": "freedom-browser",
       "desktop": {
         "entry": {
@@ -133,7 +133,7 @@
           "role": "Viewer"
         }
       ],
-      "artifactName": "Freedom-Browser-0.6-x64.${ext}"
+      "artifactName": "Freedom-Browser-${version}-x64.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -144,12 +144,12 @@
       "shortcutName": "Freedom Browser",
       "uninstallDisplayName": "Freedom Browser",
       "deleteAppDataOnUninstall": false,
-      "artifactName": "Freedom-Browser-0.6-x64-Setup.${ext}"
+      "artifactName": "Freedom-Browser-${version}-x64-Setup.${ext}"
     },
     "executableName": "freedom-browser",
     "copyright": "Freedom Browser Team",
     "portable": {
-      "artifactName": "Freedom-Browser-0.6-x64.${ext}"
+      "artifactName": "Freedom-Browser-${version}-x64.${ext}"
     }
   }
 }
