@@ -8,7 +8,8 @@ const url = require('url');
 // Separates application binaries (e.g. Program Files\Freedom Browser) from user data (profiles, history, bookmarks, cookies).
 // Defaults to user-writable %APPDATA%\Freedom Browser\User Data on Windows or ~/.config/freedom-browser/User Data on Linux.
 const storageConfigFile = path.join(app.getPath('appData'), 'Freedom Browser', 'storage-config.json');
-let activeUserDataDir = path.join(app.getPath('appData'), 'Freedom Browser', 'User Data');
+const defaultUserDataDir = path.join(app.getPath('appData'), 'Freedom Browser', 'User Data');
+let activeUserDataDir = defaultUserDataDir;
 
 function readStorageConfig() {
   try {
@@ -36,9 +37,43 @@ function writeStorageConfig(updates) {
   }
 }
 
+// Files Chromium keeps only for the running instance; never copied to a new profile folder
+const PROFILE_RUNTIME_FILES = new Set(['SingletonLock', 'SingletonSocket', 'SingletonCookie', 'DevToolsActivePort', 'lockfile', 'LOCK']);
+
 const initialStorageConfig = readStorageConfig();
 if (initialStorageConfig.userDataPath && typeof initialStorageConfig.userDataPath === 'string') {
   activeUserDataDir = initialStorageConfig.userDataPath;
+}
+
+// Data folder change (Settings → Telemetry & Logs) is applied here, before Chromium opens the profile,
+// so cookies/history databases are copied while nothing has them open
+const pendingMove = initialStorageConfig.pendingUserDataPath;
+// Another running instance still uses the old profile: leave the move for a start when it is closed
+let oldProfileFree = false;
+if (pendingMove && typeof pendingMove === 'string') {
+  try {
+    app.setPath('userData', activeUserDataDir);
+    oldProfileFree = app.requestSingleInstanceLock();
+    if (oldProfileFree) app.releaseSingleInstanceLock();
+  } catch {}
+}
+if (oldProfileFree) {
+  try {
+    fs.mkdirSync(pendingMove, { recursive: true });
+    if (initialStorageConfig.pendingMigrate && fs.existsSync(activeUserDataDir)) {
+      fs.cpSync(activeUserDataDir, pendingMove, {
+        recursive: true,
+        force: false,
+        errorOnExist: false,
+        filter: (src) => !PROFILE_RUNTIME_FILES.has(path.basename(src)),
+      });
+    }
+    activeUserDataDir = pendingMove;
+    writeStorageConfig({ userDataPath: pendingMove, pendingUserDataPath: null, pendingMigrate: null, lastMoveError: null });
+  } catch (err) {
+    console.warn('Failed to move user data, keeping the old folder:', err);
+    writeStorageConfig({ pendingUserDataPath: null, pendingMigrate: null, lastMoveError: String(err.message || err) });
+  }
 }
 
 try {
@@ -298,7 +333,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.4-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.4-1-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -1621,10 +1656,39 @@ ipcMain.handle('set_zoom_factor', (event, { webContentsId, factor }) => {
   return false;
 });
 
-// User Data Storage Location & Migration Handlers
-ipcMain.handle('get_user_data_path', () => {
-  return app.getPath('userData');
+// User Data Storage Location (Settings → Telemetry & Logs). The move itself happens on the next start.
+function folderSize(dir, depth = 0) {
+  let total = 0;
+  if (depth > 12) return 0;
+  let entries = [];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return 0; }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    try {
+      if (e.isDirectory()) total += folderSize(full, depth + 1);
+      else if (e.isFile()) total += fs.statSync(full).size;
+    } catch {}
+  }
+  return total;
+}
+
+ipcMain.handle('get_user_data_info', () => {
+  const config = readStorageConfig();
+  const current = app.getPath('userData');
+  return {
+    path: current,
+    defaultPath: defaultUserDataDir,
+    isDefault: path.resolve(current) === path.resolve(defaultUserDataDir),
+    pendingPath: config.pendingUserDataPath || null,
+    lastError: config.lastMoveError || null,
+    sizeBytes: folderSize(current),
+    cacheBytes: ['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'GPUPersistentCache']
+      .reduce((sum, name) => sum + folderSize(path.join(current, name)), 0),
+  };
 });
+
+// Kept for older renderer builds
+ipcMain.handle('get_user_data_path', () => app.getPath('userData'));
 
 ipcMain.handle('choose_user_data_path', async () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
@@ -1638,33 +1702,47 @@ ipcMain.handle('choose_user_data_path', async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle('migrate_user_data_path', async (event, { targetPath, migrateExisting }) => {
+// Only an empty folder or an existing Freedom profile, never inside the current profile:
+// copying a profile into e.g. the home folder would scatter files all over it
+function checkDataFolder(targetPath) {
+  const target = path.resolve(targetPath);
+  const current = path.resolve(app.getPath('userData'));
+  if (target === current) return 'same';
+  if (target.startsWith(current + path.sep) || current.startsWith(target + path.sep)) return 'nested';
+  if (!fs.existsSync(target)) return 'ok';
+  if (!fs.statSync(target).isDirectory()) return 'not-dir';
+  try { fs.accessSync(target, fs.constants.W_OK); } catch { return 'not-writable'; }
+  const entries = fs.readdirSync(target).filter((n) => !n.startsWith('.'));
+  if (entries.length === 0 || entries.includes('Local State')) return 'ok';
+  return 'not-empty';
+}
+
+ipcMain.handle('migrate_user_data_path', async (event, { targetPath, migrateExisting, reset }) => {
   try {
-    if (!targetPath || typeof targetPath !== 'string') {
-      return { success: false, error: 'Invalid directory path' };
+    const target = reset ? defaultUserDataDir : targetPath;
+    if (!target || typeof target !== 'string' || !path.isAbsolute(target)) {
+      return { success: false, error: 'invalid' };
     }
-    const currentPath = app.getPath('userData');
-    if (path.resolve(currentPath) === path.resolve(targetPath)) {
-      return { success: true, newPath: currentPath };
+    const check = checkDataFolder(target);
+    if (check === 'same') {
+      writeStorageConfig({ pendingUserDataPath: null, pendingMigrate: null });
+      return { success: true, newPath: target, pending: false };
     }
-
-    // Ensure target exists
-    fs.mkdirSync(targetPath, { recursive: true });
-
-    // Optionally copy existing data to new path
-    if (migrateExisting && fs.existsSync(currentPath)) {
-      fs.cpSync(currentPath, targetPath, { recursive: true, errorOnExist: false });
-    }
-
-    // Persist configuration while preserving other flags like hardwareAcceleration
-    writeStorageConfig({ userDataPath: targetPath });
-
-    return { success: true, newPath: targetPath };
+    if (check !== 'ok') return { success: false, error: check };
+    writeStorageConfig({ pendingUserDataPath: path.resolve(target), pendingMigrate: Boolean(migrateExisting), lastMoveError: null });
+    return { success: true, newPath: path.resolve(target), pending: true };
   } catch (err) {
-    console.error('Failed to migrate user data path:', err);
+    console.error('Failed to schedule user data move:', err);
     return { success: false, error: String(err) };
   }
 });
+
+ipcMain.handle('cancel_user_data_move', () => {
+  writeStorageConfig({ pendingUserDataPath: null, pendingMigrate: null });
+  return true;
+});
+
+ipcMain.handle('open_user_data_folder', () => shell.openPath(app.getPath('userData')));
 
 // Hardware Acceleration IPC Handlers
 ipcMain.handle('get_hardware_acceleration', () => {

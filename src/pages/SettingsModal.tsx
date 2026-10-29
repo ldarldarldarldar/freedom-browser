@@ -31,6 +31,7 @@ import { FreedomMark } from '../components/FreedomLogo';
 import { APP_VERSION } from '../version';
 import { RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 import { ExtensionsSettings } from '../components/ExtensionsSettings';
+import { DataLocationSettings } from '../components/DataLocationSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -58,9 +59,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [viewingLogs, setViewingLogs] = useState(false);
   const [showDetailedColors, setShowDetailedColors] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [userDataPath, setUserDataPath] = useState<string>('');
-  const [isMigratingStorage, setIsMigratingStorage] = useState(false);
-  const [storageStatusMsg, setStorageStatusMsg] = useState<string | null>(null);
   const [hardwareAcc, setHardwareAcc] = useState<boolean>(settings.hardwareAcceleration ?? true);
   const [showRestartBanner, setShowRestartBanner] = useState<boolean>(false);
 
@@ -81,43 +79,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
     onUpdateSettings({ hardwareAcceleration: enabled });
     setShowRestartBanner(true);
-  };
-
-  useEffect(() => {
-    if (activeTab === 'main' && (window as any).electronAPI?.getUserDataPath) {
-      (window as any).electronAPI.getUserDataPath().then((p: string) => {
-        if (p) setUserDataPath(p);
-      });
-    }
-  }, [activeTab]);
-
-  const handleChangeUserDataPath = async () => {
-    if (!(window as any).electronAPI?.chooseUserDataPath) return;
-    const chosen = await (window as any).electronAPI.chooseUserDataPath();
-    if (!chosen || chosen === userDataPath) return;
-
-    const shouldMigrate = window.confirm(
-      language === 'ru'
-        ? `Скопировать текущие данные браузера в новую папку?\n\n${chosen}`
-        : `Copy current browser data to new location?\n\n${chosen}`
-    );
-
-    setIsMigratingStorage(true);
-    setStorageStatusMsg(t('settings.storageMigrate'));
-    try {
-      const res = await (window as any).electronAPI.migrateUserDataPath({
-        targetPath: chosen,
-        migrateExisting: shouldMigrate,
-      });
-      if (res?.success) {
-        setUserDataPath(res.newPath);
-        setStorageStatusMsg(t('settings.storageRestart'));
-      }
-    } catch (err) {
-      console.error('Storage migration failed:', err);
-    } finally {
-      setIsMigratingStorage(false);
-    }
   };
 
   const handleBrowseDownloads = async () => {
@@ -973,35 +934,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <p className="text-[11px] text-neutral-500 mt-1">{t('settings.downloadSpeedLimitDesc')}</p>
                 </div>
 
-                <div>
-                  <label className="text-xs font-medium text-neutral-300 block mb-1.5">
-                    {t('settings.storageTitle')}
-                  </label>
-                  <div className="flex items-center gap-2 max-w-md">
-                    <input
-                      type="text"
-                      readOnly
-                      value={userDataPath || (language === 'ru' ? 'По умолчанию (папка пользователя)' : 'Default (User Profile Directory)')}
-                      className="flex-1 bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-neutral-300 font-mono focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleChangeUserDataPath}
-                      disabled={isMigratingStorage}
-                      className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-xs text-neutral-200 hover:text-white transition-colors shrink-0 cursor-pointer disabled:opacity-50"
-                    >
-                      {t('settings.storageChange')}
-                    </button>
-                  </div>
-                  {storageStatusMsg && (
-                    <div className="text-[11px] text-emerald-400 mt-1 font-mono">
-                      {storageStatusMsg}
-                    </div>
-                  )}
-                  <p className="text-[11px] text-neutral-500 mt-1">
-                    {t('settings.storageDesc')}
-                  </p>
-                </div>
               </div>
             )}
 
@@ -1111,6 +1043,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   </div>
                 </div>
+
+                <DataLocationSettings />
 
                 {settings.localDiagnosticLogs && (
                   <div className="space-y-2.5 pt-1">

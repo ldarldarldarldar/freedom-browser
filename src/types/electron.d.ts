@@ -79,7 +79,18 @@ declare global {
       relaunchApp?: () => Promise<void>;
       getUserDataPath?: () => Promise<string>;
       chooseUserDataPath?: () => Promise<string | null>;
-      migrateUserDataPath?: (options: { targetPath: string; migrateExisting: boolean }) => Promise<{ success: boolean; newPath?: string; error?: string }>;
+      migrateUserDataPath?: (options: { targetPath?: string; migrateExisting: boolean; reset?: boolean }) => Promise<{ success: boolean; newPath?: string; pending?: boolean; error?: string }>;
+      getUserDataInfo?: () => Promise<{
+        path: string;
+        defaultPath: string;
+        isDefault: boolean;
+        pendingPath: string | null;
+        lastError: string | null;
+        sizeBytes: number;
+        cacheBytes: number;
+      }>;
+      cancelUserDataMove?: () => Promise<boolean>;
+      openUserDataFolder?: () => Promise<string>;
       toggleFullScreen?: () => Promise<boolean>;
       setFullScreen?: (flag: boolean) => Promise<boolean>;
       isFullScreen?: () => Promise<boolean>;
