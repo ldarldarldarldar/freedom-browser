@@ -32,6 +32,7 @@ import { APP_VERSION } from '../version';
 import { RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 import { ExtensionsSettings } from '../components/ExtensionsSettings';
 import { DataLocationSettings } from '../components/DataLocationSettings';
+import { DeveloperLink } from '../components/DeveloperLink';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -41,6 +42,8 @@ interface SettingsModalProps {
   onClearBrowsingData: () => void;
   /** Section to open first (e.g. 'extensions' from the toolbar puzzle menu) */
   initialTab?: string;
+  /** Closes Settings and turns on the layout edit mode */
+  onEditLayout?: () => void;
 }
 
 type SettingsTab = 'main' | 'privacy' | 'telemetry' | 'visual' | 'performance' | 'extensions' | 'about';
@@ -52,6 +55,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onUpdateSettings,
   onClearBrowsingData,
   initialTab,
+  onEditLayout,
 }) => {
   const { t, language, setLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>((initialTab as SettingsTab) || 'main');
@@ -620,9 +624,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Reset drag & drop layout */}
                 <div className="border-t border-white/10 pt-4 flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-xs font-semibold text-white mb-0.5">{t('layout.reset')}</div>
-                    <div className="text-[11px] text-neutral-400">{t('layout.resetDesc')}</div>
+                    <div className="text-xs font-semibold text-white mb-0.5">{t('layout.edit')}</div>
+                    <div className="text-[11px] text-neutral-400">{t('layout.editDesc')}</div>
                   </div>
+                  <div className="flex gap-2 shrink-0">
+                  {onEditLayout && (
+                    <button
+                      id="settings-edit-layout"
+                      type="button"
+                      onClick={onEditLayout}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-xs font-medium text-emerald-300 shrink-0"
+                    >
+                      {t('layout.edit')}
+                    </button>
+                  )}
                   <button
                     id="reset-layout"
                     type="button"
@@ -634,6 +649,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   >
                     {t('layout.reset')}
                   </button>
+                  </div>
                 </div>
 
                 {/* Custom Background Image (Strictly Local) */}
@@ -993,6 +1009,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <h3 className="text-lg font-medium text-white tracking-tight">Freedom Browser</h3>
                 <p className="text-xs text-neutral-400">{t('about.version', { version: APP_VERSION })}</p>
                 <p className="max-w-md text-xs text-neutral-300 leading-relaxed">{t('about.description')}</p>
+                <DeveloperLink onOpen={onClose} />
                 <div className="flex flex-wrap justify-center gap-2 pt-2 text-[11px] text-neutral-400">
                   <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08]">{t('about.engine')}</span>
                   <span className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08]">{t('about.runtime')}</span>

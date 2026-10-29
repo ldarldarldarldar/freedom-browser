@@ -3,6 +3,7 @@ import { X, Shield, Code2, Zap, CheckCircle2, Heart, ExternalLink } from 'lucide
 import { FreedomLogo } from '../components/FreedomLogo';
 import { useTranslation } from '../i18n';
 import { APP_VERSION } from '../version';
+import { DeveloperLink } from '../components/DeveloperLink';
 
 interface AboutModalProps {
   isOpen: boolean;
@@ -49,6 +50,8 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           <p className="text-xs text-neutral-300 leading-relaxed max-w-md mx-auto">
             {t('about.description')}
           </p>
+
+          <DeveloperLink onOpen={onClose} />
 
           {/* Three Core Principles */}
           <div className="grid grid-cols-3 gap-3 text-left">

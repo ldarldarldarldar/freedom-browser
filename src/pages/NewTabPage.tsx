@@ -20,6 +20,8 @@ interface NewTabPageProps {
   showSettingsIcon?: boolean;
   showFreedomIcon?: boolean;
   isPrivate?: boolean;
+  /** Layout edit mode: title, search bar, quick links and clock can be dragged */
+  isEditingLayout?: boolean;
 }
 
 export const NewTabPage: React.FC<NewTabPageProps> = ({
@@ -27,6 +29,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   defaultSearchEngine,
   isPerformanceMode = false,
   isPrivate = false,
+  isEditingLayout = false,
   onOpenSettings,
 }) => {
   const { t, language } = useTranslation();
@@ -210,9 +213,10 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   }, []);
 
   // Draggable New Tab blocks (translate offsets kept inside the wallpaper area)
-  const titleDrag = useDragOffset('freedom_newtab_offset_title', pageRef);
-  const searchDrag = useDragOffset('freedom_newtab_offset_search', pageRef);
-  const linksDrag = useDragOffset('freedom_newtab_offset_links', pageRef);
+  const titleDrag = useDragOffset('freedom_newtab_offset_title', pageRef, isEditingLayout);
+  const searchDrag = useDragOffset('freedom_newtab_offset_search', pageRef, isEditingLayout);
+  const linksDrag = useDragOffset('freedom_newtab_offset_links', pageRef, isEditingLayout);
+  const grab = (dragging: boolean) => (isEditingLayout ? (dragging ? 'relative z-30 cursor-grabbing' : 'cursor-grab') : '');
 
   const [brandFirst, ...brandRest] = 'Freedom Browser'.split(' ');
 
@@ -238,8 +242,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           ref={titleDrag.ref}
           {...titleDrag.handlers}
           style={titleDrag.style}
-          title={t('layout.dragHint')}
-          className={`mb-[9vh] self-start w-fit touch-none ${titleDrag.isDragging ? 'relative z-30 cursor-grabbing' : 'cursor-grab'}`}
+          title={isEditingLayout ? t('layout.dragHint') : undefined}
+          className={`mb-[9vh] self-start w-fit touch-none ${grab(titleDrag.isDragging)}`}
         >
           <h1 className="text-[clamp(28px,4vw,var(--fb-fs-title))] font-normal tracking-tight leading-tight">
             {brandFirst}{' '}
@@ -254,7 +258,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           ref={searchDrag.ref}
           {...searchDrag.handlers}
           style={searchDrag.style}
-          className={`w-full max-w-[460px] mx-auto mb-10 touch-none ${searchDrag.isDragging ? 'relative z-30 cursor-grabbing' : 'cursor-grab'}`}
+          className={`w-full max-w-[460px] mx-auto mb-10 touch-none ${grab(searchDrag.isDragging)}`}
         >
         <form onSubmit={handleSearch} className="w-full">
           <div className="flex items-center w-full h-11 px-4 rounded-[var(--fb-radius-pill)] border border-[var(--fb-border-strong)] bg-[var(--fb-input)] focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-colors shadow-[var(--fb-shadow-card)]">
@@ -288,7 +292,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           ref={linksDrag.ref}
           {...linksDrag.handlers}
           style={linksDrag.style}
-          className={`flex flex-wrap justify-center gap-x-5 gap-y-4 max-w-[560px] mx-auto touch-none ${linksDrag.isDragging ? 'relative z-30 cursor-grabbing' : ''}`}
+          className={`flex flex-wrap justify-center gap-x-5 gap-y-4 max-w-[560px] mx-auto touch-none ${isEditingLayout && linksDrag.isDragging ? 'relative z-30 cursor-grabbing' : ''}`}
         >
           {favorites.map((fav, index) => {
             const iconUrl = FaviconService.getFaviconSync(fav.url);
@@ -378,22 +382,27 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         </div>
       </div>
 
-      {/* Clock & date widget: drag anywhere over the wallpaper (position saved in % of the page) */}
+      {/* Clock & date widget: in layout edit mode drag it anywhere over the wallpaper (position saved in % of the page) */}
       <div
         ref={clockRef}
         id="newtab-clock"
-        role="button"
-        tabIndex={0}
-        aria-label={t('clock.dragHint')}
-        title={t('clock.dragHint')}
-        onPointerDown={handleClockPointerDown}
-        onPointerMove={handleClockPointerMove}
-        onPointerUp={handleClockPointerUp}
-        onPointerCancel={handleClockPointerUp}
-        onDoubleClick={() => saveClockPos(null)}
-        onKeyDown={handleClockKeyDown}
+        {...(isEditingLayout
+          ? {
+              role: 'button',
+              tabIndex: 0,
+              'aria-label': t('clock.dragHint'),
+              title: t('clock.dragHint'),
+              'data-layout-editable': '',
+              onPointerDown: handleClockPointerDown,
+              onPointerMove: handleClockPointerMove,
+              onPointerUp: handleClockPointerUp,
+              onPointerCancel: handleClockPointerUp,
+              onDoubleClick: () => saveClockPos(null),
+              onKeyDown: handleClockKeyDown,
+            }
+          : {})}
         className={`absolute z-20 flex items-center gap-2.5 px-3.5 py-2 rounded-[var(--fb-radius-lg)] border border-[var(--fb-border)] bg-[color-mix(in_srgb,var(--fb-surface)_80%,transparent)] backdrop-blur-md touch-none ${
-          isDraggingClock ? 'cursor-grabbing shadow-[var(--fb-shadow-pop)]' : 'cursor-grab'
+          isEditingLayout ? (isDraggingClock ? 'cursor-grabbing shadow-[var(--fb-shadow-pop)]' : 'cursor-grab') : ''
         }`}
         style={
           clockPos

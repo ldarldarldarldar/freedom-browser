@@ -74,7 +74,7 @@ jobs:
         run: |
           $setup = Get-ChildItem release\*-Setup.exe | Select-Object -First 1
           if (-not $setup) { throw "Setup.exe was not built" }
-          $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          $p = Start-Process $setup.FullName -ArgumentList '/S', '/STARTUP' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
           # The installer may hand over to an elevated copy of itself: wait for the Apps & features entry
           $roots = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -97,7 +97,13 @@ jobs:
           $cmd = (Get-ItemProperty 'HKLM:\Software\Classes\FreedomBrowserURL\shell\open\command').'(default)'
           Write-Host "URL handler: $cmd"
           if ($cmd -notlike "*freedom-browser.exe*") { throw 'URL handler command is wrong' }
-          if (-not (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Freedom Browser.lnk")) { throw 'Start menu shortcut missing' }
+          $links = @{
+            desktop = "$env:PUBLIC\Desktop\Freedom Browser.lnk"
+            startMenu = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Freedom Browser.lnk"
+            startup = "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Startup\Freedom Browser.lnk"
+          }
+          foreach ($k in $links.Keys) { if (-not (Test-Path $links[$k])) { throw "Shortcut missing: $k ($($links[$k]))" } }
+          Write-Host 'Desktop, Start menu and Startup shortcuts created'
           $s = Start-Process $exe -ArgumentList '--smoke-test' -PassThru -Wait -RedirectStandardOutput installed-smoke.log
           Get-Content installed-smoke.log
           if ($s.ExitCode -ne 0) { throw "Installed app smoke test failed ($($s.ExitCode))" }
@@ -106,6 +112,17 @@ jobs:
           for ($i = 0; $i -lt 30 -and (Test-Path $exe); $i++) { Start-Sleep 2 }
           if (Test-Path $exe) { throw 'Uninstall left the app files' }
           if (Test-Path 'HKLM:\Software\Clients\StartMenuInternet\Freedom Browser') { throw 'Uninstall left the browser registration' }
+          foreach ($k in $links.Keys) { if (Test-Path $links[$k]) { throw "Uninstall left the $k shortcut" } }
+
+          # Options: no desktop / Start menu shortcuts when switched off
+          $p = Start-Process $setup.FullName -ArgumentList '/S', '/NODESKTOP', '/NOSTARTMENU' -Wait -PassThru
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $exe); $i++) { Start-Sleep 2 }
+          Start-Sleep 5
+          if (-not (Test-Path $exe)) { throw 'Second install failed' }
+          foreach ($k in $links.Keys) { if (Test-Path $links[$k]) { throw "Shortcut created although switched off: $k" } }
+          Write-Host 'Options respected: no shortcuts'
+          Start-Process $un -ArgumentList '/S', '/allusers' -Wait
+          for ($i = 0; $i -lt 30 -and (Test-Path $exe); $i++) { Start-Sleep 2 }
           Write-Host 'Installer test passed'
 
       - name: Upload Windows artifacts

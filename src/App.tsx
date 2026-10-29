@@ -21,6 +21,8 @@ import { DEFAULT_SETTINGS, SEARCH_ENGINES } from './settings/defaults';
 import { Sidebar, SidebarSection } from './components/Sidebar';
 import { TabsOverview } from './components/TabsOverview';
 import { DockDropOverlay, nearestEdge } from './components/DockDropOverlay';
+import { LayoutEditBar } from './components/LayoutEditBar';
+import { RESET_LAYOUT_EVENT } from './hooks/useDragOffset';
 import { DockEdge } from './settings/types';
 import { SearchEngineService } from './services/searchEngineService';
 import { logger } from './services/loggerService';
@@ -221,6 +223,8 @@ export default function App() {
   // Modals and Drawers
   const [isTaskManagerOpen, setIsTaskManagerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // Layout edit mode: panels and New Tab elements can be moved only while it is on
+  const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
@@ -2228,7 +2232,8 @@ export default function App() {
   const navigationBar = (
     <Navigation
       dock={toolbarDock}
-      onDockDragStart={(e) => startDockDrag('toolbar', e)}
+      onDockDragStart={isEditingLayout ? (e) => startDockDrag('toolbar', e) : undefined}
+      onEditLayout={() => setIsEditingLayout(true)}
       currentTab={activeTab}
       onNavigate={handleNavigate}
       onBack={handleBack}
@@ -2289,7 +2294,7 @@ export default function App() {
   const sidebarRail = (
     <Sidebar
       dock={sidebarDock}
-      onDockDragStart={(e) => startDockDrag('sidebar', e)}
+      onDockDragStart={isEditingLayout ? (e) => startDockDrag('sidebar', e) : undefined}
       active={
         isTabsOverviewOpen
           ? 'tabs'
@@ -2460,6 +2465,7 @@ export default function App() {
           defaultSearchEngine={settings.defaultSearchEngine}
           palette={settings.palette}
           isPerformanceMode={isPerformanceMode}
+          isEditingLayout={isEditingLayout}
           onOpenSettings={() => setIsSettingsOpen(true)}
           showNewTabSettingsIcon={settings.showNewTabSettingsIcon}
           showFreedomIcon={settings.showFreedomIcon}
@@ -2511,6 +2517,16 @@ export default function App() {
       {!isFullScreen && toolbarDock === 'right' && navigationBar}
       </div>
       {!isFullScreen && toolbarDock === 'bottom' && navigationBar}
+
+      {isEditingLayout && (
+        <LayoutEditBar
+          onReset={() => {
+            setSettings((prev) => ({ ...prev, sidebarDock: 'left', toolbarDock: 'top' }));
+            window.dispatchEvent(new Event(RESET_LAYOUT_EVENT));
+          }}
+          onDone={() => setIsEditingLayout(false)}
+        />
+      )}
 
       {dockDrag && (
         <DockDropOverlay
@@ -2597,6 +2613,11 @@ export default function App() {
             setSettingsInitialTab(undefined);
           }}
           initialTab={settingsInitialTab}
+          onEditLayout={() => {
+            setIsSettingsOpen(false);
+            setSettingsInitialTab(undefined);
+            setIsEditingLayout(true);
+          }}
           settings={settings}
           onUpdateSettings={(newSettings) =>
             setSettings((prev) => ({ ...prev, ...newSettings }))

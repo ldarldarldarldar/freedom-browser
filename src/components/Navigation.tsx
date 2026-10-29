@@ -3,6 +3,7 @@ import { DockEdge } from '../settings/types';
 import {
   Puzzle,
   GripVertical,
+  Move,
   VenetianMask,
   ArrowLeft,
   ArrowRight,
@@ -53,6 +54,8 @@ interface NavigationProps {
   onOpenDownloads: () => void;
   onToggleDevTools: () => void;
   onOpenAbout: () => void;
+  /** Main menu → Edit layout */
+  onEditLayout?: () => void;
   defaultSearchEngine: SearchEngineId;
   downloadsCount: number;
   headerColorClass?: string;
@@ -96,6 +99,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenDownloads,
   onToggleDevTools,
   onOpenAbout,
+  onEditLayout,
   defaultSearchEngine,
   downloadsCount,
   headerColorClass = 'bg-[var(--fb-bg)]',
@@ -780,6 +784,21 @@ export const Navigation: React.FC<NavigationProps> = ({
               )}
 
               <div className="my-1 border-t border-white/[0.06]" />
+
+              {onEditLayout && (
+                <button
+                  id="menu-edit-layout"
+                  type="button"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onEditLayout();
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white transition-colors"
+                >
+                  <Move className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>{t('layout.edit')}</span>
+                </button>
+              )}
 
               <button
                 type="button"

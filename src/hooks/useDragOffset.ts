@@ -25,8 +25,9 @@ export const RESET_LAYOUT_EVENT = 'freedom-reset-newtab-layout';
  * keeps its place in the normal layout: the move is applied as a translate() offset.
  * Dragging starts after a small threshold so clicks on inner buttons/links still work;
  * a click that ends a drag is swallowed. Double-click resets. Inputs never start a drag.
+ * Only active while `enabled` (layout edit mode); otherwise the element just keeps its saved place.
  */
-export function useDragOffset(storageKey: string, containerRef: React.RefObject<HTMLElement | null>) {
+export function useDragOffset(storageKey: string, containerRef: React.RefObject<HTMLElement | null>, enabled = true) {
   const elRef = useRef<HTMLDivElement | null>(null);
   const [offset, setOffset] = useState<DragOffset | null>(() => read(storageKey));
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
@@ -150,10 +151,13 @@ export function useDragOffset(storageKey: string, containerRef: React.RefObject<
     ref: elRef,
     isDragging,
     style: offset ? ({ transform: `translate(${dx}px, ${dy}px)` } as React.CSSProperties) : undefined,
-    handlers: {
-      onPointerDown,
-      onClickCapture,
-      onDoubleClick,
-    },
+    handlers: enabled
+      ? {
+          onPointerDown,
+          onClickCapture,
+          onDoubleClick,
+          'data-layout-editable': '',
+        }
+      : {},
   };
 }

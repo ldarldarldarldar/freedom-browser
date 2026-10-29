@@ -281,3 +281,15 @@ select {
     radial-gradient(40% 40% at 80% 80%, color-mix(in srgb, var(--fb-accent) 14%, transparent), transparent 70%),
     radial-gradient(30% 30% at 70% 18%, color-mix(in srgb, var(--fb-text) 6%, transparent), transparent 70%);
 }
+
+/* Layout edit mode (src/components/LayoutEditBar.tsx): what can be moved is outlined */
+[data-layout-editable] {
+  outline: 1.5px dashed color-mix(in srgb, var(--fb-accent) 70%, transparent);
+  outline-offset: 6px;
+  border-radius: var(--fb-radius-md);
+}
+#toolbar-dock-grip,
+#sidebar-dock-grip {
+  color: var(--fb-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fb-accent) 60%, transparent);
+}

@@ -38,6 +38,8 @@ interface WebviewContainerProps {
   defaultSearchEngine: SearchEngineId;
   palette?: ThemePalette;
   isPerformanceMode?: boolean;
+  /** Layout edit mode (main menu → Edit layout) */
+  isEditingLayout?: boolean;
   onOpenSettings?: () => void;
   showNewTabSettingsIcon?: boolean;
   showFreedomIcon?: boolean;
@@ -349,6 +351,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   defaultSearchEngine,
   palette,
   isPerformanceMode = false,
+  isEditingLayout = false,
   onOpenSettings,
   showNewTabSettingsIcon = true,
   showFreedomIcon = true,
@@ -646,6 +649,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
                           palette={palette}
                           isPerformanceMode={isPerformanceMode}
                           isPrivate={Boolean(paneTab?.isPrivate)}
+                          isEditingLayout={isEditingLayout}
                           onOpenSettings={onOpenSettings}
                           showSettingsIcon={showNewTabSettingsIcon}
                           showFreedomIcon={showFreedomIcon}
@@ -715,6 +719,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
                 palette={palette}
                 isPerformanceMode={isPerformanceMode}
                 isPrivate={Boolean(activeTab?.isPrivate)}
+                isEditingLayout={isEditingLayout}
                 onOpenSettings={onOpenSettings}
                 showSettingsIcon={showNewTabSettingsIcon}
                 showFreedomIcon={showFreedomIcon}
@@ -819,6 +824,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
           palette={palette}
           isPerformanceMode={isPerformanceMode}
           isPrivate={Boolean(activeTab?.isPrivate)}
+          isEditingLayout={isEditingLayout}
           onOpenSettings={onOpenSettings}
           showSettingsIcon={showNewTabSettingsIcon}
           showFreedomIcon={showFreedomIcon}
