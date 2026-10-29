@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Info,
   ChevronRight,
+  Puzzle,
 } from 'lucide-react';
 import { BrowserSettings, BrowserMode, ThemePresetId, ThemePalette, BackgroundImageScale } from '../settings/types';
 import { SEARCH_ENGINES } from '../settings/defaults';
@@ -28,8 +29,8 @@ import freenImg from '../assets/freen-mascot.png';
 import { useTranslation, TranslationKey } from '../i18n';
 import { FreedomMark } from '../components/FreedomLogo';
 import { APP_VERSION } from '../version';
-import { NewTabWallpaper, NEW_TAB_WALLPAPERS } from '../components/NewTabWallpaper';
 import { RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
+import { ExtensionsSettings } from '../components/ExtensionsSettings';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -37,9 +38,11 @@ interface SettingsModalProps {
   settings: BrowserSettings;
   onUpdateSettings: (newSettings: Partial<BrowserSettings>) => void;
   onClearBrowsingData: () => void;
+  /** Section to open first (e.g. 'extensions' from the toolbar puzzle menu) */
+  initialTab?: string;
 }
 
-type SettingsTab = 'main' | 'privacy' | 'telemetry' | 'visual' | 'performance' | 'about';
+type SettingsTab = 'main' | 'privacy' | 'telemetry' | 'visual' | 'performance' | 'extensions' | 'about';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -47,9 +50,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onUpdateSettings,
   onClearBrowsingData,
+  initialTab,
 }) => {
   const { t, language, setLanguage } = useTranslation();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('main');
+  const [activeTab, setActiveTab] = useState<SettingsTab>((initialTab as SettingsTab) || 'main');
   const [dataCleared, setDataCleared] = useState(false);
   const [viewingLogs, setViewingLogs] = useState(false);
   const [showDetailedColors, setShowDetailedColors] = useState(false);
@@ -279,6 +283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 { id: 'main', icon: Settings, label: t('settings.tabMain') },
                 { id: 'visual', icon: Palette, label: t('settings.tabVisual') },
                 { id: 'privacy', icon: Shield, label: t('settings.tabPrivacy') },
+                { id: 'extensions', icon: Puzzle, label: t('ext.title') },
                 { id: 'performance', icon: Zap, label: t('settings.tabPerformance') },
                 { id: 'telemetry', icon: Activity, label: t('settings.tabTelemetry') },
                 { id: 'about', icon: Info, label: t('nav.about') },
@@ -651,38 +656,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {/* New Tab wallpaper picker */}
-                <div className="border-t border-white/10 pt-4 space-y-3">
-                  <div>
-                    <div className="text-xs font-semibold text-white mb-0.5">{t('wallpaper.title')}</div>
-                    <div className="text-[11px] text-neutral-400">{t('wallpaper.desc')}</div>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2.5">
-                    {NEW_TAB_WALLPAPERS.map(({ id, labelKey }) => {
-                      const selected = (settings.newTabWallpaper ?? 'ridges') === id;
-                      return (
-                        <button
-                          key={id}
-                          id={`wallpaper-${id}`}
-                          type="button"
-                          onClick={() => onUpdateSettings({ newTabWallpaper: id })}
-                          aria-pressed={selected}
-                          className="flex flex-col gap-1.5 text-left"
-                        >
-                          <span
-                            className={`relative block h-16 rounded-[var(--fb-radius-md)] overflow-hidden bg-[var(--fb-bg)] border ${
-                              selected ? 'border-emerald-400 ring-2 ring-emerald-500/30' : 'border-[var(--fb-border)] hover:border-[var(--fb-border-strong)]'
-                            }`}
-                          >
-                            <NewTabWallpaper id={id} isStatic />
-                          </span>
-                          <span className={`text-[11px] ${selected ? 'text-white' : 'text-neutral-400'}`}>{t(labelKey)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 {/* Reset drag & drop layout */}
                 <div className="border-t border-white/10 pt-4 flex items-center justify-between gap-4">
                   <div>
@@ -1046,6 +1019,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="space-y-2.5">
                   {[
+                    { key: 'adBlockEnabled', label: t('settings.adBlock') },
                     { key: 'doNotTrack', label: t('settings.doNotTrack') },
                     { key: 'blockThirdPartyCookies', label: t('settings.blockThirdParty') },
                     { key: 'popupsBlocked', label: t('settings.blockPopups') },
@@ -1095,6 +1069,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="pt-4 text-[11px] text-neutral-500">{t('about.license')}</p>
               </div>
             )}
+
+            {activeTab === 'extensions' && <ExtensionsSettings />}
 
             {/* 5. ZERO TELEMETRY */}
             {activeTab === 'telemetry' && (

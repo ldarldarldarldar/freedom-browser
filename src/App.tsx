@@ -36,7 +36,7 @@ import { SplitViewService, SplitViewState, SplitLayoutType } from './services/sp
 import { SessionRestoreService } from './services/sessionRestoreService';
 import { CloseConfirmationModal } from './components/CloseConfirmationModal';
 import { I18nProvider } from './i18n';
-import { FileCode, AppWindow, ShieldCheck, EyeOff } from 'lucide-react';
+import { FileCode, AppWindow, ShieldCheck, ShieldBan, EyeOff } from 'lucide-react';
 import { translate, normalizeLanguage } from './i18n';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
@@ -226,6 +226,7 @@ export default function App() {
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isTabsOverviewOpen, setIsTabsOverviewOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem('freedom_sidebar_collapsed') === '1';
@@ -2129,14 +2130,15 @@ export default function App() {
     };
   };
 
-  // Keep the main process privacy filters (DNT/GPC, 3rd-party cookies, popups) in sync with Settings
+  // Keep the main process privacy filters (DNT/GPC, 3rd-party cookies, popups, ad blocker) in sync with Settings
   useEffect(() => {
     window.electronAPI?.setPrivacySettings?.({
       doNotTrack: settings.doNotTrack,
       blockThirdPartyCookies: settings.blockThirdPartyCookies,
       popupsBlocked: settings.popupsBlocked,
+      adBlockEnabled: settings.adBlockEnabled,
     });
-  }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked]);
+  }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled]);
 
   // Download speed cap is enforced by the main-process download governor
   useEffect(() => {
@@ -2237,6 +2239,10 @@ export default function App() {
       }}
       onHome={() => handleNavigate('freedom://newtab')}
       onNewPrivateTab={() => handleNewTab('freedom://newtab', { isPrivate: true })}
+      onManageExtensions={() => {
+        setSettingsInitialTab('extensions');
+        setIsSettingsOpen(true);
+      }}
       onOpenSettings={() => setIsSettingsOpen(true)}
       onOpenTaskManager={() => setIsTaskManagerOpen(true)}
       onOpenDownloads={() => setIsDownloadsOpen(!isDownloadsOpen)}
@@ -2264,12 +2270,13 @@ export default function App() {
       systemRamMb={frcStats ? (frcStats.totalSystemRamMb ?? Math.round(frcStats.totalSystemRamBytes / (1024 * 1024))) : 0}
       memoryPressureLevel={frcStats?.memoryPressureLevel || 'normal'}
       privacyToggles={[
+        { key: 'adBlockEnabled', label: translate(normalizeLanguage(settings.language), 'menu.adBlock'), value: settings.adBlockEnabled, icon: ShieldBan },
         { key: 'popupsBlocked', label: translate(normalizeLanguage(settings.language), 'menu.blockPopups'), value: settings.popupsBlocked, icon: AppWindow },
         { key: 'blockThirdPartyCookies', label: translate(normalizeLanguage(settings.language), 'menu.trackerProtection'), value: settings.blockThirdPartyCookies, icon: ShieldCheck },
         { key: 'doNotTrack', label: translate(normalizeLanguage(settings.language), 'menu.doNotTrack'), value: settings.doNotTrack, icon: EyeOff },
       ]}
       onTogglePrivacy={(key) =>
-        setSettings((prev) => ({ ...prev, [key]: !prev[key as 'doNotTrack' | 'blockThirdPartyCookies' | 'popupsBlocked'] }))
+        setSettings((prev) => ({ ...prev, [key]: !prev[key as 'doNotTrack' | 'blockThirdPartyCookies' | 'popupsBlocked' | 'adBlockEnabled'] }))
       }
     />
   );
@@ -2340,9 +2347,7 @@ export default function App() {
           !isPerformanceMode &&
           settings.starAnimationEnabled &&
           settings.backgroundParticlesEnabled &&
-          activeTab?.url === 'freedom://newtab' &&
-          // Opaque wallpapers draw their own background; only "ridges" shows the app-level stars
-          (settings.newTabWallpaper ?? 'ridges') === 'ridges'
+          activeTab?.url === 'freedom://newtab'
         }
         density={settings.starDensity}
         intensity={settings.animationIntensity}
@@ -2448,7 +2453,6 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           showNewTabSettingsIcon={settings.showNewTabSettingsIcon}
           showFreedomIcon={settings.showFreedomIcon}
-          newTabWallpaper={settings.newTabWallpaper ?? 'ridges'}
           onFoundInPage={handleFoundInPage}
           onTabZoomChange={handleTabZoomChange}
           splitViewState={splitViewState}
@@ -2578,7 +2582,11 @@ export default function App() {
       {isSettingsOpen && (
         <SettingsModal
           isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
+          onClose={() => {
+            setIsSettingsOpen(false);
+            setSettingsInitialTab(undefined);
+          }}
+          initialTab={settingsInitialTab}
           settings={settings}
           onUpdateSettings={(newSettings) =>
             setSettings((prev) => ({ ...prev, ...newSettings }))

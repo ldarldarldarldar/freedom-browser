@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DockEdge } from '../settings/types';
 import {
+  Puzzle,
   GripVertical,
   VenetianMask,
   ArrowLeft,
@@ -74,6 +75,7 @@ interface NavigationProps {
   systemRamMb?: number;
   memoryPressureLevel?: 'normal' | 'moderate' | 'critical';
   onNewPrivateTab?: () => void;
+  onManageExtensions?: () => void;
   /** Window edge the toolbar is docked to; left/right render it as a vertical panel */
   dock?: DockEdge;
   onDockDragStart?: (e: React.PointerEvent) => void;
@@ -118,6 +120,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   privacyToggles,
   onTogglePrivacy,
   onNewPrivateTab,
+  onManageExtensions,
   dock = 'top',
   onDockDragStart,
 }) => {
@@ -128,6 +131,17 @@ export const Navigation: React.FC<NavigationProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  // Chrome extensions (puzzle button)
+  const [showExtensions, setShowExtensions] = useState(false);
+  const [extensions, setExtensions] = useState<FreedomExtensionInfo[]>([]);
+  const extensionsApi = window.electronAPI?.extensions;
+  useEffect(() => {
+    if (!extensionsApi) return;
+    const load = () => extensionsApi.list().then(setExtensions).catch(() => {});
+    load();
+    window.addEventListener('freedom-extensions-changed', load);
+    return () => window.removeEventListener('freedom-extensions-changed', load);
+  }, [extensionsApi]);
   const [showSecurityDetails, setShowSecurityDetails] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -148,6 +162,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setShowMenu(false);
+        setShowExtensions(false);
         setShowSecurityDetails(false);
       }
     };
@@ -416,6 +431,71 @@ export const Navigation: React.FC<NavigationProps> = ({
           >
             <HistoryIcon className="w-4 h-4" />
           </button>
+        )}
+
+        {/* Chrome extensions */}
+        {extensionsApi && (
+          <div className="relative">
+            <button
+              id="btn-extensions"
+              type="button"
+              onClick={() => {
+                setShowExtensions((v) => !v);
+                setShowMenu(false);
+              }}
+              className={`w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] transition-colors ${
+                showExtensions ? 'text-white bg-white/[0.08]' : 'text-neutral-400 hover:text-white hover:bg-white/[0.08]'
+              }`}
+              title={t('ext.toolbar')}
+            >
+              <Puzzle className="w-4 h-4" />
+            </button>
+            {showExtensions && (
+              <div
+                id="extensions-menu"
+                className={`absolute ${dock === 'left' ? 'left-0' : 'right-0'} ${popUp ? 'bottom-9' : 'top-9'} w-64 p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}
+              >
+                {extensions.filter((e) => e.enabled).length === 0 && (
+                  <div className="px-2.5 py-2 text-neutral-500">{t('ext.empty')}</div>
+                )}
+                {extensions
+                  .filter((e) => e.enabled)
+                  .map((ext) => (
+                    <button
+                      key={ext.folder}
+                      type="button"
+                      disabled={!ext.popup}
+                      onClick={(e) => {
+                        const r = (e.currentTarget.closest('.relative') as HTMLElement).getBoundingClientRect();
+                        setShowExtensions(false);
+                        extensionsApi.open(ext.folder, 'popup', { x: Math.round(r.right), y: Math.round(r.bottom + 4) });
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] disabled:hover:bg-transparent flex items-center gap-2 text-neutral-300 hover:text-white"
+                    >
+                      {ext.icon ? <img src={ext.icon} alt="" className="w-4 h-4 rounded-sm" /> : <Puzzle className="w-4 h-4 text-neutral-500" />}
+                      <span className="truncate flex-1">{ext.name}</span>
+                      {!ext.popup && <span className="text-[10px] text-neutral-600">{t('ext.noPopup')}</span>}
+                    </button>
+                  ))}
+                {onManageExtensions && (
+                  <>
+                    <div className="my-1 border-t border-white/[0.06]" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExtensions(false);
+                        onManageExtensions();
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white"
+                    >
+                      <SettingsIcon className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>{t('ext.manage')}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Freedom RAM Control (FRC) HUD Button */}

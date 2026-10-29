@@ -125,6 +125,63 @@
     }
   } catch {}
 
+  // 4b. Built-in ad blocker (electron/adblock.cjs): cosmetic filters for http(s) pages.
+  // Network requests are filtered in the main process; this part hides leftover ad slots.
+  try {
+    if (/^https?:$/.test(location.protocol)) {
+      const { ipcRenderer, webFrame } = require('electron');
+      const pageUrl = location.href;
+      // Hostname CSS is inserted by the main process; scriptlets must run in the page world before its scripts
+      const start = ipcRenderer.sendSync('freedom-adblock-start', pageUrl);
+      if (start) {
+        for (const script of start.scripts || []) {
+          webFrame.executeJavaScript(script).catch(() => {});
+        }
+
+        // Generic hiding rules depend on the classes/ids/links present in the DOM
+        const seen = { classes: new Set(), ids: new Set(), hrefs: new Set() };
+        const collect = (root) => {
+          const fresh = { classes: [], ids: [], hrefs: [] };
+          const add = (kind, value) => {
+            if (value && !seen[kind].has(value)) {
+              seen[kind].add(value);
+              fresh[kind].push(value);
+            }
+          };
+          const nodes = root.querySelectorAll ? root.querySelectorAll('[id],[class],a[href]') : [];
+          for (const el of [root, ...nodes]) {
+            if (!el || el.nodeType !== 1) continue;
+            if (el.id) add('ids', el.id);
+            for (const c of el.classList || []) add('classes', c);
+            if (el.tagName === 'A' && el.href) add('hrefs', el.href);
+          }
+          if (fresh.classes.length || fresh.ids.length || fresh.hrefs.length) {
+            ipcRenderer.send('freedom-adblock-dom', pageUrl, fresh);
+          }
+        };
+
+        let pending = [];
+        let timer = 0;
+        const flush = () => {
+          timer = 0;
+          const roots = pending;
+          pending = [];
+          for (const root of roots) collect(root);
+        };
+        window.addEventListener('DOMContentLoaded', () => {
+          collect(document.documentElement);
+          new MutationObserver((mutations) => {
+            for (const m of mutations) {
+              if (m.type === 'attributes') pending.push(m.target);
+              else for (const n of m.addedNodes) if (n.nodeType === 1) pending.push(n);
+            }
+            if (!timer && pending.length) timer = setTimeout(flush, 250);
+          }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'id'] });
+        }, { once: true });
+      }
+    }
+  } catch {}
+
   // 5. Freedom RAM Control (FRC-GUARD) Telemetry Sensors:
   // Detect active media playback, WebRTC streams, and unsaved form states
   try {

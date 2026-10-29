@@ -298,7 +298,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.3-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.3-4-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -1320,14 +1320,31 @@ ipcMain.handle('pick_custom_background', async () => {
 });
 
 // Privacy settings mirrored from the renderer (Settings → Privacy). Defaults match src/settings/defaults.ts
-const privacyState = { doNotTrack: true, blockThirdPartyCookies: true, popupsBlocked: true };
+const privacyState = { doNotTrack: true, blockThirdPartyCookies: true, popupsBlocked: true, adBlockEnabled: true };
 ipcMain.handle('set_privacy_settings', (event, next) => {
   if (next && typeof next === 'object') {
     for (const key of Object.keys(privacyState)) {
       if (typeof next[key] === 'boolean') privacyState[key] = next[key];
     }
   }
+  adBlocker?.setEnabled(privacyState.adBlockEnabled);
   return { ...privacyState };
+});
+
+// ---- Built-in ad blocker (electron/adblock.cjs), created on app ready ----
+const { createAdBlocker } = require('./adblock.cjs');
+let adBlocker = null;
+// Sync call from electron/webview-preload.cjs at document start: page CSS is inserted, scriptlets returned
+ipcMain.on('freedom-adblock-start', (event, pageUrl) => {
+  try {
+    event.returnValue = adBlocker?.pageStart(event.sender, pageUrl) ?? null;
+  } catch (err) {
+    console.warn('[adblock]', err);
+    event.returnValue = null;
+  }
+});
+ipcMain.on('freedom-adblock-dom', (event, pageUrl, dom) => {
+  try { adBlocker?.pageDom(event.sender, pageUrl, dom); } catch (err) { console.warn('[adblock]', err); }
 });
 
 // Approximate registrable domain ("sub.example.co.uk" -> "example.co.uk") for first/third-party checks
@@ -1659,6 +1676,13 @@ function configureBrowsingSession(ses) {
     callback({ cancel: false, requestHeaders: details.requestHeaders });
   });
 
+  // Ad & tracker blocking for pages in browser tabs
+  ses.webRequest.onBeforeRequest((details, callback) => {
+    let verdict = null;
+    try { verdict = adBlocker?.matchRequest(details); } catch {}
+    callback(verdict || {});
+  });
+
   // Third-party cookie blocking: drop Set-Cookie on cross-site subresource responses
   ses.webRequest.onHeadersReceived((details, callback) => {
     if (details.responseHeaders && isThirdPartyRequest(details)) {
@@ -1680,12 +1704,79 @@ function keyIs(input, letter) {
   return input.code === `Key${letter.toUpperCase()}` || (input.key || '').toLowerCase() === letter;
 }
 
+// ---- Chrome extensions (Settings → Extensions, toolbar puzzle button) ----
+const { createExtensionManager } = require('./extensions.cjs');
+let extensionManager = null;
+const withExtensions = (fn) => async (...args) => {
+  if (!extensionManager) throw new Error('Extensions are not ready yet');
+  return fn(...args);
+};
+
+ipcMain.handle('extensions_list', withExtensions(() => extensionManager.list()));
+ipcMain.handle('extensions_install_folder', withExtensions(async () => {
+  const res = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'], title: 'Select unpacked extension folder (with manifest.json)' });
+  if (res.canceled || !res.filePaths[0]) return null;
+  return extensionManager.installFromDir(res.filePaths[0]);
+}));
+ipcMain.handle('extensions_install_file', withExtensions(async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: 'Select extension package',
+    filters: [{ name: 'Chrome extension', extensions: ['crx', 'zip'] }],
+  });
+  if (res.canceled || !res.filePaths[0]) return null;
+  return extensionManager.installFromArchive(fs.readFileSync(res.filePaths[0]), path.parse(res.filePaths[0]).name);
+}));
+ipcMain.handle('extensions_install_store', withExtensions((event, idOrUrl) => extensionManager.installFromWebStore(idOrUrl)));
+ipcMain.handle('extensions_set_enabled', withExtensions((event, folder, enabled) => extensionManager.setEnabled(folder, Boolean(enabled))));
+ipcMain.handle('extensions_remove', withExtensions((event, folder) => extensionManager.remove(folder)));
+
+// Extension popup (action.default_popup) in a small window; options page in a normal tab
+let extensionPopup = null;
+ipcMain.handle('extensions_open', withExtensions((event, folder, kind, anchor) => {
+  const ext = extensionManager.list().find((e) => e.folder === folder);
+  if (!ext) return false;
+  const url = extensionManager.pageUrl(folder, kind === 'options' ? ext.options : ext.popup);
+  if (!url) return false;
+  if (kind === 'options') {
+    mainWindow?.webContents.send('webview-new-window', { url });
+    return true;
+  }
+  if (extensionPopup && !extensionPopup.isDestroyed()) extensionPopup.close();
+  const bounds = mainWindow.getBounds();
+  const width = 380;
+  const x = Math.round(bounds.x + Math.min(Math.max((anchor?.x ?? bounds.width) - width, 8), bounds.width - width - 8));
+  const y = Math.round(bounds.y + (anchor?.y ?? 80));
+  extensionPopup = new BrowserWindow({
+    parent: mainWindow,
+    x,
+    y,
+    width,
+    height: 560,
+    frame: false,
+    resizable: true,
+    show: false,
+    backgroundColor: '#16191c',
+    webPreferences: { session: session.defaultSession, contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  extensionPopup.loadURL(url);
+  extensionPopup.once('ready-to-show', () => extensionPopup?.show());
+  extensionPopup.on('blur', () => extensionPopup && !extensionPopup.isDestroyed() && extensionPopup.close());
+  return true;
+}));
+
 // App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.userAgentFallback = desktopChromeUA;
   session.defaultSession.setUserAgent(desktopChromeUA);
 
+  adBlocker = createAdBlocker({ app, net });
+  adBlocker.setEnabled(privacyState.adBlockEnabled);
   configureBrowsingSession(session.defaultSession);
+
+  // Chrome extensions must be loaded on every start, before any page/webview is created
+  extensionManager = createExtensionManager({ app, session, net });
+  await extensionManager.loadAllOnStartup().catch((err) => console.warn('[extensions]', err));
 
   registerLinuxDesktopIntegration();
   createWindow();

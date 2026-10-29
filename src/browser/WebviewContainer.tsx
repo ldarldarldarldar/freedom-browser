@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { BrowserTab } from './types';
 import { NewTabPage } from '../pages/NewTabPage';
 import { ErrorPage } from '../pages/ErrorPage';
-import { SearchEngineId, ThemePalette, NewTabWallpaperId } from '../settings/types';
+import { SearchEngineId, ThemePalette } from '../settings/types';
 import { Moon, ExternalLink, Globe, ShieldCheck, GripVertical, GripHorizontal } from 'lucide-react';
 import { tauriBridge, isTauriEnvironment, isElectronEnvironment } from '../services/tauriBridge';
 import { ZoomService } from '../services/zoomService';
@@ -41,7 +41,6 @@ interface WebviewContainerProps {
   onOpenSettings?: () => void;
   showNewTabSettingsIcon?: boolean;
   showFreedomIcon?: boolean;
-  newTabWallpaper?: NewTabWallpaperId;
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
   onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
   splitViewState?: SplitViewState;
@@ -95,6 +94,10 @@ const ElectronWebviewTab: React.FC<{
   onTabZoomChange,
 }) => {
   const wvRef = useRef<any>(null);
+  // The src attribute is only the first URL. Later navigations go through webview.loadURL
+  // (tauriBridge.navigateNative); re-setting src after every did-navigate sync (redirects,
+  // "site.com" -> "site.com/") made the webview load each page a second time.
+  const [initialSrc] = useState(tab.url);
   const currentTabRef = useRef(tab);
   currentTabRef.current = tab;
 
@@ -318,7 +321,7 @@ const ElectronWebviewTab: React.FC<{
       <webview
         ref={wvRef}
         id={`webview-${tab.id}`}
-        src={tab.url}
+        src={initialSrc}
         partition={tab.isPrivate ? tab.privatePartition : undefined}
         className="w-full h-full border-none outline-none bg-neutral-950"
         allowpopups="true"
@@ -349,7 +352,6 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
   onOpenSettings,
   showNewTabSettingsIcon = true,
   showFreedomIcon = true,
-  newTabWallpaper = 'ridges',
   onFoundInPage,
   onTabZoomChange,
   splitViewState,
@@ -643,7 +645,6 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
                           defaultSearchEngine={defaultSearchEngine}
                           palette={palette}
                           isPerformanceMode={isPerformanceMode}
-                          wallpaper={newTabWallpaper}
                           isPrivate={Boolean(paneTab?.isPrivate)}
                           onOpenSettings={onOpenSettings}
                           showSettingsIcon={showNewTabSettingsIcon}
@@ -713,7 +714,6 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
                 defaultSearchEngine={defaultSearchEngine}
                 palette={palette}
                 isPerformanceMode={isPerformanceMode}
-                wallpaper={newTabWallpaper}
                 isPrivate={Boolean(activeTab?.isPrivate)}
                 onOpenSettings={onOpenSettings}
                 showSettingsIcon={showNewTabSettingsIcon}
@@ -818,7 +818,6 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
           defaultSearchEngine={defaultSearchEngine}
           palette={palette}
           isPerformanceMode={isPerformanceMode}
-          wallpaper={newTabWallpaper}
           isPrivate={Boolean(activeTab?.isPrivate)}
           onOpenSettings={onOpenSettings}
           showSettingsIcon={showNewTabSettingsIcon}

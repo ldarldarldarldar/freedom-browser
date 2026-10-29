@@ -49,13 +49,13 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   clearBrowsingDataOnExit: false,
   javascriptEnabled: true,
   popupsBlocked: true,
+  adBlockEnabled: true,
 
   // Telemetry: Stored strictly locally, OFF by default
   localDiagnosticLogs: false,
 
   // Visual Customization & Themes
   theme: 'black-space',
-  newTabWallpaper: 'ridges',
   sidebarDock: 'left',
   toolbarDock: 'top',
   downloadSpeedLimitKBps: 0,

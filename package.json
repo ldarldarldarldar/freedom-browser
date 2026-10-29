@@ -2,7 +2,7 @@
   "name": "freedom-browser",
   "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.6.3",
+  "version": "0.6.3-4",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
@@ -23,6 +23,7 @@
     "build:linux": "bash scripts/build-linux.sh"
   },
   "dependencies": {
+    "@ghostery/adblocker": "2.20.1",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tauri-apps/api": "^2.11.1",

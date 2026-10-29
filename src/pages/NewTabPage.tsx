@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { VenetianMask, Search, Globe, Plus, Pencil, X, Settings, ArrowRight, Clock, ShieldCheck, EyeOff, SlidersHorizontal } from 'lucide-react';
 import { FreedomMark } from '../components/FreedomLogo';
 import { HistoryService } from '../services/historyService';
-import { SearchEngineId, ThemePalette, NewTabWallpaperId } from '../settings/types';
+import { SearchEngineId, ThemePalette } from '../settings/types';
 import { NewTabWallpaper } from '../components/NewTabWallpaper';
 import { useDragOffset, RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 import { SearchEngineService } from '../services/searchEngineService';
@@ -19,16 +19,13 @@ interface NewTabPageProps {
   onOpenSettings?: () => void;
   showSettingsIcon?: boolean;
   showFreedomIcon?: boolean;
-  wallpaper?: NewTabWallpaperId;
   isPrivate?: boolean;
 }
 
 export const NewTabPage: React.FC<NewTabPageProps> = ({
   onNavigate,
   defaultSearchEngine,
-  palette,
   isPerformanceMode = false,
-  wallpaper = 'ridges',
   isPrivate = false,
   onOpenSettings,
 }) => {
@@ -221,13 +218,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
 
   return (
     <div ref={pageRef} className="relative flex min-h-full text-[var(--fb-text)] select-none z-10">
-      {/* Decorative backdrop (Settings → Themes → New Tab wallpaper) */}
-      <NewTabWallpaper
-        id={wallpaper}
-        isStatic={isPerformanceMode}
-        particleColor={palette?.particleColor}
-        className="pointer-events-none"
-      />
+      {/* Decorative backdrop: theme accent glow (app-level star canvas shows through) */}
+      <NewTabWallpaper className="pointer-events-none" />
 
       <div className="relative flex-1 min-w-0 flex flex-col px-[7%] pt-[9vh] pb-8">
         {isPrivate && (

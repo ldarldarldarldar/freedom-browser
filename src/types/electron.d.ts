@@ -1,5 +1,22 @@
 import type * as React from 'react';
 
+declare global {
+  /** Installed Chrome extension as reported by electron/extensions.cjs */
+  interface FreedomExtensionInfo {
+    folder: string;
+    id: string;
+    name: string;
+    description: string;
+    version: string;
+    manifestVersion: number;
+    enabled: boolean;
+    icon: string | null;
+    popup: string | null;
+    options: string | null;
+    error: string | null;
+  }
+}
+
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {
@@ -47,7 +64,16 @@ declare global {
       pickCustomBackground: () => Promise<string | null>;
       setBrowserMode: (mode: 'performance' | 'quality') => Promise<boolean>;
       setDownloadSpeedLimit?: (kbps: number) => Promise<number>;
-      setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean }) => Promise<unknown>;
+      extensions?: {
+        list: () => Promise<FreedomExtensionInfo[]>;
+        installFolder: () => Promise<string | null>;
+        installFile: () => Promise<string | null>;
+        installFromStore: (idOrUrl: string) => Promise<string>;
+        setEnabled: (folder: string, enabled: boolean) => Promise<void>;
+        remove: (folder: string) => Promise<void>;
+        open: (folder: string, kind: 'popup' | 'options', anchor?: { x: number; y: number }) => Promise<boolean>;
+      };
+      setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean; adBlockEnabled: boolean }) => Promise<unknown>;
       getHardwareAcceleration?: () => Promise<boolean>;
       setHardwareAcceleration?: (enabled: boolean) => Promise<boolean>;
       relaunchApp?: () => Promise<void>;

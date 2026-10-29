@@ -57,10 +57,7 @@ export interface ThemePalette {
 
 export type DockEdge = 'top' | 'bottom' | 'left' | 'right';
 
-export type NewTabWallpaperId = 'ridges' | 'theme' | 'space' | 'freedom';
-
 export interface BrowserSettings {
-  newTabWallpaper?: NewTabWallpaperId;
   /** Where the left navigation rail and the address toolbar are docked (drag & drop) */
   sidebarDock?: DockEdge;
   toolbarDock?: DockEdge;
@@ -91,6 +88,8 @@ export interface BrowserSettings {
   clearBrowsingDataOnExit: boolean;
   javascriptEnabled: boolean;
   popupsBlocked: boolean;
+  /** Built-in ad & tracker blocker (electron/adblock.cjs) */
+  adBlockEnabled: boolean;
 
   // Telemetry & Diagnostics (strictly local, off by default)
   localDiagnosticLogs: boolean;
