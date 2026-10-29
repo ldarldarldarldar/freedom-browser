@@ -76,9 +76,20 @@ jobs:
           if (-not $setup) { throw "Setup.exe was not built" }
           $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
-          $dir = "$env:ProgramFiles\Freedom Browser"
+          # The installer may hand over to an elevated copy of itself: wait for the Apps & features entry
+          $roots = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
+          $entry = $null
+          for ($i = 0; $i -lt 60 -and -not $entry; $i++) {
+            $entry = Get-ChildItem $roots -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty $_.PSPath } | Where-Object { $_.DisplayName -like 'Freedom Browser*' } | Select-Object -First 1
+            if (-not $entry) { Start-Sleep 2 }
+          }
+          if (-not $entry) { throw 'Not listed in Apps & features' }
+          Write-Host "Installed: $($entry.DisplayName) $($entry.DisplayVersion) at $($entry.InstallLocation) ($($entry.PSParentPath))"
+          $dir = $entry.InstallLocation.Trim('"')
           $exe = "$dir\freedom-browser.exe"
-          if (-not (Test-Path $exe)) { throw "Not installed at $exe" }
+          for ($i = 0; $i -lt 30 -and -not (Test-Path $exe); $i++) { Start-Sleep 2 }
+          if (-not (Test-Path $exe)) { Get-ChildItem $dir -ErrorAction SilentlyContinue | Select-Object -First 20 | Format-Table Name; throw "Not installed at $exe" }
+          if ($entry.PSParentPath -notlike '*HKEY_LOCAL_MACHINE*') { throw 'Installed per-user instead of for all users' }
           $caps = 'HKLM:\Software\Clients\StartMenuInternet\Freedom Browser\Capabilities'
           if ((Get-ItemProperty "$caps\URLAssociations").https -ne 'FreedomBrowserURL') { throw 'https association missing' }
           if (-not (Get-ItemProperty 'HKLM:\Software\RegisteredApplications').'Freedom Browser') { throw 'RegisteredApplications entry missing' }
@@ -86,12 +97,12 @@ jobs:
           Write-Host "URL handler: $cmd"
           if ($cmd -notlike "*freedom-browser.exe*") { throw 'URL handler command is wrong' }
           if (-not (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Freedom Browser.lnk")) { throw 'Start menu shortcut missing' }
-          $uninstallKey = Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq 'Freedom Browser' }
-          if (-not $uninstallKey) { throw 'Not listed in Apps & features' }
           $s = Start-Process $exe -ArgumentList '--smoke-test' -PassThru -Wait -RedirectStandardOutput installed-smoke.log
           Get-Content installed-smoke.log
           if ($s.ExitCode -ne 0) { throw "Installed app smoke test failed ($($s.ExitCode))" }
-          Start-Process "$dir\Uninstall Freedom Browser.exe" -ArgumentList '/S' -Wait
+          $un = $entry.UninstallString -replace '^"([^"]+)".*$', '$1'
+          Write-Host "Uninstaller: $un"
+          Start-Process $un -ArgumentList '/S', '/allusers' -Wait
           for ($i = 0; $i -lt 30 -and (Test-Path $exe); $i++) { Start-Sleep 2 }
           if (Test-Path $exe) { throw 'Uninstall left the app files' }
           if (Test-Path 'HKLM:\Software\Clients\StartMenuInternet\Freedom Browser') { throw 'Uninstall left the browser registration' }
