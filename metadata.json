@@ -1,6 +1,6 @@
 {
   "name": "Freedom Browser",
-  "version": "0.6.3-4",
+  "version": "0.6.4",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser built on Electron and Chromium.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

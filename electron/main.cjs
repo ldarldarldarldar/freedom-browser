@@ -298,7 +298,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.3-4-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.4-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {
@@ -593,6 +593,16 @@ function createWindow() {
     });
   }
 
+  // The browser UI (it has the privileged preload) never leaves its own page: web links go to tabs
+  const appPage = (u) => { try { const x = new URL(u); return x.protocol + x.host + x.pathname; } catch { return ''; } };
+  mainWindow.webContents.on('will-navigate', (navEvent, targetUrl) => {
+    if (appPage(targetUrl) !== appPage(mainWindow.webContents.getURL())) navEvent.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
+    if (/^https?:\/\//.test(targetUrl)) mainWindow?.webContents.send('webview-open-tab', { url: targetUrl });
+    return { action: 'deny' };
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -698,11 +708,76 @@ function createWindow() {
   });
 }
 
+// Pages may only open web URLs in new tabs; file:// only from local files (never internal or script URLs)
+function isWebTabUrl(targetUrl, opener) {
+  try {
+    const { protocol } = new URL(targetUrl);
+    if (protocol === 'http:' || protocol === 'https:') return true;
+    if (protocol === 'file:') return (opener?.getURL() || '').startsWith('file:');
+  } catch {}
+  return false;
+}
+
+// target=_blank, Ctrl/middle click and window.open from tab pages and their popups
+function routeNewWindows(pageContents) {
+  // Popup blocker: like Chrome, a page may only open tabs/windows right after the user clicked or
+  // pressed a key in it (input-event also covers iframes, e.g. "Sign in with Google" buttons)
+  let lastUserInput = 0;
+  pageContents.on('input-event', (inputEvent, input) => {
+    if (/^(mouseDown|mouseUp|keyDown|rawKeyDown|touchStart|touchEnd|gestureTap)$/.test(input.type)) lastUserInput = Date.now();
+  });
+
+  // Links that ask for a new tab/window (target=_blank, Ctrl/middle click, window.open).
+  // Electron would otherwise open them in a bare BrowserWindow.
+  pageContents.setWindowOpenHandler(({ url: targetUrl, disposition }) => {
+    if (!isWebTabUrl(targetUrl, pageContents)) return { action: 'deny' };
+    if (privacyState.popupsBlocked && Date.now() - lastUserInput > 1500) return { action: 'deny' };
+    if (disposition === 'save-to-disk') {
+      pageContents.downloadURL(targetUrl);
+      return { action: 'deny' };
+    }
+    // Shift+click / window.open with size features: a real popup, so sign-in flows keep window.opener
+    if (disposition === 'new-window') {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true,
+          backgroundColor: '#16191c',
+          webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+        },
+      };
+    }
+    // Ctrl+click and middle click open in the background (Ctrl+Shift+click in the foreground)
+    mainWindow?.webContents.send('webview-open-tab', {
+      url: targetUrl,
+      active: disposition !== 'background-tab',
+      isPrivate: pageContents.session !== session.defaultSession,
+    });
+    return { action: 'deny' };
+  });
+  pageContents.on('did-create-window', (popup) => routeNewWindows(popup.webContents));
+}
+
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
+  if (contents.getType() === 'window') {
+    // Every <webview> gets the hardened preferences and our preload, whatever the renderer asked for
+    contents.on('will-attach-webview', (attachEvent, webPreferences, params) => {
+      delete webPreferences.preloadURL;
+      webPreferences.preload = path.join(__dirname, 'webview-preload.cjs');
+      webPreferences.nodeIntegration = false;
+      webPreferences.nodeIntegrationInSubFrames = false;
+      webPreferences.contextIsolation = true;
+      webPreferences.webSecurity = true;
+      if (!/^(https?|file):/.test(params.src || '')) attachEvent.preventDefault();
+    });
+  }
+
   if (contents.getType() === 'webview') {
     configureBrowsingSession(contents.session);
     contents.setBackgroundThrottling(true);
+
+    routeNewWindows(contents);
 
 
     // Handle HTML5 Fullscreen API requests from games or video players inside webviews
@@ -1759,6 +1834,7 @@ ipcMain.handle('extensions_open', withExtensions((event, folder, kind, anchor) =
     backgroundColor: '#16191c',
     webPreferences: { session: session.defaultSession, contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+  routeNewWindows(extensionPopup.webContents);
   extensionPopup.loadURL(url);
   extensionPopup.once('ready-to-show', () => extensionPopup?.show());
   extensionPopup.on('blur', () => extensionPopup && !extensionPopup.isDestroyed() && extensionPopup.close());

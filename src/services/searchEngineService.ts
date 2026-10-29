@@ -101,6 +101,42 @@ export class SearchEngineService {
   }
 
   /**
+   * Link, image or selected text dragged from a page onto the address bar, tab strip or New Tab search.
+   * Only web URLs open directly; anything else is searched, so a page can never make a drop open
+   * file://, javascript: or freedom:// URLs. Returns null when there is nothing usable (or files,
+   * which the window-level drop handler opens).
+   */
+  public static resolveDroppedData(data: DataTransfer | null, engineId: SearchEngineId, customUrl?: string): string | null {
+    if (!data || data.types.includes('Files')) return null;
+    const uri = (data.getData('text/uri-list') || '').split(/\r?\n/).map((l) => l.trim()).find((l) => l && !l.startsWith('#'));
+    const text = (uri || data.getData('text/plain') || '').trim().slice(0, 2048);
+    if (!text) return null;
+    const asWebUrl = (value: string) => {
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : null;
+      } catch {
+        return null;
+      }
+    };
+    // Bare host names ("example.com/page", "localhost:3000") open as https; local paths are searched
+    const bareHost = /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#]\S*)?$/i.test(text);
+    const direct = asWebUrl(text) || (bareHost && this.isLikelyUrl(text) ? asWebUrl(`https://${text}`) : null);
+    if (direct) return direct;
+    const encoded = encodeURIComponent(text);
+    if (engineId === 'custom' && customUrl) return customUrl.replace('%s', encoded);
+    const engine = SEARCH_ENGINES.find((e) => e.id === engineId) || SEARCH_ENGINES[0];
+    return engine.searchUrl.replace('%s', encoded);
+  }
+
+  /** Drag-over check for drop zones that accept links/text from pages (not files, not internal drags) */
+  public static isDroppableData(data: DataTransfer | null): boolean {
+    if (!data) return false;
+    const types = Array.from(data.types);
+    return !types.includes('Files') && (types.includes('text/uri-list') || types.includes('text/plain'));
+  }
+
+  /**
    * Format display URL (clean view without https:// for cleaner address bar)
    */
   public static formatDisplayUrl(url: string): string {

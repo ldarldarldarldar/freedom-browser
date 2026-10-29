@@ -129,6 +129,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   const popUp = dock === 'bottom';
   const { t } = useTranslation();
   const [inputValue, setInputValue] = useState('');
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   // Chrome extensions (puzzle button)
@@ -176,6 +177,23 @@ export const Navigation: React.FC<NavigationProps> = ({
 
     const resolved = SearchEngineService.resolveInputToUrl(inputValue, defaultSearchEngine);
     onNavigate(resolved);
+    inputRef.current?.blur();
+  };
+
+  // Links, images and selected text dragged from a page: open the link / search the text
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!SearchEngineService.isDroppableData(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'link';
+    setIsDropTarget(true);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+    setIsDropTarget(false);
+    const target = SearchEngineService.resolveDroppedData(e.dataTransfer, defaultSearchEngine);
+    if (!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onNavigate(target);
     inputRef.current?.blur();
   };
 
@@ -253,10 +271,16 @@ export const Navigation: React.FC<NavigationProps> = ({
 
       {/* Omni Address & Search Bar */}
       <div className={`${vertical ? 'flex-none' : 'flex-1 min-w-0'} relative app-no-drag`}>
-        <form onSubmit={handleSubmit} className="w-full">
+        <form
+          onSubmit={handleSubmit}
+          onDragOver={handleDragOver}
+          onDragLeave={() => setIsDropTarget(false)}
+          onDrop={handleDrop}
+          className="w-full"
+        >
           <div
             className={`flex items-center w-full h-7 px-2 rounded-[var(--fb-radius-md)] border transition-colors duration-150 ${
-              isFocused
+              isFocused || isDropTarget
                 ? 'bg-[var(--fb-input)] border-emerald-500/50 ring-2 ring-emerald-500/15 text-white'
                 : 'bg-[var(--fb-input)] hover:bg-[var(--fb-surface-hover)] border-[var(--fb-border)] hover:border-[var(--fb-border-strong)] text-neutral-200'
             }`}

@@ -524,8 +524,8 @@ export default function App() {
     if (!tabs.some((t) => t.isPrivate)) incognitoPartitionRef.current = null;
   }, [tabs]);
 
-  const handleNewTab = useCallback((targetUrl: string = 'freedom://newtab', options?: { isPrivate?: boolean }) => {
-    const newId = `tab-${Date.now()}`;
+  const handleNewTab = useCallback((targetUrl: string = 'freedom://newtab', options?: { isPrivate?: boolean; background?: boolean }) => {
+    const newId = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const isPrivate = Boolean(options?.isPrivate);
     const newTab: BrowserTab = {
       id: newId,
@@ -548,6 +548,8 @@ export default function App() {
     };
 
     setTabs((prev) => [...prev, newTab]);
+    // Background tabs (Ctrl/middle click on a link) stay behind the current one
+    if (options?.background) return;
     setActiveTabId(newId);
 
     // If Split View is active, route new tab into the active pane
@@ -1606,9 +1608,12 @@ export default function App() {
       const unsubNewWindow = (window as any).electronAPI.on('webview-new-window', ({ url }: { url: string }) => {
         handleNewTab(url);
       });
-      const unsubOpenTab = (window as any).electronAPI.on('webview-open-tab', ({ url }: { url: string }) => {
-        handleNewTab(url);
-      });
+      const unsubOpenTab = (window as any).electronAPI.on(
+        'webview-open-tab',
+        ({ url, active, isPrivate }: { url: string; active?: boolean; isPrivate?: boolean }) => {
+          handleNewTab(url, { background: active === false, isPrivate });
+        }
+      );
       const unsubSearchText = (window as any).electronAPI.on('webview-search-text', ({ text }: { text: string }) => {
         const targetUrl = SearchEngineService.resolveInputToUrl(text, settings.defaultSearchEngine);
         handleNewTab(targetUrl);
@@ -2388,6 +2393,11 @@ export default function App() {
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
             onNewTab={() => handleNewTab('freedom://newtab')}
+            onDropData={(data) => {
+              const url = SearchEngineService.resolveDroppedData(data, settings.defaultSearchEngine);
+              if (url) handleNewTab(url, { isPrivate: activeTab?.isPrivate });
+              return Boolean(url);
+            }}
             headerColorClass={getHeaderColorClass()}
             onRestoreClosedTab={handleRestoreClosedTab}
             closedTabsCount={closedTabsCount}

@@ -24,6 +24,7 @@ import { SplitViewState } from '../services/splitViewService';
 import { useTranslation } from '../i18n';
 import { FreedomMark } from './FreedomLogo';
 import { FaviconService } from '../services/faviconService';
+import { SearchEngineService } from '../services/searchEngineService';
 
 interface TabBarProps {
   tabs: BrowserTab[];
@@ -47,6 +48,8 @@ interface TabBarProps {
   splitViewState?: SplitViewState;
   onOpenInSplitView?: (tabId: string) => void;
   onCloseWindow?: () => void;
+  /** Link or text dragged from a page onto the tab strip: open it in a new tab (returns false if unusable) */
+  onDropData?: (data: DataTransfer) => boolean;
 }
 
 interface ContextMenuState {
@@ -77,6 +80,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   splitViewState,
   onOpenInSplitView,
   onCloseWindow,
+  onDropData,
 }) => {
   const { t } = useTranslation();
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -140,6 +144,17 @@ export const TabBar: React.FC<TabBarProps> = ({
     <div
       id="browser-tab-bar"
       className={`flex items-center h-[var(--fb-tabbar-h)] pl-3 select-none relative z-40 bg-[var(--fb-chrome)] overflow-x-auto no-scrollbar app-drag-region`}
+      onDragOver={(e) => {
+        if (!onDropData || !SearchEngineService.isDroppableData(e.dataTransfer)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'link';
+      }}
+      onDrop={(e) => {
+        if (onDropData?.(e.dataTransfer)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
       onDoubleClick={(e) => {
         if (
           (e.target as HTMLElement).id === 'browser-tab-bar' ||
