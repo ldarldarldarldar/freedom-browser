@@ -1,6 +1,7 @@
 node_modules/
 build/*
 !build/icons/
+!build/installer.nsh
 dist/
 release/
 coverage/
