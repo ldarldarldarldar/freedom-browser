@@ -84,8 +84,9 @@ jobs:
             if (-not $entry) { Start-Sleep 2 }
           }
           if (-not $entry) { throw 'Not listed in Apps & features' }
-          Write-Host "Installed: $($entry.DisplayName) $($entry.DisplayVersion) at $($entry.InstallLocation) ($($entry.PSParentPath))"
-          $dir = $entry.InstallLocation.Trim('"')
+          $un = $entry.UninstallString -replace '^"([^"]+)".*$', '$1'
+          $dir = Split-Path $un -Parent
+          Write-Host "Installed: $($entry.DisplayName) $($entry.DisplayVersion) in $dir ($($entry.PSParentPath))"
           $exe = "$dir\freedom-browser.exe"
           for ($i = 0; $i -lt 30 -and -not (Test-Path $exe); $i++) { Start-Sleep 2 }
           if (-not (Test-Path $exe)) { Get-ChildItem $dir -ErrorAction SilentlyContinue | Select-Object -First 20 | Format-Table Name; throw "Not installed at $exe" }
@@ -100,7 +101,6 @@ jobs:
           $s = Start-Process $exe -ArgumentList '--smoke-test' -PassThru -Wait -RedirectStandardOutput installed-smoke.log
           Get-Content installed-smoke.log
           if ($s.ExitCode -ne 0) { throw "Installed app smoke test failed ($($s.ExitCode))" }
-          $un = $entry.UninstallString -replace '^"([^"]+)".*$', '$1'
           Write-Host "Uninstaller: $un"
           Start-Process $un -ArgumentList '/S', '/allusers' -Wait
           for ($i = 0; $i -lt 30 -and (Test-Path $exe); $i++) { Start-Sleep 2 }
