@@ -333,7 +333,7 @@ function registerLinuxDesktopIntegration() {
       const candidates = [
         path.join(__dirname, '../Freedom Browser.AppImage'),
         path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.4-1-x86_64.AppImage'),
+        path.join(__dirname, '../release/Freedom-Browser-0.6.4-2-x86_64.AppImage'),
         process.execPath,
       ];
       for (const cand of candidates) {

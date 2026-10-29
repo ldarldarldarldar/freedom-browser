@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Windows portable EXE & zip
+      - name: Build Windows installer (Setup.exe) & zip
         run: npm run build:win
 
       - name: Smoke test (launch packaged app)
@@ -67,12 +67,42 @@ jobs:
           Get-Content smoke.log
           if ($p.ExitCode -ne 0) { throw "Smoke test failed with exit code $($p.ExitCode)" }
 
+      # Installer check on a real Windows: silent install, browser registration, Start menu,
+      # launch of the installed app, silent uninstall cleans the registry
+      - name: Installer test (install, registry, launch, uninstall)
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem release\*-Setup.exe | Select-Object -First 1
+          if (-not $setup) { throw "Setup.exe was not built" }
+          $p = Start-Process $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer exited with $($p.ExitCode)" }
+          $dir = "$env:ProgramFiles\Freedom Browser"
+          $exe = "$dir\freedom-browser.exe"
+          if (-not (Test-Path $exe)) { throw "Not installed at $exe" }
+          $caps = 'HKLM:\Software\Clients\StartMenuInternet\Freedom Browser\Capabilities'
+          if ((Get-ItemProperty "$caps\URLAssociations").https -ne 'FreedomBrowserURL') { throw 'https association missing' }
+          if (-not (Get-ItemProperty 'HKLM:\Software\RegisteredApplications').'Freedom Browser') { throw 'RegisteredApplications entry missing' }
+          $cmd = (Get-ItemProperty 'HKLM:\Software\Classes\FreedomBrowserURL\shell\open\command').'(default)'
+          Write-Host "URL handler: $cmd"
+          if ($cmd -notlike "*freedom-browser.exe*") { throw 'URL handler command is wrong' }
+          if (-not (Test-Path "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Freedom Browser.lnk")) { throw 'Start menu shortcut missing' }
+          $uninstallKey = Get-ChildItem 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall' | Where-Object { (Get-ItemProperty $_.PSPath).DisplayName -eq 'Freedom Browser' }
+          if (-not $uninstallKey) { throw 'Not listed in Apps & features' }
+          $s = Start-Process $exe -ArgumentList '--smoke-test' -PassThru -Wait -RedirectStandardOutput installed-smoke.log
+          Get-Content installed-smoke.log
+          if ($s.ExitCode -ne 0) { throw "Installed app smoke test failed ($($s.ExitCode))" }
+          Start-Process "$dir\Uninstall Freedom Browser.exe" -ArgumentList '/S' -Wait
+          for ($i = 0; $i -lt 30 -and (Test-Path $exe); $i++) { Start-Sleep 2 }
+          if (Test-Path $exe) { throw 'Uninstall left the app files' }
+          if (Test-Path 'HKLM:\Software\Clients\StartMenuInternet\Freedom Browser') { throw 'Uninstall left the browser registration' }
+          Write-Host 'Installer test passed'
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Freedom-Windows-Binaries
           path: |
-            release/*.exe
+            release/*-Setup.exe
             release/*.zip
 
   publish-release:

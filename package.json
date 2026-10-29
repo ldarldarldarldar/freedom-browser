@@ -2,7 +2,7 @@
   "name": "freedom-browser",
   "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.6.4-1",
+  "version": "0.6.4-2",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
@@ -16,8 +16,8 @@
     "electron:dev": "electron . --dev",
     "electron:start": "electron .",
     "build:appimage": "npm run build && electron-builder --linux AppImage --publish never",
-    "build:win": "npm run build && electron-builder --win portable zip --publish never",
-    "build:win:installer": "npm run build && electron-builder --win nsis",
+    "build:win": "npm run build && electron-builder --win nsis zip --publish never",
+    "build:win:installer": "npm run build && electron-builder --win nsis --publish never",
     "build:dist": "npm run build && electron-builder --linux AppImage && electron-builder --win portable zip",
     "tauri": "tauri",
     "build:linux": "bash scripts/build-linux.sh"
@@ -115,7 +115,6 @@
     "win": {
       "target": [
         "nsis",
-        "portable",
         "zip"
       ],
       "icon": "build/icons/icon.ico",
@@ -144,12 +143,14 @@
       "shortcutName": "Freedom Browser",
       "uninstallDisplayName": "Freedom Browser",
       "deleteAppDataOnUninstall": false,
-      "artifactName": "Freedom-Browser-${version}-x64-Setup.${ext}"
+      "artifactName": "Freedom-Browser-${version}-x64-Setup.${ext}",
+      "include": "build/installer.nsh",
+      "installerIcon": "build/icons/icon.ico",
+      "uninstallerIcon": "build/icons/icon.ico",
+      "runAfterFinish": true,
+      "menuCategory": false
     },
     "executableName": "freedom-browser",
-    "copyright": "Freedom Browser Team",
-    "portable": {
-      "artifactName": "Freedom-Browser-${version}-x64.${ext}"
-    }
+    "copyright": "Freedom Browser Team"
   }
 }
