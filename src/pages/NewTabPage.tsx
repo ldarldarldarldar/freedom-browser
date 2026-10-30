@@ -5,6 +5,7 @@ import { HistoryService } from '../services/historyService';
 import { SearchEngineId, ThemePalette } from '../settings/types';
 import { NewTabWallpaper } from '../components/NewTabWallpaper';
 import { useDragOffset, RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
+import { NewTabElementId, useNewTabElements } from '../hooks/useNewTabElements';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { FaviconService } from '../services/faviconService';
@@ -36,6 +37,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   const [query, setQuery] = useState('');
   const [time, setTime] = useState<string>('');
   const [date, setDate] = useState<string>('');
+  const { isVisible, clockStyle, setElementVisible } = useNewTabElements();
+  const showClock = isVisible('clock');
 
   // 0 favorites by default; separate persistent storage from bookmarks
   const [favorites, setFavorites] = useState<NewTabFavorite[]>(() => FavoritesService.getFavorites());
@@ -47,6 +50,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   const [urlInput, setUrlInput] = useState('');
 
   useEffect(() => {
+    if (!showClock) return;
     const updateTime = () => {
       const now = new Date();
       setTime(
@@ -65,7 +69,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
     const timerInterval = isPerformanceMode ? 30000 : 1000;
     const timer = setInterval(updateTime, timerInterval);
     return () => clearInterval(timer);
-  }, [isPerformanceMode, language]);
+  }, [isPerformanceMode, language, showClock]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,7 +172,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   };
 
   const handleClockPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || !clockRef.current) return;
+    if (e.button !== 0 || !clockRef.current || (e.target as HTMLElement).closest('[data-no-drag]')) return;
     const rect = clockRef.current.getBoundingClientRect();
     dragOffset.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
     clockRef.current.setPointerCapture(e.pointerId);
@@ -216,9 +220,33 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   const titleDrag = useDragOffset('freedom_newtab_offset_title', pageRef, isEditingLayout);
   const searchDrag = useDragOffset('freedom_newtab_offset_search', pageRef, isEditingLayout);
   const linksDrag = useDragOffset('freedom_newtab_offset_links', pageRef, isEditingLayout);
+  const quoteDrag = useDragOffset('freedom_newtab_offset_quote', pageRef, isEditingLayout);
+  const bigClockDrag = useDragOffset('freedom_newtab_offset_bigclock', pageRef, isEditingLayout);
   const grab = (dragging: boolean) => (isEditingLayout ? (dragging ? 'relative z-30 cursor-grabbing' : 'cursor-grab') : '');
 
   const [brandFirst, ...brandRest] = 'Freedom Browser'.split(' ');
+
+  // Layout edit mode: × in the corner of an element removes it (the edit bar's Elements menu brings it back)
+  const removeButton = (id: NewTabElementId) =>
+    isEditingLayout && (
+      <button
+        type="button"
+        data-no-drag
+        data-remove-element={id}
+        title={t('layout.removeElement')}
+        aria-label={t('layout.removeElement')}
+        onClick={(e) => {
+          e.stopPropagation();
+          setElementVisible(id, false);
+        }}
+        onDoubleClick={(e) => e.stopPropagation()}
+        className="absolute -top-3 -right-3 z-10 w-5 h-5 flex items-center justify-center rounded-full border border-[var(--fb-border-strong)] bg-[var(--fb-surface-3)] text-[var(--fb-text-2)] hover:text-[var(--fb-danger)] cursor-pointer"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    );
+
+  const useBigClock = showClock && clockStyle === 'big';
 
   return (
     <div ref={pageRef} className="relative flex min-h-full text-[var(--fb-text)] select-none z-10">
@@ -237,28 +265,49 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         )}
 
         {/* Hero (draggable within the wallpaper) */}
+        {isVisible('title') && (
         <header
           id="newtab-title"
           ref={titleDrag.ref}
           {...titleDrag.handlers}
           style={titleDrag.style}
           title={isEditingLayout ? t('layout.dragHint') : undefined}
-          className={`mb-[9vh] self-start w-fit touch-none ${grab(titleDrag.isDragging)}`}
+          className={`relative ${useBigClock ? 'mb-[4vh]' : 'mb-[9vh]'} self-start w-fit touch-none ${grab(titleDrag.isDragging)}`}
         >
           <h1 className="text-[clamp(28px,4vw,var(--fb-fs-title))] font-normal tracking-tight leading-tight">
             {brandFirst}{' '}
             <span className="text-[var(--fb-accent-soft)]">{brandRest.join(' ')}</span>
           </h1>
           <p className="mt-1.5 text-[14px] text-[var(--fb-text-2)]">{t('newtab.tagline')}</p>
+          {removeButton('title')}
         </header>
+        )}
+
+        {/* Big centered clock (clock style "big"; the "cube" widget is below) */}
+        {useBigClock && (
+          <div
+            id="newtab-clock"
+            data-clock-style="big"
+            ref={bigClockDrag.ref}
+            {...bigClockDrag.handlers}
+            style={bigClockDrag.style}
+            title={isEditingLayout ? t('layout.dragHint') : undefined}
+            className={`relative self-center text-center mb-[5vh] touch-none ${grab(bigClockDrag.isDragging)}`}
+          >
+            <div className="text-[clamp(56px,9vw,112px)] font-light leading-none tracking-tight tabular-nums">{time || '00:00'}</div>
+            <div className="mt-2 text-[14px] text-[var(--fb-text-2)]">{date}</div>
+            {removeButton('clock')}
+          </div>
+        )}
 
         {/* Search */}
+        {isVisible('search') && (
         <div
           id="newtab-search"
           ref={searchDrag.ref}
           {...searchDrag.handlers}
           style={searchDrag.style}
-          className={`w-full max-w-[460px] mx-auto mb-10 touch-none ${grab(searchDrag.isDragging)}`}
+          className={`relative w-full max-w-[460px] mx-auto mb-10 touch-none ${grab(searchDrag.isDragging)}`}
         >
         <form onSubmit={handleSearch} className="w-full">
           <div className="flex items-center w-full h-11 px-4 rounded-[var(--fb-radius-pill)] border border-[var(--fb-border-strong)] bg-[var(--fb-input)] focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-colors shadow-[var(--fb-shadow-card)]">
@@ -283,16 +332,18 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             </button>
           </div>
         </form>
-
+        {removeButton('search')}
         </div>
+        )}
 
         {/* Favorites (speed dial) + Add button: drag the group by the Add button or the gaps */}
+        {isVisible('links') && (
         <div
           id="newtab-links"
           ref={linksDrag.ref}
           {...linksDrag.handlers}
           style={linksDrag.style}
-          className={`flex flex-wrap justify-center gap-x-5 gap-y-4 max-w-[560px] mx-auto touch-none ${isEditingLayout && linksDrag.isDragging ? 'relative z-30 cursor-grabbing' : ''}`}
+          className={`relative flex flex-wrap justify-center gap-x-5 gap-y-4 max-w-[560px] mx-auto touch-none ${isEditingLayout && linksDrag.isDragging ? 'relative z-30 cursor-grabbing' : ''}`}
         >
           {favorites.map((fav, index) => {
             const iconUrl = FaviconService.getFaviconSync(fav.url);
@@ -371,18 +422,33 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             </span>
             <span className="mt-1.5 text-[11px] text-[var(--fb-text-2)] group-hover:text-[var(--fb-text)]">{t('newtab.add')}</span>
           </button>
+          {removeButton('links')}
         </div>
+        )}
 
         {/* Footer: quote + clock widget */}
         <div className="mt-auto pt-10 flex items-end justify-between gap-6">
-          <p className="max-w-[300px] text-[11px] leading-relaxed text-[var(--fb-text-3)]">
-            {t('newtab.quote')}
-            <span className="block mt-1">— {t('newtab.quoteAuthor')}</span>
-          </p>
+          {isVisible('quote') && (
+            <div
+              id="newtab-quote"
+              ref={quoteDrag.ref}
+              {...quoteDrag.handlers}
+              style={quoteDrag.style}
+              title={isEditingLayout ? t('layout.dragHint') : undefined}
+              className={`relative max-w-[300px] touch-none ${grab(quoteDrag.isDragging)}`}
+            >
+              <p className="text-[11px] leading-relaxed text-[var(--fb-text-3)]">
+                {t('newtab.quote')}
+                <span className="block mt-1">— {t('newtab.quoteAuthor')}</span>
+              </p>
+              {removeButton('quote')}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Clock & date widget: in layout edit mode drag it anywhere over the wallpaper (position saved in % of the page) */}
+      {showClock && clockStyle === 'cube' && (
+      /* Clock & date widget: in layout edit mode drag it anywhere over the wallpaper (position saved in % of the page) */
       <div
         ref={clockRef}
         id="newtab-clock"
@@ -415,7 +481,9 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           <div className="text-[13px] tabular-nums">{time || '00:00'}</div>
           <div className="text-[10px] text-[var(--fb-text-3)]">{date}</div>
         </div>
+        {removeButton('clock')}
       </div>
+      )}
 
       {/* Add / Edit Favorite Modal */}
       {isModalOpen && (

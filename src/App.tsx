@@ -2525,6 +2525,8 @@ export default function App() {
             window.dispatchEvent(new Event(RESET_LAYOUT_EVENT));
           }}
           onDone={() => setIsEditingLayout(false)}
+          isNewTabActive={activeTab?.url === 'freedom://newtab'}
+          onOpenNewTab={() => handleNewTab('freedom://newtab')}
         />
       )}
 

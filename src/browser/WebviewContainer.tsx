@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { BrowserTab } from './types';
 import { NewTabPage } from '../pages/NewTabPage';
 import { ErrorPage } from '../pages/ErrorPage';
+import { LoadError, PAGE_IS_BARE_SCRIPT, loadErrorFromHttpStatus, loadErrorFromNetError } from './loadErrors';
 import { SearchEngineId, ThemePalette } from '../settings/types';
 import { Moon, ExternalLink, Globe, ShieldCheck, GripVertical, GripHorizontal } from 'lucide-react';
 import { tauriBridge, isTauriEnvironment, isElectronEnvironment } from '../services/tauriBridge';
@@ -82,10 +83,12 @@ const ElectronWebviewTab: React.FC<{
   onNewTabRequested?: (url: string) => void;
   onFoundInPage?: (result: { activeMatchOrdinal: number; numberOfMatches: number }) => void;
   onTabZoomChange?: (tabId: string, zoomLevel: number) => void;
+  onGoHome?: () => void;
 }> = ({
   tab,
   isActive,
   style,
+  onGoHome,
   onFocused,
   onTabTitleChange,
   onTabFaviconChange,
@@ -100,6 +103,8 @@ const ElectronWebviewTab: React.FC<{
   // (tauriBridge.navigateNative); re-setting src after every did-navigate sync (redirects,
   // "site.com" -> "site.com/") made the webview load each page a second time.
   const [initialSrc] = useState(tab.url);
+  // Failed load shown over the webview, which stays mounted so "Try again" and the toolbar keep working
+  const [loadError, setLoadError] = useState<LoadError | null>(null);
   const currentTabRef = useRef(tab);
   currentTabRef.current = tab;
 
@@ -155,7 +160,7 @@ const ElectronWebviewTab: React.FC<{
     const syncState = (navUrl?: string, navTitle?: string, navFavicons?: string[]) => {
       try {
         const rawUrl = navUrl || (typeof el.getURL === 'function' ? el.getURL() : '') || currentTabRef.current.url;
-        if (!rawUrl || rawUrl === 'about:blank') return;
+        if (!rawUrl || rawUrl === 'about:blank' || rawUrl.startsWith('chrome-error:')) return;
 
         let rawTitle = navTitle !== undefined ? navTitle : (typeof el.getTitle === 'function' ? el.getTitle() : '');
         if (!rawTitle || rawTitle === rawUrl) {
@@ -193,7 +198,18 @@ const ElectronWebviewTab: React.FC<{
       syncState();
     };
 
+    // HTTP error of the current page, decided once it has loaded (see PAGE_IS_BARE_SCRIPT)
+    let pendingHttpError: LoadError | null = null;
+
+    const handleStartNavigation = (e: any) => {
+      if (e.isMainFrame && !e.isInPlace) {
+        pendingHttpError = null;
+        setLoadError(null);
+      }
+    };
+
     const handleDidNavigate = (e: any) => {
+      pendingHttpError = e.httpResponseCode >= 400 ? loadErrorFromHttpStatus(e.httpResponseCode, e.httpStatusText, e.url) : null;
       syncState(e.url);
     };
 
@@ -222,11 +238,31 @@ const ElectronWebviewTab: React.FC<{
     const handleStopLoading = () => {
       callbacksRef.current.onTabLoadingChange?.(tab.id, false);
       syncState();
+      const httpError = pendingHttpError;
+      pendingHttpError = null;
+      if (httpError) {
+        el.executeJavaScript(PAGE_IS_BARE_SCRIPT)
+          .then((isBare: unknown) => {
+            if (isBare === true && el.getURL() === httpError.url) setLoadError(httpError);
+          })
+          .catch(() => {});
+      }
     };
 
-    const handleFailLoading = () => {
+    const handleFailLoading = (e?: any) => {
       callbacksRef.current.onTabLoadingChange?.(tab.id, false);
-      syncState();
+      if (e?.isMainFrame) {
+        const failure = loadErrorFromNetError(e.errorCode, e.errorDescription, e.validatedURL || currentTabRef.current.url);
+        if (failure) setLoadError(failure);
+      }
+      syncState(e?.isMainFrame && e.validatedURL ? e.validatedURL : undefined);
+    };
+
+    const handleProcessGone = (e: any) => {
+      callbacksRef.current.onTabLoadingChange?.(tab.id, false);
+      if (e.reason !== 'clean-exit') {
+        setLoadError({ type: 'crashed', url: currentTabRef.current.url, code: `RENDERER_${String(e.reason).toUpperCase()}` });
+      }
     };
 
     const handleNewWindow = (e: any) => {
@@ -249,6 +285,7 @@ const ElectronWebviewTab: React.FC<{
     };
 
     el.addEventListener('dom-ready', handleDomReady);
+    el.addEventListener('did-start-navigation', handleStartNavigation);
     el.addEventListener('did-navigate', handleDidNavigate);
     el.addEventListener('did-navigate-in-page', handleDidNavigateInPage);
     el.addEventListener('page-title-updated', handleTitleUpdated);
@@ -256,9 +293,7 @@ const ElectronWebviewTab: React.FC<{
     el.addEventListener('did-start-loading', handleStartLoading);
     el.addEventListener('did-stop-loading', handleStopLoading);
     el.addEventListener('did-fail-load', handleFailLoading);
-    el.addEventListener('crashed', handleFailLoading);
-    el.addEventListener('gpu-crashed', handleFailLoading);
-    el.addEventListener('plugin-crashed', handleFailLoading);
+    el.addEventListener('render-process-gone', handleProcessGone);
     el.addEventListener('new-window', handleNewWindow);
     el.addEventListener('found-in-page', handleFoundInPage);
     el.addEventListener('focus', handleFocus);
@@ -283,6 +318,7 @@ const ElectronWebviewTab: React.FC<{
       tauriBridge.unregisterWebview(tab.id);
       el.removeEventListener('ipc-message', handleIpcMessage);
       el.removeEventListener('dom-ready', handleDomReady);
+      el.removeEventListener('did-start-navigation', handleStartNavigation);
       el.removeEventListener('did-navigate', handleDidNavigate);
       el.removeEventListener('did-navigate-in-page', handleDidNavigateInPage);
       el.removeEventListener('page-title-updated', handleTitleUpdated);
@@ -290,9 +326,7 @@ const ElectronWebviewTab: React.FC<{
       el.removeEventListener('did-start-loading', handleStartLoading);
       el.removeEventListener('did-stop-loading', handleStopLoading);
       el.removeEventListener('did-fail-load', handleFailLoading);
-      el.removeEventListener('crashed', handleFailLoading);
-      el.removeEventListener('gpu-crashed', handleFailLoading);
-      el.removeEventListener('plugin-crashed', handleFailLoading);
+      el.removeEventListener('render-process-gone', handleProcessGone);
       el.removeEventListener('new-window', handleNewWindow);
       el.removeEventListener('found-in-page', handleFoundInPage);
       el.removeEventListener('focus', handleFocus);
@@ -331,6 +365,19 @@ const ElectronWebviewTab: React.FC<{
         webpreferences="contextIsolation=yes, javascript=yes, allowRunningInsecureContent=no"
         preload={(window as any).electronAPI?.webviewPreload || undefined}
       />
+      {loadError && (
+        <div className="absolute inset-0 z-10">
+          <ErrorPage
+            errorType={loadError.type}
+            url={loadError.url}
+            code={loadError.code}
+            httpStatus={loadError.httpStatus}
+            onReload={() => wvRef.current?.loadURL(loadError.url)}
+            onHome={() => onGoHome?.()}
+            onShowResponse={loadError.type === 'http' ? () => setLoadError(null) : undefined}
+          />
+        </div>
+      )}
     </div>
   );
 };
@@ -799,6 +846,7 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
                 onNewTabRequested={onNewTabRequested}
                 onFoundInPage={onFoundInPage}
                 onTabZoomChange={onTabZoomChange}
+                onGoHome={() => (isSplit ? onPaneNavigate?.(t.id, 'freedom://newtab') : onNavigate('freedom://newtab'))}
               />
             );
           })}
