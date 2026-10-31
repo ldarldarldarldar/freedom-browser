@@ -40,6 +40,7 @@ import { SEARCH_ENGINES } from '../settings/defaults';
 import { tauriBridge } from '../services/tauriBridge';
 import { TabSortMode } from '../services/tabSortService';
 import { useTranslation } from '../i18n';
+import { useNewTabElements } from '../hooks/useNewTabElements';
 
 interface NavigationProps {
   currentTab: BrowserTab | undefined;
@@ -132,6 +133,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   // Popups open upward when the toolbar sits at the bottom of the window
   const popUp = dock === 'bottom';
   const { t } = useTranslation();
+  const { getScale } = useNewTabElements();
   const [inputValue, setInputValue] = useState('');
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -208,6 +210,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     <header
       id="browser-nav-toolbar"
       data-dock={dock}
+      style={{ zoom: getScale('toolbar') }}
       className={`flex select-none relative z-30 bg-[var(--fb-chrome)] border-[var(--fb-border)] app-drag-region ${
         vertical
           ? `flex-col items-stretch w-[264px] shrink-0 p-2 gap-2 ${dock === 'left' ? 'border-r' : 'border-l'}`

@@ -88,7 +88,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
 
   if (!isOpen) return null;
 
-  const handleExecuteJS = (e: React.FormEvent) => {
+  const handleExecuteJS = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!consoleInput.trim()) return;
 
@@ -100,9 +100,11 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
     const newLogs = [...consoleLogs, { type: 'input' as const, text: `> ${input}`, time }];
 
     try {
-      // Safe client evaluation
-      // eslint-disable-next-line no-eval
-      const result = window.eval(input);
+      // Runs in the page of the active tab. The browser UI itself has no eval: its CSP forbids it,
+      // and code pasted here must not reach the privileged API.
+      const webview = activeTab ? tauriBridge.getWebview(activeTab.id) : null;
+      if (!webview) throw new Error('Open a web page in this tab to use the console');
+      const result = await webview.executeJavaScript(input);
       newLogs.push({
         type: 'output' as const,
         text: typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result),

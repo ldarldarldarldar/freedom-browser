@@ -1,8 +1,14 @@
-const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, clipboard, webContents, net } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, dialog, Menu, MenuItem, clipboard, webContents, net, protocol } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const url = require('url');
+const { execFile } = require('child_process');
+const { UI_ORIGIN, UI_PARTITION, registerUiScheme, serveUi, migrateUiStorage } = require('./ui-host.cjs');
+const { createPermissionManager, originOf } = require('./permissions.cjs');
+
+// Must happen before app ready
+registerUiScheme(protocol);
 
 // User Data Storage Path & System Configuration
 // Separates application binaries (e.g. Program Files\Freedom Browser) from user data (profiles, history, bookmarks, cookies).
@@ -119,7 +125,13 @@ app.commandLine.appendSwitch('disable-features', disableFeaturesList);
 app.commandLine.appendSwitch('enable-features', 'V8FlushBaselineCode,V8FlushBytecode,V8MemoryReducer');
 app.commandLine.appendSwitch('renderer-process-limit', '6'); // Prevents runaway process explosion
 app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache (keeps working set lean)
-app.commandLine.appendSwitch('js-flags', '--expose-gc --max-old-space-size=512'); // Ensure sufficient V8 heap for modern WebApps & enable V8 GC
+// Never add --expose-gc here: it would give every web page a deterministic gc(), a classic exploit primitive
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+// Blocks third-party cookies inside the network stack, including document.cookie in cross-site iframes.
+// Read at startup only, so a change in Settings applies after a restart.
+if (initialStorageConfig.blockThirdPartyCookies !== false) {
+  app.commandLine.appendSwitch('test-third-party-cookie-phaseout');
+}
 
 // GPU optimizations & Linux Wayland/Vulkan conflict fix (saves 60-90 MB GPU process memory)
 if (process.platform === 'linux') {
@@ -129,9 +141,84 @@ if (process.platform === 'linux') {
 app.commandLine.appendSwitch('disable-gpu-memory-buffer-video-frames');
 app.commandLine.appendSwitch('force-color-profile', 'srgb');
 
-const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
+// A packaged build never loads its UI from a dev server, whatever the environment or arguments say
+const isDev = !app.isPackaged && (process.env.NODE_ENV === 'development' || process.argv.includes('--dev'));
 let mainWindow = null;
+let uiSession = null;
+let permissionManager = null;
 let isForceQuitting = false;
+let startupComplete = false;
+
+// Every privileged channel: only the main frame of the browser UI may call it, so a compromised
+// tab renderer cannot use IPC to escape its sandbox
+function isTrustedUiSender(event) {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  if (event.senderFrame !== event.sender.mainFrame) return false;
+  const senderUrl = event.senderFrame.url || '';
+  return senderUrl.startsWith(`${UI_ORIGIN}/`) || (isDev && senderUrl.startsWith('http://localhost:3000/'));
+}
+function handleUi(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedUiSender(event)) throw new Error(`Blocked IPC "${channel}" from an untrusted sender`);
+    return handler(event, ...args);
+  });
+}
+
+// ---- Download safety ----
+const DANGEROUS_EXTENSIONS = new Set([
+  'exe', 'msi', 'msix', 'appx', 'bat', 'cmd', 'com', 'scr', 'pif', 'cpl', 'msc', 'lnk', 'url', 'reg', 'hta', 'ps1', 'psm1',
+  'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'jar', 'dll', 'iso', 'img', 'vhd', 'vhdx',
+  'sh', 'bash', 'zsh', 'fish', 'run', 'bin', 'desktop', 'appimage', 'deb', 'rpm', 'flatpak', 'snap', 'py', 'pl', 'rb',
+  'dmg', 'pkg', 'app', 'command',
+]);
+const isDangerousFile = (name) => DANGEROUS_EXTENSIONS.has(path.extname(String(name)).slice(1).toLowerCase());
+const lastInputAt = new WeakMap(); // webContents -> time of the last click or key press in it
+const USER_DOWNLOAD_WINDOW_MS = 10000;
+const browserDownloads = new Set(); // files saved by this browser during this run
+const refusedAutoDownloadSites = new Set();
+
+function hostWindowOf(contents) {
+  try {
+    const win = BrowserWindow.fromWebContents(contents);
+    if (win) return win;
+  } catch {}
+  return mainWindow;
+}
+
+const isUserTriggered = (contents) => Boolean(contents) && Date.now() - (lastInputAt.get(contents) || 0) < USER_DOWNLOAD_WINDOW_MS;
+const downloadNeedsApproval = (contents, filename) => isDangerousFile(filename) || !isUserTriggered(contents);
+
+// Resolves true when the download may proceed. Asks for executable types and for downloads the user did not trigger.
+async function approveDownload(contents, filename, downloadUrl) {
+  const dangerous = isDangerousFile(filename);
+  const site = contents && !contents.isDestroyed() ? originOf(contents.getURL()) : '';
+  const userTriggered = isUserTriggered(contents);
+  if (!dangerous && userTriggered) return true;
+  if (!userTriggered && site && refusedAutoDownloadSites.has(site)) return false;
+  const ru = currentAppLanguage === 'ru';
+  const from = site || originOf(downloadUrl) || downloadUrl;
+  const message = ru ? `Скачать файл «${filename}»?` : `Download "${filename}"?`;
+  const detail = [
+    ru ? `Источник: ${from}` : `From: ${from}`,
+    dangerous && (ru ? 'Этот тип файла может запускать программы и навредить компьютеру.' : 'This type of file can run programs and harm your computer.'),
+    !userTriggered && (ru ? 'Загрузка началась без вашего действия.' : 'This download started without any action from you.'),
+  ].filter(Boolean).join('\n');
+  const win = hostWindowOf(contents);
+  const options = { type: 'warning', title: 'Freedom Browser', message, detail, buttons: [ru ? 'Отмена' : 'Cancel', ru ? 'Скачать' : 'Download'], defaultId: 0, cancelId: 0, noLink: true };
+  const { response } = await (win && !win.isDestroyed() ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options));
+  if (response !== 1 && !userTriggered && site) refusedAutoDownloadSites.add(site);
+  return response === 1;
+}
+
+// Files fetched by the throttled downloader do not pass through Chromium's download code: mark them as
+// coming from the internet ourselves, so Windows SmartScreen still checks them
+function markFromInternet(filePath, sourceUrl, referrer) {
+  if (process.platform !== 'win32') return;
+  const lines = ['[ZoneTransfer]', 'ZoneId=3'];
+  if (/^https?:/i.test(referrer || '')) lines.push(`ReferrerUrl=${referrer}`);
+  if (/^https?:/i.test(sourceUrl || '')) lines.push(`HostUrl=${sourceUrl}`);
+  fs.writeFile(`${filePath}:Zone.Identifier`, `${lines.join('\r\n')}\r\n`, () => {});
+}
 const activeDownloads = new Map();
 let activeDownloadsLocation = '';
 
@@ -152,7 +239,7 @@ function takeDownloadCredit(bytes) {
   return limiter.tokens >= 0 ? 0 : Math.ceil((-limiter.tokens / downloadSpeedLimitBps) * 1000);
 }
 
-function startThrottledDownload({ url, ses, savePath, downloadId, referrer }) {
+function startThrottledDownload({ url, ses, savePath, downloadId, referrer, isPrivate }) {
   const startTime = Date.now();
   let received = 0;
   let total = 0;
@@ -165,6 +252,7 @@ function startThrottledDownload({ url, ses, savePath, downloadId, referrer }) {
         filename: path.basename(savePath),
         url,
         filepath: savePath,
+        isPrivate,
         receivedBytes: received,
         totalBytes: total || received,
         startTime,
@@ -183,6 +271,10 @@ function startThrottledDownload({ url, ses, savePath, downloadId, referrer }) {
     activeDownloads.delete(downloadId);
     out.end(() => {
       if (state !== 'completed') fs.rm(savePath, { force: true }, () => {});
+      else {
+        browserDownloads.add(savePath);
+        markFromInternet(savePath, url, referrer);
+      }
       send('download-completed', { state, speedBps: 0, totalBytes: state === 'completed' ? received : total || received });
     });
   };
@@ -225,7 +317,7 @@ function startThrottledDownload({ url, ses, savePath, downloadId, referrer }) {
   request.end();
 }
 
-ipcMain.handle('set_download_speed_limit', (event, kbps) => {
+handleUi('set_download_speed_limit', (event, kbps) => {
   const value = Number(kbps);
   downloadSpeedLimitBps = Number.isFinite(value) && value > 0 ? Math.round(value * 1024) : 0;
   limiter.tokens = 0;
@@ -239,11 +331,12 @@ const isPlatformWin = process.platform === 'win32';
 const isPlatformMac = process.platform === 'darwin';
 
 // Unified authentic Desktop Chrome User-Agent across all web navigation and authentication flows
-const desktopChromeUA = isPlatformWin
-  ? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
+const chromeMajor = process.versions.chrome.split('.')[0];
+const desktopChromeUA = `Mozilla/5.0 (${isPlatformWin
+  ? 'Windows NT 10.0; Win64; x64'
   : isPlatformMac
-  ? 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
-  : 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36';
+  ? 'Macintosh; Intel Mac OS X 10_15_7'
+  : 'X11; Linux x86_64'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajor}.0.0.0 Safari/537.36`;
 
 // Extract local HTML file path or Web URL from CLI arguments (for "Open with" -> Freedom Browser)
 function extractFileUrlFromArgs(argv, workingDir = process.cwd()) {
@@ -319,7 +412,7 @@ function extractFileUrlFromArgs(argv, workingDir = process.cwd()) {
 
 // Register desktop file and MIME association in Linux environment so "Open With" / "Открыть с помощью" lists Freedom Browser
 function registerLinuxDesktopIntegration() {
-  if (process.platform !== 'linux') return;
+  if (process.platform !== 'linux' || !app.isPackaged) return;
   try {
     const homeDir = os.homedir();
     const appsDir = path.join(homeDir, '.local', 'share', 'applications');
@@ -327,23 +420,7 @@ function registerLinuxDesktopIntegration() {
     fs.mkdirSync(appsDir, { recursive: true });
     fs.mkdirSync(iconsDir, { recursive: true });
 
-    // Determine target executable
-    let targetExec = process.env.APPIMAGE || '';
-    if (!targetExec) {
-      const candidates = [
-        path.join(__dirname, '../Freedom Browser.AppImage'),
-        path.join(__dirname, '../Freedom.AppImage'),
-        path.join(__dirname, '../release/Freedom-Browser-0.6.4-4-x86_64.AppImage'),
-        process.execPath,
-      ];
-      for (const cand of candidates) {
-        if (fs.existsSync(cand)) {
-          targetExec = cand;
-          break;
-        }
-      }
-    }
-    if (!targetExec) targetExec = process.execPath;
+    const targetExec = process.env.APPIMAGE || process.execPath;
 
     // Copy icon
     const srcIcon = path.join(__dirname, '../build/icons/512x512.png');
@@ -359,7 +436,7 @@ function registerLinuxDesktopIntegration() {
 Name=Freedom Browser
 GenericName=Web Browser
 Comment=Lightweight, fast, and privacy-focused desktop web browser
-Exec="${targetExec}" %U
+Exec="${targetExec.replace(/(["`$\\])/g, '\\\\$1')}" %U
 Terminal=false
 Type=Application
 Icon=freedom-browser
@@ -370,40 +447,9 @@ Categories=Network;WebBrowser;
 
     fs.writeFileSync(desktopFile, desktopContent, 'utf8');
 
-    // Register with mimeapps.list
-    const mimeConfigFile = path.join(homeDir, '.config', 'mimeapps.list');
-    let mimeContent = fs.existsSync(mimeConfigFile) ? fs.readFileSync(mimeConfigFile, 'utf8') : '';
-    const associations = [
-      'text/html=freedom-browser.desktop;',
-      'text/xml=freedom-browser.desktop;',
-      'application/xhtml+xml=freedom-browser.desktop;',
-      'x-scheme-handler/http=freedom-browser.desktop;',
-      'x-scheme-handler/https=freedom-browser.desktop;'
-    ];
-
-    if (!mimeContent.includes('[Added Associations]')) {
-      mimeContent = `[Added Associations]\n` + associations.join('\n') + '\n\n' + mimeContent;
-      fs.writeFileSync(mimeConfigFile, mimeContent, 'utf8');
-    } else {
-      let modified = false;
-      for (const assoc of associations) {
-        const mimeType = assoc.split('=')[0];
-        if (!mimeContent.includes(mimeType + '=')) {
-          mimeContent = mimeContent.replace('[Added Associations]', `[Added Associations]\n${assoc}`);
-          modified = true;
-        } else if (!mimeContent.includes('freedom-browser.desktop')) {
-          const regex = new RegExp(`(${mimeType}=)([^\\n]+)`);
-          mimeContent = mimeContent.replace(regex, `$1freedom-browser.desktop;$2`);
-          modified = true;
-        }
-      }
-      if (modified) {
-        fs.writeFileSync(mimeConfigFile, mimeContent, 'utf8');
-      }
-    }
-
-    const { exec } = require('child_process');
-    exec(`update-desktop-database "${appsDir}" 2>/dev/null`, () => {});
+    // Lists the browser under "Open with". Becoming the default browser stays the user's decision,
+    // so ~/.config/mimeapps.list is not touched.
+    execFile('update-desktop-database', [appsDir], () => {});
   } catch (err) {
     console.warn('Failed to register Linux desktop integration:', err);
   }
@@ -529,12 +575,13 @@ function createWindow() {
     titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     webPreferences: {
+      session: uiSession,
       preload: path.join(__dirname, 'preload.cjs'),
       webviewTag: true,
       nodeIntegration: false,
       contextIsolation: true,
       spellcheck: false, // Disables background spellcheck memory footprint
-      sandbox: false,
+      sandbox: true,
     },
   });
 
@@ -601,7 +648,9 @@ function createWindow() {
     if (query.tabCount) devUrl.searchParams.set('tabCount', query.tabCount);
     mainWindow.loadURL(devUrl.toString());
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'), { query });
+    const uiUrl = new URL(`${UI_ORIGIN}/index.html`);
+    for (const [key, value] of Object.entries(query)) uiUrl.searchParams.set(key, value);
+    mainWindow.loadURL(uiUrl.toString());
   }
 
   // CI smoke test (`--smoke-test`): verify the renderer UI mounted, then exit with a status code
@@ -661,46 +710,109 @@ function createWindow() {
 
     const originalFilename = item.getFilename() || 'download';
     const finalDownloadPath = getUniqueFilePath(downloadDir, originalFilename);
-    item.setSavePath(finalDownloadPath);
 
     const downloadId = 'dl-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    const isPrivate = Boolean(webContents && !webContents.isDestroyed() && webContents.session !== session.defaultSession);
+    const shownName = path.basename(finalDownloadPath);
     // Speed limit active: hand plain http(s) downloads to the throttled downloader
     const itemUrl = item.getURL();
     if (downloadSpeedLimitBps > 0 && /^https?:/i.test(itemUrl)) {
       event.preventDefault();
-      startThrottledDownload({
-        url: itemUrl,
-        ses: webContents?.session || session.defaultSession,
-        savePath: finalDownloadPath,
-        downloadId,
-        referrer: webContents && !webContents.isDestroyed() ? webContents.getURL() : '',
+      const ses = webContents?.session || session.defaultSession;
+      const referrer = webContents && !webContents.isDestroyed() ? webContents.getURL() : '';
+      approveDownload(webContents, shownName, itemUrl).then((approved) => {
+        if (approved) startThrottledDownload({ url: itemUrl, ses, savePath: finalDownloadPath, downloadId, referrer, isPrivate });
       });
       return;
     }
 
+    // Until the user answers, data goes to a name that cannot be run; small files may finish before the answer
+    const needsApproval = downloadNeedsApproval(webContents, shownName);
+    const pendingPath = needsApproval ? `${finalDownloadPath}.pending` : finalDownloadPath;
+    item.setSavePath(pendingPath);
+    if (needsApproval) item.pause();
     activeDownloads.set(downloadId, item);
 
     const startTime = Date.now();
     const downloadUrl = item.getURL();
     const totalBytes = item.getTotalBytes() || 0;
 
-    // Send immediate start event with real initial metadata
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('download-start', {
-        id: downloadId,
-        filename: path.basename(finalDownloadPath),
-        url: downloadUrl,
-        filepath: finalDownloadPath,
-        totalBytes,
-        receivedBytes: 0,
-        state: 'progressing',
-        startTime,
-        speedBps: 0,
-      });
+    let approved = !needsApproval;
+    let finished = null; // state from the 'done' event
+
+    const announceStart = () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('download-start', {
+          id: downloadId,
+          filename: shownName,
+          url: downloadUrl,
+          filepath: finalDownloadPath,
+          isPrivate,
+          totalBytes,
+          receivedBytes: 0,
+          state: 'progressing',
+          startTime,
+          speedBps: 0,
+        });
+      }
+    };
+
+    const reportDone = () => {
+      activeDownloads.delete(downloadId);
+      const isCompleted = finished === 'completed' && fs.existsSync(finalDownloadPath);
+      const finalState = isCompleted ? 'completed' : (finished === 'cancelled' ? 'cancelled' : 'interrupted');
+      if (isCompleted) browserDownloads.add(finalDownloadPath);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('download-completed', {
+          id: downloadId,
+          filename: shownName,
+          url: downloadUrl,
+          filepath: finalDownloadPath,
+          isPrivate,
+          receivedBytes: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes() || item.getReceivedBytes(),
+          state: finalState,
+          startTime,
+          speedBps: 0,
+        });
+      }
+    };
+
+    // Runs once the download has ended and, if it needed approval, the user has allowed it
+    const settle = () => {
+      if (!approved || finished === null) return;
+      if (needsApproval && finished === 'completed') {
+        fs.rename(pendingPath, finalDownloadPath, (err) => {
+          if (err) {
+            console.warn('Failed to finish download:', err);
+            finished = 'interrupted';
+          }
+          reportDone();
+        });
+      } else {
+        reportDone();
+      }
+    };
+
+    if (needsApproval) {
+      const refuse = () => {
+        activeDownloads.delete(downloadId);
+        try { item.cancel(); } catch {}
+        fs.rm(pendingPath, { force: true }, () => {});
+      };
+      approveDownload(webContents, shownName, downloadUrl).then((allowed) => {
+        if (!allowed) return refuse();
+        approved = true;
+        announceStart();
+        if (item.getState() === 'progressing') item.resume();
+        settle();
+      }, refuse);
+    } else {
+      announceStart();
     }
 
     item.on('updated', (evt, state) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
+      if (approved && mainWindow && !mainWindow.isDestroyed()) {
         const received = item.getReceivedBytes();
         const total = item.getTotalBytes() || totalBytes;
         const elapsedSec = (Date.now() - startTime) / 1000;
@@ -711,6 +823,7 @@ function createWindow() {
           filename: path.basename(finalDownloadPath),
           url: downloadUrl,
           filepath: finalDownloadPath,
+          isPrivate,
           receivedBytes: received,
           totalBytes: total,
           state: state === 'progressing' ? 'progressing' : 'paused',
@@ -721,24 +834,9 @@ function createWindow() {
     });
 
     item.once('done', (evt, state) => {
-      activeDownloads.delete(downloadId);
-      const existsOnDisk = fs.existsSync(finalDownloadPath);
-      const isCompleted = state === 'completed' && existsOnDisk;
-      const finalState = isCompleted ? 'completed' : (state === 'cancelled' ? 'cancelled' : 'interrupted');
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('download-completed', {
-          id: downloadId,
-          filename: path.basename(finalDownloadPath),
-          url: downloadUrl,
-          filepath: finalDownloadPath,
-          receivedBytes: item.getReceivedBytes(),
-          totalBytes: item.getTotalBytes() || item.getReceivedBytes(),
-          state: finalState,
-          startTime,
-          speedBps: 0,
-        });
-      }
+      finished = state;
+      // Ended while the dialog was open and the user refused: refuse() already removed it
+      settle();
     });
   });
 }
@@ -759,7 +857,10 @@ function routeNewWindows(pageContents) {
   // pressed a key in it (input-event also covers iframes, e.g. "Sign in with Google" buttons)
   let lastUserInput = 0;
   pageContents.on('input-event', (inputEvent, input) => {
-    if (/^(mouseDown|mouseUp|keyDown|rawKeyDown|touchStart|touchEnd|gestureTap)$/.test(input.type)) lastUserInput = Date.now();
+    if (/^(mouseDown|mouseUp|keyDown|rawKeyDown|touchStart|touchEnd|gestureTap)$/.test(input.type)) {
+      lastUserInput = Date.now();
+      lastInputAt.set(pageContents, lastUserInput);
+    }
   });
 
   // Links that ask for a new tab/window (target=_blank, Ctrl/middle click, window.open).
@@ -778,7 +879,7 @@ function routeNewWindows(pageContents) {
         overrideBrowserWindowOptions: {
           autoHideMenuBar: true,
           backgroundColor: '#16191c',
-          webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+          webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, nodeIntegrationInSubFrames: true, preload: path.join(__dirname, 'webview-preload.cjs') },
         },
       };
     }
@@ -790,21 +891,42 @@ function routeNewWindows(pageContents) {
     });
     return { action: 'deny' };
   });
-  pageContents.on('did-create-window', (popup) => routeNewWindows(popup.webContents));
+  pageContents.on('did-create-window', (popup) => {
+    routeNewWindows(popup.webContents);
+    // A popup has no address bar: its title always shows the real site, whatever the page calls itself
+    const showSite = () => {
+      if (!popup.isDestroyed()) popup.setTitle(originOf(popup.webContents.getURL()) || 'Freedom Browser');
+    };
+    popup.on('page-title-updated', (titleEvent) => { titleEvent.preventDefault(); showSite(); });
+    popup.webContents.on('did-navigate', showSite);
+    popup.webContents.on('did-navigate-in-page', showSite);
+    showSite();
+  });
 }
 
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
+  // Pages see only the public address, never LAN addresses of the machine (also after camera/microphone access)
+  contents.setWebRTCIPHandlingPolicy('default_public_interface_only');
+
   if (contents.getType() === 'window') {
     // Every <webview> gets the hardened preferences and our preload, whatever the renderer asked for
     contents.on('will-attach-webview', (attachEvent, webPreferences, params) => {
       delete webPreferences.preloadURL;
       webPreferences.preload = path.join(__dirname, 'webview-preload.cjs');
       webPreferences.nodeIntegration = false;
-      webPreferences.nodeIntegrationInSubFrames = false;
+      // With the sandbox on this gives no Node: it only runs our preload in iframes too (see its compatibility part)
+      webPreferences.nodeIntegrationInSubFrames = true;
       webPreferences.contextIsolation = true;
       webPreferences.webSecurity = true;
-      if (!/^(https?|file):/.test(params.src || '')) attachEvent.preventDefault();
+      webPreferences.sandbox = true;
+      webPreferences.webviewTag = false;
+      webPreferences.allowRunningInsecureContent = false;
+      delete webPreferences.enableBlinkFeatures;
+      delete webPreferences.disableBlinkFeatures;
+      // Tabs use the default profile or an in-memory incognito partition, never the UI's own session
+      const partitionOk = !params.partition || /^freedom-incognito-[a-z0-9]+$/.test(params.partition);
+      if (!partitionOk || !/^(https?|file):/.test(params.src || '')) attachEvent.preventDefault();
     });
   }
 
@@ -820,6 +942,8 @@ app.on('web-contents-created', (event, contents) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.setFullScreen(true);
         mainWindow.webContents.send('window-fullscreen-change', true);
+        // A full-screen page can draw a fake browser: always say which site it is and how to leave
+        mainWindow.webContents.send('webview-html-fullscreen', { site: originOf(contents.getURL()) });
       }
     });
 
@@ -957,29 +1081,35 @@ app.on('web-contents-created', (event, contents) => {
       event.preventDefault();
       const menu = new Menu();
       const i18n = MENU_STRINGS[currentAppLanguage] || MENU_STRINGS.en;
+      // Same rule as links opened by the page itself: no file://, javascript: or internal URLs from web pages.
+      // Tabs opened from an incognito tab stay incognito.
+      const isPrivate = contents.session !== session.defaultSession;
+      const canOpen = (target) => isWebTabUrl(target, contents);
 
       // 1. Link Actions
       if (params.linkURL) {
-        menu.append(new MenuItem({
-          label: i18n.openLink,
-          click: () => { contents.loadURL(params.linkURL); },
-        }));
-        menu.append(new MenuItem({
-          label: i18n.openLinkNewTab,
-          click: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: true });
-            }
-          },
-        }));
-        menu.append(new MenuItem({
-          label: i18n.openLinkBgTab,
-          click: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: false });
-            }
-          },
-        }));
+        if (canOpen(params.linkURL)) {
+          menu.append(new MenuItem({
+            label: i18n.openLink,
+            click: () => { contents.loadURL(params.linkURL); },
+          }));
+          menu.append(new MenuItem({
+            label: i18n.openLinkNewTab,
+            click: () => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: true, isPrivate });
+              }
+            },
+          }));
+          menu.append(new MenuItem({
+            label: i18n.openLinkBgTab,
+            click: () => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('webview-open-tab', { url: params.linkURL, active: false, isPrivate });
+              }
+            },
+          }));
+        }
         menu.append(new MenuItem({
           label: i18n.copyLinkAddress,
           click: () => { clipboard.writeText(params.linkURL); },
@@ -989,17 +1119,22 @@ app.on('web-contents-created', (event, contents) => {
 
       // 2. Image Actions
       if (params.mediaType === 'image' && params.srcURL) {
-        menu.append(new MenuItem({
-          label: i18n.openImageNewTab,
-          click: () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('webview-open-tab', { url: params.srcURL, active: true });
-            }
-          },
-        }));
+        if (canOpen(params.srcURL)) {
+          menu.append(new MenuItem({
+            label: i18n.openImageNewTab,
+            click: () => {
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('webview-open-tab', { url: params.srcURL, active: true, isPrivate });
+              }
+            },
+          }));
+        }
         menu.append(new MenuItem({
           label: i18n.saveImageAs,
-          click: () => { contents.downloadURL(params.srcURL); },
+          click: () => {
+            lastInputAt.set(contents, Date.now());
+            contents.downloadURL(params.srcURL);
+          },
         }));
         menu.append(new MenuItem({
           label: i18n.copyImageAddress,
@@ -1020,7 +1155,7 @@ app.on('web-contents-created', (event, contents) => {
           label: i18n.searchWebFor.replace('%s', truncated),
           click: () => {
             if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('webview-search-text', { text });
+              mainWindow.webContents.send('webview-search-text', { text, isPrivate });
             }
           },
         }));
@@ -1124,7 +1259,7 @@ function getLinuxSystemMemory() {
 }
 
 // Real Non-Duplicating System Task Manager Resource Monitor
-ipcMain.handle('get_system_task_manager_stats', async () => {
+handleUi('get_system_task_manager_stats', async () => {
   try {
     const metrics = app.getAppMetrics();
     const cpuUsage = process.getCPUUsage();
@@ -1256,7 +1391,7 @@ ipcMain.handle('get_system_task_manager_stats', async () => {
 });
 
 // Real per-tab webview memory usage without duplication
-ipcMain.handle('get_webviews_memory', async (event, mappings) => {
+handleUi('get_webviews_memory', async (event, mappings) => {
   const result = {};
   if (!Array.isArray(mappings)) return result;
 
@@ -1309,8 +1444,10 @@ ipcMain.handle('get_webviews_memory', async (event, mappings) => {
 });
 
 // Terminate process safely
-ipcMain.handle('terminate_process', (event, pid) => {
+handleUi('terminate_process', (event, pid) => {
   try {
+    // Only renderer processes of this browser's tabs, never an arbitrary PID
+    if (!app.getAppMetrics().some((m) => m.pid === pid && m.type === 'Tab')) return false;
     process.kill(pid);
     return true;
   } catch (err) {
@@ -1320,7 +1457,7 @@ ipcMain.handle('terminate_process', (event, pid) => {
 });
 
 // Freedom RAM Control (FRC) - Manual memory reclamation / clean RAM
-ipcMain.handle('clean_ram', async () => {
+handleUi('clean_ram', async () => {
   try {
     const isLinux = process.platform === 'linux';
     const beforeMetrics = app.getAppMetrics();
@@ -1340,15 +1477,7 @@ ipcMain.handle('clean_ram', async () => {
       try { global.gc(); } catch {}
     }
 
-    // 2. Invoke V8 isolate GC across all active webContents (renderers & main window)
     const allWebContents = webContents.getAllWebContents();
-    for (const wc of allWebContents) {
-      if (!wc.isDestroyed()) {
-        try {
-          wc.executeJavaScript('if (typeof window.gc === "function") { window.gc(); }').catch(() => {});
-        } catch {}
-      }
-    }
 
     // 3. Clear Chromium caches across all active webContents and defaultSession
     try {
@@ -1403,7 +1532,7 @@ ipcMain.handle('clean_ram', async () => {
 });
 
 // Native file picker for custom background image (zero telemetry, strictly local)
-ipcMain.handle('pick_custom_background', async () => {
+handleUi('pick_custom_background', async () => {
   if (!mainWindow) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select Custom Background Image',
@@ -1430,14 +1559,18 @@ ipcMain.handle('pick_custom_background', async () => {
 });
 
 // Privacy settings mirrored from the renderer (Settings → Privacy). Defaults match src/settings/defaults.ts
-const privacyState = { doNotTrack: true, blockThirdPartyCookies: true, popupsBlocked: true, adBlockEnabled: true };
-ipcMain.handle('set_privacy_settings', (event, next) => {
+const privacyState = { doNotTrack: true, blockThirdPartyCookies: true, popupsBlocked: true, adBlockEnabled: true, checkForUpdates: true };
+handleUi('set_privacy_settings', (event, next) => {
   if (next && typeof next === 'object') {
     for (const key of Object.keys(privacyState)) {
       if (typeof next[key] === 'boolean') privacyState[key] = next[key];
     }
   }
   adBlocker?.setEnabled(privacyState.adBlockEnabled);
+  // Applied by the command line switch at the next start
+  if (readStorageConfig().blockThirdPartyCookies !== privacyState.blockThirdPartyCookies) {
+    writeStorageConfig({ blockThirdPartyCookies: privacyState.blockThirdPartyCookies });
+  }
   return { ...privacyState };
 });
 
@@ -1446,6 +1579,7 @@ const { createAdBlocker } = require('./adblock.cjs');
 let adBlocker = null;
 // Sync call from electron/webview-preload.cjs at document start: page CSS is inserted, scriptlets returned
 ipcMain.on('freedom-adblock-start', (event, pageUrl) => {
+  if (event.sender.getType() !== 'webview') { event.returnValue = null; return; }
   try {
     event.returnValue = adBlocker?.pageStart(event.sender, pageUrl) ?? null;
   } catch (err) {
@@ -1454,6 +1588,7 @@ ipcMain.on('freedom-adblock-start', (event, pageUrl) => {
   }
 });
 ipcMain.on('freedom-adblock-dom', (event, pageUrl, dom) => {
+  if (event.sender.getType() !== 'webview') return;
   try { adBlocker?.pageDom(event.sender, pageUrl, dom); } catch (err) { console.warn('[adblock]', err); }
 });
 
@@ -1481,7 +1616,7 @@ function isThirdPartyRequest(details) {
 }
 
 // Performance mode notification to main process
-ipcMain.handle('set_browser_mode', (event, mode) => {
+handleUi('set_browser_mode', (event, mode) => {
   if (mode === 'performance') {
     // In performance mode, trigger GC in all web contents and main process to reclaim idle heap
     if (global.gc) {
@@ -1492,7 +1627,7 @@ ipcMain.handle('set_browser_mode', (event, mode) => {
 });
 
 // DevTools
-ipcMain.handle('open_devtools', () => {
+handleUi('open_devtools', () => {
   const focused = BrowserWindow.getFocusedWindow();
   if (focused) {
     focused.webContents.toggleDevTools();
@@ -1502,43 +1637,50 @@ ipcMain.handle('open_devtools', () => {
 });
 
 // Downloads IPC: Native cross-platform downloads management
-ipcMain.handle('open_download_folder', async (event, customFolder) => {
+handleUi('open_download_folder', async (event, customFolder) => {
   let target = customFolder || activeDownloadsLocation || app.getPath('downloads');
-  if (target && typeof target === 'string' && target.trim() !== '') {
-    let resolved = target.trim();
-    if (resolved.startsWith('~/')) {
-      resolved = path.join(os.homedir(), resolved.slice(2));
-    }
-    if (fs.existsSync(resolved)) {
-      target = resolved;
-    }
-  }
-  if (!fs.existsSync(target)) {
-    try {
-      fs.mkdirSync(target, { recursive: true });
-    } catch (e) {
-      target = app.getPath('downloads');
-    }
-  }
+  if (typeof target !== 'string') target = app.getPath('downloads');
+  target = target.trim();
+  if (target.startsWith('~/')) target = path.join(os.homedir(), target.slice(2));
+  // shell.openPath runs whatever it is given: this channel only ever opens folders
+  let isFolder = false;
+  try { isFolder = fs.statSync(target).isDirectory(); } catch {}
+  if (!isFolder) target = app.getPath('downloads');
   await shell.openPath(target);
   return true;
 });
 
-ipcMain.handle('open_download_file', async (event, filepath) => {
+handleUi('open_download_file', async (event, filepath) => {
   if (!filepath || typeof filepath !== 'string') return false;
   if (!fs.existsSync(filepath)) return false;
+  // Files of unknown origin (older history entries) and programs are confirmed in a dialog the UI cannot answer
+  if (!browserDownloads.has(filepath) || isDangerousFile(filepath)) {
+    const ru = currentAppLanguage === 'ru';
+    const options = {
+      type: 'warning',
+      title: 'Freedom Browser',
+      message: ru ? 'Открыть этот файл?' : 'Open this file?',
+      detail: `${filepath}${isDangerousFile(filepath) ? `\n\n${ru ? 'Этот тип файла может запускать программы. Открывайте его, только если доверяете источнику.' : 'This type of file can run programs. Open it only if you trust its source.'}` : ''}`,
+      buttons: [ru ? 'Отмена' : 'Cancel', ru ? 'Открыть' : 'Open'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    };
+    const { response } = await (mainWindow && !mainWindow.isDestroyed() ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options));
+    if (response !== 1) return false;
+  }
   await shell.openPath(filepath);
   return true;
 });
 
-ipcMain.handle('show_item_in_folder', async (event, filepath) => {
+handleUi('show_item_in_folder', async (event, filepath) => {
   if (!filepath || typeof filepath !== 'string') return false;
   if (!fs.existsSync(filepath)) return false;
   shell.showItemInFolder(filepath);
   return true;
 });
 
-ipcMain.handle('cancel_download', (event, downloadId) => {
+handleUi('cancel_download', (event, downloadId) => {
   const item = activeDownloads.get(downloadId);
   if (item && !item.isDestroyed?.()) {
     try {
@@ -1552,7 +1694,7 @@ ipcMain.handle('cancel_download', (event, downloadId) => {
   return false;
 });
 
-ipcMain.handle('verify_download_items', async (event, items) => {
+handleUi('verify_download_items', async (event, items) => {
   if (!Array.isArray(items)) return [];
   return items.filter((item) => {
     if (!item) return false;
@@ -1561,23 +1703,23 @@ ipcMain.handle('verify_download_items', async (event, items) => {
   });
 });
 
-ipcMain.handle('get_default_download_dir', () => {
+handleUi('get_default_download_dir', () => {
   return app.getPath('downloads');
 });
 
-ipcMain.handle('set_language', (event, lang) => {
+handleUi('set_language', (event, lang) => {
   currentAppLanguage = lang === 'ru' ? 'ru' : 'en';
   return true;
 });
 
-ipcMain.handle('set_downloads_dir', (event, dirPath) => {
+handleUi('set_downloads_dir', (event, dirPath) => {
   if (dirPath && typeof dirPath === 'string') {
     activeDownloadsLocation = dirPath.trim();
   }
   return true;
 });
 
-ipcMain.handle('choose_download_dir', async () => {
+handleUi('choose_download_dir', async () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     title: currentAppLanguage === 'ru' ? 'Выберите папку для загрузок' : 'Select Downloads Directory',
@@ -1590,26 +1732,24 @@ ipcMain.handle('choose_download_dir', async () => {
   return activeDownloadsLocation;
 });
 
-ipcMain.handle('start_download', (event, { url }) => {
-  if (mainWindow && !mainWindow.isDestroyed() && url) {
-    mainWindow.webContents.downloadURL(url);
-    return true;
-  }
-  return false;
+handleUi('start_download', (event, { url }) => {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false;
+  session.defaultSession.downloadURL(url);
+  return true;
 });
 
-ipcMain.handle('set_window_title', (event, title) => {
+handleUi('set_window_title', (event, title) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setTitle(title ? `${title} - Freedom Browser` : 'Freedom Browser');
   }
 });
 
-ipcMain.handle('close_app', () => {
+handleUi('close_app', () => {
   app.quit();
 });
 
 // Frameless Window Control Handlers
-ipcMain.handle('window_minimize', () => {
+handleUi('window_minimize', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.minimize();
     return true;
@@ -1617,7 +1757,7 @@ ipcMain.handle('window_minimize', () => {
   return false;
 });
 
-ipcMain.handle('window_maximize', () => {
+handleUi('window_maximize', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMaximized()) {
       mainWindow.unmaximize();
@@ -1629,7 +1769,7 @@ ipcMain.handle('window_maximize', () => {
   return false;
 });
 
-ipcMain.handle('window_close', () => {
+handleUi('window_close', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.close();
     return true;
@@ -1637,17 +1777,18 @@ ipcMain.handle('window_close', () => {
   return false;
 });
 
-ipcMain.handle('window_is_maximized', () => {
+handleUi('window_is_maximized', () => {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false;
 });
 
 // Direct WebContents Zoom Factor Handler
-ipcMain.handle('set_zoom_factor', (event, { webContentsId, factor }) => {
+handleUi('set_zoom_factor', (event, { webContentsId, factor }) => {
   try {
     const { webContents } = require('electron');
     const target = webContents.fromId(webContentsId);
-    if (target && !target.isDestroyed()) {
-      target.setZoomFactor(factor);
+    const value = Number(factor);
+    if (target && !target.isDestroyed() && target.getType() === 'webview' && value >= 0.25 && value <= 5) {
+      target.setZoomFactor(value);
       return true;
     }
   } catch (err) {
@@ -1672,7 +1813,7 @@ function folderSize(dir, depth = 0) {
   return total;
 }
 
-ipcMain.handle('get_user_data_info', () => {
+handleUi('get_user_data_info', () => {
   const config = readStorageConfig();
   const current = app.getPath('userData');
   return {
@@ -1688,9 +1829,9 @@ ipcMain.handle('get_user_data_info', () => {
 });
 
 // Kept for older renderer builds
-ipcMain.handle('get_user_data_path', () => app.getPath('userData'));
+handleUi('get_user_data_path', () => app.getPath('userData'));
 
-ipcMain.handle('choose_user_data_path', async () => {
+handleUi('choose_user_data_path', async () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select Freedom Browser User Data Directory',
@@ -1717,7 +1858,7 @@ function checkDataFolder(targetPath) {
   return 'not-empty';
 }
 
-ipcMain.handle('migrate_user_data_path', async (event, { targetPath, migrateExisting, reset }) => {
+handleUi('migrate_user_data_path', async (event, { targetPath, migrateExisting, reset }) => {
   try {
     const target = reset ? defaultUserDataDir : targetPath;
     if (!target || typeof target !== 'string' || !path.isAbsolute(target)) {
@@ -1737,31 +1878,31 @@ ipcMain.handle('migrate_user_data_path', async (event, { targetPath, migrateExis
   }
 });
 
-ipcMain.handle('cancel_user_data_move', () => {
+handleUi('cancel_user_data_move', () => {
   writeStorageConfig({ pendingUserDataPath: null, pendingMigrate: null });
   return true;
 });
 
-ipcMain.handle('open_user_data_folder', () => shell.openPath(app.getPath('userData')));
+handleUi('open_user_data_folder', () => shell.openPath(app.getPath('userData')));
 
 // Hardware Acceleration IPC Handlers
-ipcMain.handle('get_hardware_acceleration', () => {
+handleUi('get_hardware_acceleration', () => {
   const config = readStorageConfig();
   return config.hardwareAcceleration !== false;
 });
 
-ipcMain.handle('set_hardware_acceleration', (event, enabled) => {
+handleUi('set_hardware_acceleration', (event, enabled) => {
   writeStorageConfig({ hardwareAcceleration: Boolean(enabled) });
   return true;
 });
 
-ipcMain.handle('relaunch_app', () => {
+handleUi('relaunch_app', () => {
   app.relaunch();
   app.exit(0);
 });
 
 // Fullscreen Window Management IPC Handlers
-ipcMain.handle('window_fullscreen_toggle', () => {
+handleUi('window_fullscreen_toggle', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     const next = !mainWindow.isFullScreen();
     mainWindow.setFullScreen(next);
@@ -1770,7 +1911,7 @@ ipcMain.handle('window_fullscreen_toggle', () => {
   return false;
 });
 
-ipcMain.handle('window_fullscreen_set', (event, flag) => {
+handleUi('window_fullscreen_set', (event, flag) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setFullScreen(Boolean(flag));
     return mainWindow.isFullScreen();
@@ -1778,11 +1919,11 @@ ipcMain.handle('window_fullscreen_set', (event, flag) => {
   return false;
 });
 
-ipcMain.handle('window_is_fullscreen', () => {
+handleUi('window_is_fullscreen', () => {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow.isFullScreen() : false;
 });
 
-ipcMain.handle('force_close_app', () => {
+handleUi('force_close_app', () => {
   isForceQuitting = true;
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.close();
@@ -1791,7 +1932,7 @@ ipcMain.handle('force_close_app', () => {
   }
 });
 
-ipcMain.handle('choose_file_to_open', async () => {
+handleUi('choose_file_to_open', async () => {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Open HTML Document',
@@ -1812,12 +1953,13 @@ const configuredSessions = new WeakSet();
 function configureBrowsingSession(ses) {
   if (!ses || configuredSessions.has(ses)) return;
   configuredSessions.add(ses);
+  permissionManager?.attach(ses);
   ses.setUserAgent(desktopChromeUA);
   // Guarantee all outgoing HTTP/HTTPS requests advertise desktop Chrome without mobile hints
   ses.webRequest.onBeforeSendHeaders((details, callback) => {
     details.requestHeaders['User-Agent'] = desktopChromeUA;
     details.requestHeaders['Sec-CH-UA-Mobile'] = '?0';
-    details.requestHeaders['Sec-CH-UA'] = '"Chromium";v="132", "Google Chrome";v="132", "Not:A-Brand";v="99"';
+    details.requestHeaders['Sec-CH-UA'] = `"Chromium";v="${chromeMajor}", "Google Chrome";v="${chromeMajor}", "Not:A-Brand";v="99"`;
     details.requestHeaders['Sec-CH-UA-Platform'] = isPlatformWin ? '"Windows"' : isPlatformMac ? '"macOS"' : '"Linux"';
     if (privacyState.doNotTrack) {
       details.requestHeaders['DNT'] = '1';
@@ -1865,13 +2007,37 @@ const withExtensions = (fn) => async (...args) => {
   return fn(...args);
 };
 
-ipcMain.handle('extensions_list', withExtensions(() => extensionManager.list()));
-ipcMain.handle('extensions_install_folder', withExtensions(async () => {
+// Shown before any extension is installed: what it asks for, in a dialog the UI cannot answer
+async function confirmExtensionInstall({ name, version, permissions, sites, source }) {
+  const ru = currentAppLanguage === 'ru';
+  const allSites = sites.some((p) => p === '<all_urls>' || p === '*://*/*' || p === 'http://*/*' || p === 'https://*/*');
+  const lines = [
+    ru ? `Источник: ${source}` : `Source: ${source}`,
+    allSites
+      ? (ru ? 'Сможет читать и изменять данные на ВСЕХ сайтах.' : 'Can read and change your data on ALL websites.')
+      : sites.length ? `${ru ? 'Сайты' : 'Sites'}: ${sites.slice(0, 12).join(', ')}` : '',
+    permissions.length ? `${ru ? 'Разрешения' : 'Permissions'}: ${permissions.join(', ')}` : '',
+  ].filter(Boolean);
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title: 'Freedom Browser',
+    message: ru ? `Установить расширение «${name}» ${version || ''}?` : `Install extension "${name}" ${version || ''}?`,
+    detail: lines.join('\n'),
+    buttons: [ru ? 'Отмена' : 'Cancel', ru ? 'Установить' : 'Install'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  if (response !== 1) throw new Error(ru ? 'Установка отменена' : 'Installation cancelled');
+}
+
+handleUi('extensions_list', withExtensions(() => extensionManager.list()));
+handleUi('extensions_install_folder', withExtensions(async () => {
   const res = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'], title: 'Select unpacked extension folder (with manifest.json)' });
   if (res.canceled || !res.filePaths[0]) return null;
   return extensionManager.installFromDir(res.filePaths[0]);
 }));
-ipcMain.handle('extensions_install_file', withExtensions(async () => {
+handleUi('extensions_install_file', withExtensions(async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     title: 'Select extension package',
@@ -1880,13 +2046,13 @@ ipcMain.handle('extensions_install_file', withExtensions(async () => {
   if (res.canceled || !res.filePaths[0]) return null;
   return extensionManager.installFromArchive(fs.readFileSync(res.filePaths[0]), path.parse(res.filePaths[0]).name);
 }));
-ipcMain.handle('extensions_install_store', withExtensions((event, idOrUrl) => extensionManager.installFromWebStore(idOrUrl)));
-ipcMain.handle('extensions_set_enabled', withExtensions((event, folder, enabled) => extensionManager.setEnabled(folder, Boolean(enabled))));
-ipcMain.handle('extensions_remove', withExtensions((event, folder) => extensionManager.remove(folder)));
+handleUi('extensions_install_store', withExtensions((event, idOrUrl) => extensionManager.installFromWebStore(idOrUrl)));
+handleUi('extensions_set_enabled', withExtensions((event, folder, enabled) => extensionManager.setEnabled(folder, Boolean(enabled))));
+handleUi('extensions_remove', withExtensions((event, folder) => extensionManager.remove(folder)));
 
 // Extension popup (action.default_popup) in a small window; options page in a normal tab
 let extensionPopup = null;
-ipcMain.handle('extensions_open', withExtensions((event, folder, kind, anchor) => {
+handleUi('extensions_open', withExtensions((event, folder, kind, anchor) => {
   const ext = extensionManager.list().find((e) => e.folder === folder);
   if (!ext) return false;
   const url = extensionManager.pageUrl(folder, kind === 'options' ? ext.options : ext.popup);
@@ -1919,21 +2085,115 @@ ipcMain.handle('extensions_open', withExtensions((event, folder, kind, anchor) =
   return true;
 }));
 
+// Settings → Privacy → Site permissions
+handleUi('permissions_list', () => permissionManager?.list() || []);
+handleUi('permissions_remove', (event, origin, permission) => permissionManager?.remove(origin, permission) || false);
+
+// ---- New version check (Settings → Privacy) ----
+// Security fixes reach users only through new releases, so tell them. Installing stays a user action:
+// the builds are not code-signed, and silently replacing a browser binary needs signatures to be safe.
+const EXTENSION_UPDATE_DELAY_MS = 60 * 1000;
+const UPDATE_CHECK_DELAY_MS = 30 * 1000;
+const RELEASES_API = 'https://api.github.com/repos/ldarldarldarldar/freedom-browser/releases/latest';
+const RELEASES_PAGE = 'https://github.com/ldarldarldarldar/freedom-browser/releases/';
+
+// "0.6.4-5" is newer than "0.6.4-4" and "0.6.4" in this project's numbering
+function isNewerVersion(candidate, current) {
+  const parts = (v) => String(v).replace(/^v/, '').split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+  const a = parts(candidate);
+  const b = parts(current);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
+}
+
+async function checkForNewVersion() {
+  if (!privacyState.checkForUpdates || !app.isPackaged) return;
+  const response = await net.fetch(RELEASES_API, { headers: { accept: 'application/vnd.github+json' }, credentials: 'omit' });
+  if (!response.ok) return;
+  const { tag_name: tag, html_url: page } = await response.json();
+  const config = readStorageConfig();
+  if (!tag || !isNewerVersion(tag, app.getVersion()) || config.lastNotifiedVersion === tag) return;
+  writeStorageConfig({ lastNotifiedVersion: tag });
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const ru = currentAppLanguage === 'ru';
+  const { response: choice } = await dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Freedom Browser',
+    message: ru ? `Доступна новая версия: ${tag}` : `A new version is available: ${tag}`,
+    detail: ru ? `Сейчас установлена ${app.getVersion()}. Обновления закрывают уязвимости движка браузера.` : `You have ${app.getVersion()}. Updates fix security holes in the browser engine.`,
+    buttons: [ru ? 'Позже' : 'Later', ru ? 'Открыть страницу загрузки' : 'Open download page'],
+    defaultId: 1,
+    cancelId: 0,
+    noLink: true,
+  });
+  if (choice === 1 && typeof page === 'string' && page.startsWith(RELEASES_PAGE) && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('webview-open-tab', { url: page, active: true });
+  }
+}
+
+// Versions before cookie encryption left values in plain text, and Chromium only encrypts a cookie when it is
+// next written. Writing them all back once covers the ones a site would otherwise never touch again.
+async function encryptOldCookies() {
+  if (readStorageConfig().cookiesEncrypted) return;
+  try {
+    const cookies = await session.defaultSession.cookies.get({});
+    for (const c of cookies) {
+      const host = c.domain.replace(/^\./, '');
+      await session.defaultSession.cookies.set({
+        url: `${c.secure ? 'https' : 'http'}://${host}${c.path || '/'}`,
+        name: c.name,
+        value: c.value,
+        ...(c.hostOnly ? {} : { domain: c.domain }),
+        path: c.path,
+        secure: c.secure,
+        httpOnly: c.httpOnly,
+        sameSite: c.sameSite,
+        ...(c.expirationDate ? { expirationDate: c.expirationDate } : {}),
+      }).catch((err) => console.warn('[cookies] could not rewrite one cookie:', err.message));
+    }
+    await session.defaultSession.cookies.flushStore();
+    writeStorageConfig({ cookiesEncrypted: true });
+  } catch (err) {
+    console.warn('[cookies] encryption pass failed:', err.message);
+  }
+}
+
 // App lifecycle
 app.whenReady().then(async () => {
   app.userAgentFallback = desktopChromeUA;
   session.defaultSession.setUserAgent(desktopChromeUA);
+
+  permissionManager = createPermissionManager({
+    app,
+    session,
+    dialog,
+    windowFor: hostWindowOf,
+    language: () => currentAppLanguage,
+  });
+
+  // The UI lives in a session of its own: no extensions, no site cookies, no file:// origin shared with tabs
+  uiSession = session.fromPartition(UI_PARTITION);
+  serveUi(uiSession, path.join(__dirname, '../dist'));
+  permissionManager.attachDenyAll(uiSession);
+  uiSession.on('will-download', (...args) => session.defaultSession.emit('will-download', ...args));
+  await migrateUiStorage({ app, BrowserWindow, session, uiSession });
+  await encryptOldCookies();
 
   adBlocker = createAdBlocker({ app, net });
   adBlocker.setEnabled(privacyState.adBlockEnabled);
   configureBrowsingSession(session.defaultSession);
 
   // Chrome extensions must be loaded on every start, before any page/webview is created
-  extensionManager = createExtensionManager({ app, session, net });
+  extensionManager = createExtensionManager({ app, session, net, confirmInstall: confirmExtensionInstall });
   await extensionManager.loadAllOnStartup().catch((err) => console.warn('[extensions]', err));
+  setTimeout(() => extensionManager.updateFromStore().catch((err) => console.warn('[extensions] update check:', err.message)), EXTENSION_UPDATE_DELAY_MS);
 
   registerLinuxDesktopIntegration();
   createWindow();
+  startupComplete = true;
+  setTimeout(() => checkForNewVersion().catch((err) => console.warn('[update check]', err.message)), UPDATE_CHECK_DELAY_MS);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -1942,8 +2202,14 @@ app.whenReady().then(async () => {
   });
 });
 
+// Chromium delays localStorage writes for minutes after a burst of changes: save settings before leaving
+app.on('before-quit', () => {
+  uiSession?.flushStorageData();
+});
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // The hidden windows of the startup migration closing is not the user closing the browser
+  if (startupComplete && process.platform !== 'darwin') {
     app.quit();
   }
 });

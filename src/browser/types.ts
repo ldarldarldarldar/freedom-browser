@@ -83,6 +83,7 @@ export interface ClosedTabEntry {
 
 export interface DownloadItem {
   id: string;
+  isPrivate?: boolean;
   filename: string;
   url: string;
   filepath: string;

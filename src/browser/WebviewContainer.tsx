@@ -62,6 +62,8 @@ interface WebviewContainerProps {
   onExitSplitView?: () => void;
 }
 
+const isWebFavicon = (icon: string) => /^(https?:|data:image\/)/i.test(icon);
+
 const ElectronWebviewTab: React.FC<{
   tab: BrowserTab;
   isActive: boolean;
@@ -157,7 +159,9 @@ const ElectronWebviewTab: React.FC<{
     };
 
     // Central synchronizer: queries actual Chromium webContents properties on any navigation event
-    const syncState = (navUrl?: string, navTitle?: string, navFavicons?: string[]) => {
+    const syncState = (navUrl?: string, navTitle?: string, rawFavicons?: string[]) => {
+      // Page-supplied icons: web and inline images only, never local or network-share paths
+      const navFavicons = rawFavicons?.filter(isWebFavicon);
       try {
         const rawUrl = navUrl || (typeof el.getURL === 'function' ? el.getURL() : '') || currentTabRef.current.url;
         if (!rawUrl || rawUrl === 'about:blank' || rawUrl.startsWith('chrome-error:')) return;
@@ -225,9 +229,10 @@ const ElectronWebviewTab: React.FC<{
     };
 
     const handleFaviconUpdated = (e: any) => {
-      if (e.favicons && e.favicons.length > 0) {
-        callbacksRef.current.onTabFaviconChange?.(tab.id, e.favicons[0]);
-        syncState(undefined, undefined, e.favicons);
+      const favicons = (e.favicons || []).filter(isWebFavicon);
+      if (favicons.length > 0) {
+        callbacksRef.current.onTabFaviconChange?.(tab.id, favicons[0]);
+        syncState(undefined, undefined, favicons);
       }
     };
 
@@ -363,7 +368,6 @@ const ElectronWebviewTab: React.FC<{
         allowpopups="true"
         allowfullscreen="true"
         webpreferences="contextIsolation=yes, javascript=yes, allowRunningInsecureContent=no"
-        preload={(window as any).electronAPI?.webviewPreload || undefined}
       />
       {loadError && (
         <div className="absolute inset-0 z-10">

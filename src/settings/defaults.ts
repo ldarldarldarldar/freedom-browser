@@ -50,6 +50,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   javascriptEnabled: true,
   popupsBlocked: true,
   adBlockEnabled: true,
+  checkForUpdates: true,
 
   // Telemetry: Stored strictly locally, OFF by default
   localDiagnosticLogs: false,

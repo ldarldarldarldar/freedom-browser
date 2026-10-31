@@ -64,6 +64,10 @@ declare global {
       pickCustomBackground: () => Promise<string | null>;
       setBrowserMode: (mode: 'performance' | 'quality') => Promise<boolean>;
       setDownloadSpeedLimit?: (kbps: number) => Promise<number>;
+      sitePermissions?: {
+        list: () => Promise<Array<{ origin: string; permission: string; decision: 'allow' | 'block' }>>;
+        remove: (origin: string, permission: string) => Promise<boolean>;
+      };
       extensions?: {
         list: () => Promise<FreedomExtensionInfo[]>;
         installFolder: () => Promise<string | null>;
@@ -73,7 +77,7 @@ declare global {
         remove: (folder: string) => Promise<void>;
         open: (folder: string, kind: 'popup' | 'options', anchor?: { x: number; y: number }) => Promise<boolean>;
       };
-      setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean; adBlockEnabled: boolean }) => Promise<unknown>;
+      setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean; adBlockEnabled: boolean; checkForUpdates?: boolean }) => Promise<unknown>;
       getHardwareAcceleration?: () => Promise<boolean>;
       setHardwareAcceleration?: (enabled: boolean) => Promise<boolean>;
       relaunchApp?: () => Promise<void>;

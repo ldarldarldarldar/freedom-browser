@@ -165,7 +165,7 @@ export const TabBar: React.FC<TabBarProps> = ({
       }}
     >
       <FreedomMark size={18} className="mr-3 text-[var(--fb-text)]" />
-      <div className="flex items-center flex-1 min-w-0 max-w-full space-x-1 py-1">
+      <div className="flex items-center flex-1 min-w-0 max-w-full h-full space-x-1">
         {tabs.map((tab, index) => {
           const splitPaneIndex = splitViewState?.enabled
             ? splitViewState.panes.findIndex((p) => p.tabId === tab.id)
@@ -210,12 +210,16 @@ export const TabBar: React.FC<TabBarProps> = ({
                   setContextMenu({ tab, x, y });
                 }}
                 title={`${tab.isPrivate ? `[${t('incognito.badge')}] ` : ''}${displayTitle} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isInSplit ? ` [Split: Pane ${splitPaneIndex + 1}]` : ''}`}
-                className={`group relative flex items-center h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 cursor-pointer min-w-[110px] max-w-[210px] flex-1 overflow-hidden app-no-drag select-none ${tab.isPrivate ? 'outline outline-1 outline-dashed outline-[var(--fb-border-strong)] -outline-offset-1 ' : ''}${
-                  isActive
-                    ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] border border-[var(--fb-border)] font-medium'
-                    : 'bg-transparent text-neutral-400 hover:text-neutral-200 hover:bg-white/[0.05] border border-transparent'
-                }`}
+                // The clickable area fills the strip's height: throw the pointer at the top edge of the screen and click
+                className="group flex items-center h-full min-w-[110px] max-w-[210px] flex-1 cursor-pointer app-no-drag select-none"
               >
+                <div
+                  className={`relative flex items-center w-full h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 overflow-hidden ${tab.isPrivate ? 'outline outline-1 outline-dashed outline-[var(--fb-border-strong)] -outline-offset-1 ' : ''}${
+                    isActive
+                      ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] border border-[var(--fb-border)] font-medium'
+                      : 'bg-transparent text-neutral-400 group-hover:text-neutral-200 group-hover:bg-white/[0.05] border border-transparent'
+                  }`}
+                >
                 {/* Active Tab Accent Bar */}
                 {isActive && tab.isLoading && (
                   <div className="absolute bottom-0 left-2.5 right-2.5 h-[2px] bg-emerald-400/70 rounded-full" />
@@ -316,6 +320,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                 >
                   <X className="w-3 h-3" />
                 </button>
+                </div>
               </div>
             </React.Fragment>
           );
@@ -326,10 +331,12 @@ export const TabBar: React.FC<TabBarProps> = ({
           id="btn-new-tab"
           type="button"
           onClick={onNewTab}
-          className="flex items-center justify-center w-7 h-7 ml-1 rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0"
+          className="group flex items-center justify-center w-7 h-full ml-1 app-no-drag shrink-0 cursor-pointer"
           title={t('tab.addNewTab')}
         >
-          <Plus className="w-4 h-4" />
+          <span className="flex items-center justify-center w-7 h-7 rounded-[var(--fb-radius-sm)] text-neutral-400 group-hover:text-white group-hover:bg-white/[0.08] group-active:scale-95 transition-all">
+            <Plus className="w-4 h-4" />
+          </span>
         </button>
 
         {/* Restore Recently Closed Tab Button */}
@@ -338,29 +345,35 @@ export const TabBar: React.FC<TabBarProps> = ({
             id="btn-restore-closed-tab"
             type="button"
             onClick={onRestoreClosedTab}
-            className="flex items-center justify-center w-7 h-7 ml-1 rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-emerald-400 hover:bg-white/[0.08] active:scale-95 transition-all app-no-drag shrink-0"
+            className="group flex items-center justify-center w-7 h-full ml-1 app-no-drag shrink-0 cursor-pointer"
             title={t('tab.restoreClosed', { count: closedTabsCount })}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <span className="flex items-center justify-center w-7 h-7 rounded-[var(--fb-radius-sm)] text-neutral-400 group-hover:text-emerald-400 group-hover:bg-white/[0.08] group-active:scale-95 transition-all">
+              <RotateCcw className="w-3.5 h-3.5" />
+            </span>
           </button>
         )}
 
         {/* Tab Sort & Group Button */}
         {onSortTabs && (
-          <div className="relative shrink-0 app-no-drag">
+          <div className="relative shrink-0 h-full app-no-drag">
             <button
               ref={sortButtonRef}
               id="btn-tab-sort"
               type="button"
               onClick={handleSortButtonClick}
-              className={`flex items-center justify-center w-7 h-7 ml-1 rounded-[var(--fb-radius-sm)] transition-all app-no-drag cursor-pointer border ${
-                showSortMenu || activeSortMode !== 'none'
-                  ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/[0.08] border-transparent active:scale-95'
-              }`}
+              className="group flex items-center justify-center w-7 h-full ml-1 app-no-drag cursor-pointer"
               title={t('sort.buttonTooltip')}
             >
-              <ArrowUpDown className="w-3.5 h-3.5" />
+              <span
+                className={`flex items-center justify-center w-7 h-7 rounded-[var(--fb-radius-sm)] transition-all border ${
+                  showSortMenu || activeSortMode !== 'none'
+                    ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30'
+                    : 'text-neutral-400 group-hover:text-white group-hover:bg-white/[0.08] border-transparent group-active:scale-95'
+                }`}
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+              </span>
             </button>
           </div>
         )}

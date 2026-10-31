@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Move, RotateCcw, Check, LayoutGrid, Plus, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { TranslationKey } from '../i18n/translations';
-import { ClockStyle, NEW_TAB_ELEMENTS, NewTabElementId, useNewTabElements } from '../hooks/useNewTabElements';
+import { ClockStyle, NEW_TAB_ELEMENTS, NewTabElementId, ScalableElementId, useNewTabElements } from '../hooks/useNewTabElements';
+import { ScaleStepper } from './ScaleStepper';
 
 interface LayoutEditBarProps {
   onReset: () => void;
@@ -19,6 +20,12 @@ const ELEMENT_LABELS: Record<NewTabElementId, TranslationKey> = {
   clock: 'layout.element.clock',
   quote: 'layout.element.quote',
 };
+
+// Parts of the browser itself: always there, so they only have a size
+const CHROME_ELEMENTS: { id: ScalableElementId; label: TranslationKey }[] = [
+  { id: 'sidebar', label: 'layout.element.sidebar' },
+  { id: 'toolbar', label: 'layout.element.toolbar' },
+];
 
 const CLOCK_STYLES: { id: ClockStyle; label: TranslationKey }[] = [
   { id: 'cube', label: 'layout.clockStyle.cube' },
@@ -44,7 +51,7 @@ export const LayoutEditBar: React.FC<LayoutEditBarProps> = ({ onReset, onDone, i
       {isElementsOpen && (
         <div
           id="layout-elements-panel"
-          className="w-[300px] p-2 rounded-[var(--fb-radius-lg)] border border-[var(--fb-border-strong)] bg-[var(--fb-surface)] shadow-[var(--fb-shadow-pop)] text-[var(--fb-text)]"
+          className="w-[360px] p-2 rounded-[var(--fb-radius-lg)] border border-[var(--fb-border-strong)] bg-[var(--fb-surface)] shadow-[var(--fb-shadow-pop)] text-[var(--fb-text)]"
         >
           {!isNewTabActive && (
             <button
@@ -59,7 +66,8 @@ export const LayoutEditBar: React.FC<LayoutEditBarProps> = ({ onReset, onDone, i
             const visible = isVisible(id);
             return (
               <div key={id} className="flex items-center justify-between gap-2 pl-2 py-0.5">
-                <span className={`text-xs ${visible ? '' : 'text-[var(--fb-text-3)]'}`}>{t(ELEMENT_LABELS[id])}</span>
+                <span className={`text-xs flex-1 min-w-0 truncate ${visible ? '' : 'text-[var(--fb-text-3)]'}`}>{t(ELEMENT_LABELS[id])}</span>
+                {visible && <ScaleStepper id={id} />}
                 <button
                   type="button"
                   id={`layout-element-${id}`}
@@ -72,6 +80,14 @@ export const LayoutEditBar: React.FC<LayoutEditBarProps> = ({ onReset, onDone, i
               </div>
             );
           })}
+          <div className="mt-1.5 pt-1.5 border-t border-[var(--fb-border)]">
+            {CHROME_ELEMENTS.map(({ id, label }) => (
+              <div key={id} className="flex items-center justify-between gap-2 px-2 py-1">
+                <span className="text-xs flex-1 min-w-0 truncate">{t(label)}</span>
+                <ScaleStepper id={id} />
+              </div>
+            ))}
+          </div>
           <div className="mt-1.5 pt-2 px-2 pb-1 border-t border-[var(--fb-border)]">
             <div className="mb-1.5 text-[11px] text-[var(--fb-text-2)]">{t('layout.clockStyle')}</div>
             <div className="grid grid-cols-2 gap-1">

@@ -76,7 +76,7 @@ export class TauriBridge {
           return { tabId: t.id, webContentsId };
         });
 
-        const res = await (window as any).electronAPI.invoke('get_webviews_memory', mappings);
+        const res = await (window as any).electronAPI.getWebviewsMemory(mappings);
         if (res && typeof res === 'object') {
           return res;
         }

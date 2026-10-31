@@ -6,6 +6,7 @@ import { SearchEngineId, ThemePalette } from '../settings/types';
 import { NewTabWallpaper } from '../components/NewTabWallpaper';
 import { useDragOffset, RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 import { NewTabElementId, useNewTabElements } from '../hooks/useNewTabElements';
+import { ScaleStepper } from '../components/ScaleStepper';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { FaviconService } from '../services/faviconService';
@@ -37,7 +38,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
   const [query, setQuery] = useState('');
   const [time, setTime] = useState<string>('');
   const [date, setDate] = useState<string>('');
-  const { isVisible, clockStyle, setElementVisible } = useNewTabElements();
+  const { isVisible, clockStyle, setElementVisible, getScale } = useNewTabElements();
   const showClock = isVisible('clock');
 
   // 0 favorites by default; separate persistent storage from bookmarks
@@ -246,6 +247,17 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       </button>
     );
 
+  // Layout edit mode: − 100% + above an element changes its size (the zoom sits on an inner wrapper, so the drag
+  // offset on the outer element keeps following the pointer 1:1)
+  const sizeControl = (id: NewTabElementId) =>
+    isEditingLayout && (
+      <ScaleStepper
+        id={id}
+        className="absolute -top-3 left-0 z-10 border border-[var(--fb-border-strong)] bg-[var(--fb-surface-3)]"
+      />
+    );
+  const zoomOf = (id: NewTabElementId): React.CSSProperties => ({ zoom: getScale(id) });
+
   const useBigClock = showClock && clockStyle === 'big';
 
   return (
@@ -274,11 +286,14 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           title={isEditingLayout ? t('layout.dragHint') : undefined}
           className={`relative ${useBigClock ? 'mb-[4vh]' : 'mb-[9vh]'} self-start w-fit touch-none ${grab(titleDrag.isDragging)}`}
         >
-          <h1 className="text-[clamp(28px,4vw,var(--fb-fs-title))] font-normal tracking-tight leading-tight">
-            {brandFirst}{' '}
-            <span className="text-[var(--fb-accent-soft)]">{brandRest.join(' ')}</span>
-          </h1>
-          <p className="mt-1.5 text-[14px] text-[var(--fb-text-2)]">{t('newtab.tagline')}</p>
+          <div style={zoomOf('title')}>
+            <h1 className="text-[clamp(28px,4vw,var(--fb-fs-title))] font-normal tracking-tight leading-tight">
+              {brandFirst}{' '}
+              <span className="text-[var(--fb-accent-soft)]">{brandRest.join(' ')}</span>
+            </h1>
+            <p className="mt-1.5 text-[14px] text-[var(--fb-text-2)]">{t('newtab.tagline')}</p>
+          </div>
+          {sizeControl('title')}
           {removeButton('title')}
         </header>
         )}
@@ -294,8 +309,11 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             title={isEditingLayout ? t('layout.dragHint') : undefined}
             className={`relative self-center text-center mb-[5vh] touch-none ${grab(bigClockDrag.isDragging)}`}
           >
-            <div className="text-[clamp(56px,9vw,112px)] font-light leading-none tracking-tight tabular-nums">{time || '00:00'}</div>
-            <div className="mt-2 text-[14px] text-[var(--fb-text-2)]">{date}</div>
+            <div style={zoomOf('clock')}>
+              <div className="text-[clamp(56px,9vw,112px)] font-light leading-none tracking-tight tabular-nums">{time || '00:00'}</div>
+              <div className="mt-2 text-[14px] text-[var(--fb-text-2)]">{date}</div>
+            </div>
+            {sizeControl('clock')}
             {removeButton('clock')}
           </div>
         )}
@@ -306,10 +324,10 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           id="newtab-search"
           ref={searchDrag.ref}
           {...searchDrag.handlers}
-          style={searchDrag.style}
-          className={`relative w-full max-w-[460px] mx-auto mb-10 touch-none ${grab(searchDrag.isDragging)}`}
+          style={{ ...searchDrag.style, maxWidth: 460 * getScale('search') }}
+          className={`relative w-full mx-auto mb-10 touch-none ${grab(searchDrag.isDragging)}`}
         >
-        <form onSubmit={handleSearch} className="w-full">
+        <form onSubmit={handleSearch} className="w-full" style={zoomOf('search')}>
           <div className="flex items-center w-full h-11 px-4 rounded-[var(--fb-radius-pill)] border border-[var(--fb-border-strong)] bg-[var(--fb-input)] focus-within:border-emerald-500/50 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-colors shadow-[var(--fb-shadow-card)]">
             <Search className="w-4 h-4 text-[var(--fb-text-2)] mr-3 shrink-0" />
             <input
@@ -332,6 +350,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             </button>
           </div>
         </form>
+        {sizeControl('search')}
         {removeButton('search')}
         </div>
         )}
@@ -342,9 +361,10 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
           id="newtab-links"
           ref={linksDrag.ref}
           {...linksDrag.handlers}
-          style={linksDrag.style}
-          className={`relative flex flex-wrap justify-center gap-x-5 gap-y-4 max-w-[560px] mx-auto touch-none ${isEditingLayout && linksDrag.isDragging ? 'relative z-30 cursor-grabbing' : ''}`}
+          style={{ ...linksDrag.style, maxWidth: 560 * getScale('links') }}
+          className={`relative w-full mx-auto touch-none ${isEditingLayout && linksDrag.isDragging ? 'relative z-30 cursor-grabbing' : ''}`}
         >
+          <div className="flex flex-wrap justify-center gap-x-5 gap-y-4" style={zoomOf('links')}>
           {favorites.map((fav, index) => {
             const iconUrl = FaviconService.getFaviconSync(fav.url);
             return (
@@ -422,6 +442,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             </span>
             <span className="mt-1.5 text-[11px] text-[var(--fb-text-2)] group-hover:text-[var(--fb-text)]">{t('newtab.add')}</span>
           </button>
+          </div>
+          {sizeControl('links')}
           {removeButton('links')}
         </div>
         )}
@@ -433,14 +455,15 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
               id="newtab-quote"
               ref={quoteDrag.ref}
               {...quoteDrag.handlers}
-              style={quoteDrag.style}
+              style={{ ...quoteDrag.style, maxWidth: 300 * getScale('quote') }}
               title={isEditingLayout ? t('layout.dragHint') : undefined}
-              className={`relative max-w-[300px] touch-none ${grab(quoteDrag.isDragging)}`}
+              className={`relative touch-none ${grab(quoteDrag.isDragging)}`}
             >
-              <p className="text-[11px] leading-relaxed text-[var(--fb-text-3)]">
+              <p className="text-[11px] leading-relaxed text-[var(--fb-text-3)]" style={zoomOf('quote')}>
                 {t('newtab.quote')}
                 <span className="block mt-1">— {t('newtab.quoteAuthor')}</span>
               </p>
+              {sizeControl('quote')}
               {removeButton('quote')}
             </div>
           )}
@@ -476,11 +499,14 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             : { right: '7%', bottom: '32px' }
         }
       >
-        <Clock className="w-4.5 h-4.5 text-[var(--fb-text-2)] pointer-events-none" strokeWidth={1.5} />
-        <div className="leading-tight pointer-events-none">
-          <div className="text-[13px] tabular-nums">{time || '00:00'}</div>
-          <div className="text-[10px] text-[var(--fb-text-3)]">{date}</div>
+        <div className="flex items-center gap-2.5 pointer-events-none" style={zoomOf('clock')}>
+          <Clock className="w-4.5 h-4.5 text-[var(--fb-text-2)]" strokeWidth={1.5} />
+          <div className="leading-tight">
+            <div className="text-[13px] tabular-nums">{time || '00:00'}</div>
+            <div className="text-[10px] text-[var(--fb-text-3)]">{date}</div>
+          </div>
         </div>
+        {sizeControl('clock')}
         {removeButton('clock')}
       </div>
       )}

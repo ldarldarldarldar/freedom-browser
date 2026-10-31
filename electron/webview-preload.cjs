@@ -5,131 +5,66 @@
 (function () {
   'use strict';
 
-  // 1. Safe Anti-Bot / Anti-Fingerprint Shims:
-  // Ensure navigator.webdriver is false (prevents automated browser blocks)
-  try {
-    if (Object.defineProperty) {
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => false,
-        configurable: true,
-      });
-    }
-  } catch {}
+  const { webFrame } = require('electron');
 
-  // 2. Realistic Plugins Mock if empty
-  try {
-    if (navigator.plugins && navigator.plugins.length === 0) {
-      const mockPlugins = [
-        { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-        { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-        { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-      ];
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => mockPlugins,
-        configurable: true,
-      });
-    }
-  } catch {}
-
-  // 3. Realistic window.chrome Object for Chromium compatibility across all webapps
-  try {
-    if (!window.chrome) {
-      window.chrome = {};
-    }
-    if (!window.chrome.app) {
-      window.chrome.app = {
-        isInstalled: false,
-        InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
-        RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' },
-        getDetails: function () {},
-        getIsInstalled: function () { return false; },
-        installState: function () { return 'not_installed'; },
-        runningState: function () { return 'cannot_run'; }
-      };
-    }
-    if (!window.chrome.csi) {
-      window.chrome.csi = function () {
-        return { startE: Date.now(), onloadT: Date.now(), pageT: 100, tran: 15 };
-      };
-    }
-    if (!window.chrome.loadTimes) {
-      window.chrome.loadTimes = function () {
-        return {
-          requestTime: Date.now() / 1000,
-          startLoadTime: Date.now() / 1000,
-          commitLoadTime: Date.now() / 1000,
-          finishDocumentLoadTime: Date.now() / 1000,
-          finishLoadTime: Date.now() / 1000,
-          firstPaintTime: Date.now() / 1000,
-          firstPaintAfterLoadTime: 0,
-          navigationType: 'Other',
-          wasFetchedViaSpdy: true,
-          wasNpnNegotiated: true,
-          npnNegotiatedProtocol: 'h2',
-          wasAlternateProtocolAvailable: false,
-          connectionInfo: 'h2'
+  // 1. Compatibility with Chrome, in the page's own world and in every frame (this preload runs in an isolated
+  // world, where changes to window and navigator are invisible to the page). The User-Agent and Sec-CH-UA headers
+  // already say Chrome: sites that compare them with these values, such as Twitch login, otherwise refuse the browser.
+  const COMPAT = `(() => {
+    try {
+      if (!window.chrome || !window.chrome.app) {
+        const start = Date.now() / 1000;
+        const chrome = window.chrome || {};
+        chrome.app = {
+          isInstalled: false,
+          InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+          RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' },
+          getDetails() { return null; },
+          getIsInstalled() { return false; },
+          installState() { return 'not_installed'; },
+          runningState() { return 'cannot_run'; },
         };
+        chrome.runtime = chrome.runtime || {};
+        chrome.csi = () => ({ startE: Date.now(), onloadT: Date.now(), pageT: performance.now(), tran: 15 });
+        chrome.loadTimes = () => ({
+          requestTime: start, startLoadTime: start, commitLoadTime: start, finishDocumentLoadTime: start,
+          finishLoadTime: start, firstPaintTime: start, firstPaintAfterLoadTime: 0, navigationType: 'Other',
+          wasFetchedViaSpdy: true, wasNpnNegotiated: true, npnNegotiatedProtocol: 'h2',
+          wasAlternateProtocolAvailable: false, connectionInfo: 'h2',
+        });
+        window.chrome = chrome;
+      }
+    } catch {}
+
+    try {
+      const proto = window.NavigatorUAData && NavigatorUAData.prototype;
+      const brandsOf = Object.getOwnPropertyDescriptor(proto, 'brands').get;
+      const realValues = proto.getHighEntropyValues;
+      const withChrome = (list) => {
+        const engine = list.find((item) => item.brand === 'Chromium');
+        if (!engine || list.some((item) => item.brand === 'Google Chrome')) return list;
+        return [engine, { brand: 'Google Chrome', version: engine.version }, ...list.filter((item) => item !== engine)];
       };
-    }
-    if (!window.chrome.runtime) {
-      window.chrome.runtime = {
-        OnInstalledReason: {},
-        OnRestartRequiredReason: {},
-        PlatformArch: {},
-        PlatformNaclArch: {},
-        PlatformOs: {},
-        RequestUpdateCheckStatus: {},
-        connect: function () {},
-        sendMessage: function () {},
-        id: undefined
+      Object.defineProperty(proto, 'brands', { configurable: true, enumerable: true, get() { return withChrome(brandsOf.call(this)); } });
+      proto.getHighEntropyValues = function (hints) {
+        return realValues.call(this, hints).then((values) => {
+          if (values.brands) values.brands = withChrome(values.brands);
+          if (values.fullVersionList) values.fullVersionList = withChrome(values.fullVersionList);
+          return values;
+        });
       };
-    }
-  } catch {}
+    } catch {}
+  })();`;
+  if (/^https?:$/.test(location.protocol)) webFrame.executeJavaScript(COMPAT).catch(() => {});
 
-  // 4. WebAuthn Passkey & Security Key Protection:
-  // For Twitch only: suppress unprompted passive/conditional passkey queries.
-  // For all other domains (especially Google, Gemini, Microsoft, Apple, GitHub):
-  // leave WebAuthn 100% native and untampered so passkeys, security keys, and security checkups succeed without any error.
-  try {
-    const isTwitch = () => {
-      try {
-        const host = window.location.hostname || '';
-        return host.includes('twitch.tv');
-      } catch {
-        return false;
-      }
-    };
-
-    if (isTwitch()) {
-      if (window.PublicKeyCredential && typeof window.PublicKeyCredential.isConditionalMediationAvailable === 'function') {
-        window.PublicKeyCredential.isConditionalMediationAvailable = async function () {
-          return false;
-        };
-      }
-
-      if (navigator.credentials && typeof navigator.credentials.get === 'function') {
-        const origGet = navigator.credentials.get.bind(navigator.credentials);
-        navigator.credentials.get = function (options) {
-          if (
-            options &&
-            options.mediation === 'conditional' &&
-            (!navigator.userActivation || !navigator.userActivation.isActive)
-          ) {
-            return Promise.reject(
-              new DOMException('Conditional mediation is not supported in this context.', 'NotSupportedError')
-            );
-          }
-          return origGet(options);
-        };
-      }
-    }
-  } catch {}
+  // Everything below belongs to the tab's top page
+  if (window.top !== window) return;
 
   // 4b. Built-in ad blocker (electron/adblock.cjs): cosmetic filters for http(s) pages.
   // Network requests are filtered in the main process; this part hides leftover ad slots.
   try {
     if (/^https?:$/.test(location.protocol)) {
-      const { ipcRenderer, webFrame } = require('electron');
+      const { ipcRenderer } = require('electron');
       const pageUrl = location.href;
       // Hostname CSS is inserted by the main process; scriptlets must run in the page world before its scripts
       const start = ipcRenderer.sendSync('freedom-adblock-start', pageUrl);

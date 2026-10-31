@@ -2,6 +2,7 @@ import React from 'react';
 import { House, PanelsTopLeft, Bookmark, History, Download, Settings, PanelLeftClose, PanelLeftOpen, GripVertical, GripHorizontal } from 'lucide-react';
 import { DockEdge } from '../settings/types';
 import { useTranslation } from '../i18n';
+import { useNewTabElements } from '../hooks/useNewTabElements';
 
 export type SidebarSection = 'home' | 'tabs' | 'bookmarks' | 'history' | 'downloads' | null;
 
@@ -41,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const horizontal = dock === 'top' || dock === 'bottom';
   const edgeBorder = { left: 'border-r', right: 'border-l', top: 'border-b', bottom: 'border-t' }[dock];
   const { t } = useTranslation();
+  const { getScale } = useNewTabElements();
 
   const items: { id: Exclude<SidebarSection, null>; icon: React.ElementType; label: string; onClick: () => void; badge?: number }[] = [
     { id: 'home', icon: House, label: t('sidebar.home'), onClick: onHome },
@@ -61,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       className={`relative z-20 flex shrink-0 ${edgeBorder} border-[var(--fb-border)] bg-[var(--fb-sidebar)] select-none ${
         horizontal ? 'flex-row items-center h-10 px-1.5 gap-1' : 'flex-col py-2 transition-[width] duration-150'
       }`}
-      style={horizontal ? undefined : { width: collapsed ? 'var(--fb-sidebar-w-collapsed)' : 'var(--fb-sidebar-w)' }}
+      style={{ zoom: getScale('sidebar'), ...(horizontal ? {} : { width: collapsed ? 'var(--fb-sidebar-w-collapsed)' : 'var(--fb-sidebar-w)' }) }}
     >
       {onDockDragStart && (
         <button

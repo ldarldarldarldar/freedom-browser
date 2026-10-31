@@ -31,6 +31,7 @@ import { FreedomMark } from '../components/FreedomLogo';
 import { APP_VERSION } from '../version';
 import { RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 import { ExtensionsSettings } from '../components/ExtensionsSettings';
+import { SitePermissionsSettings } from '../components/SitePermissionsSettings';
 import { DataLocationSettings } from '../components/DataLocationSettings';
 import { DeveloperLink } from '../components/DeveloperLink';
 
@@ -972,6 +973,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     { key: 'blockThirdPartyCookies', label: t('settings.blockThirdParty') },
                     { key: 'popupsBlocked', label: t('settings.blockPopups') },
                     { key: 'clearBrowsingDataOnExit', label: t('settings.clearOnExit') },
+                    { key: 'checkForUpdates', label: t('settings.checkForUpdates') },
                   ].map(({ key, label }) => (
                     <div key={key} className="flex items-center justify-between py-1">
                       <span className="text-xs text-neutral-200 font-medium">{label}</span>
@@ -986,6 +988,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   ))}
                 </div>
+
+                <SitePermissionsSettings />
 
                 <div className="pt-3.5 border-t border-white/[0.06]">
                   <button

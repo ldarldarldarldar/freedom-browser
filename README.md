@@ -14,12 +14,12 @@
 2. **Programming** — Integrated developer console, network inspector, WebAssembly & DOM inspection.
 3. **Speed** — Low RAM usage, idle tab hibernation, hardware acceleration, and rapid startup.
 
-> **Freedom Browser 0.6.4-4** — redesigned graphite UI with a new logo, built on **Electron + Chromium** (the Tauri/Rust notes below are historical).
+> **Freedom Browser 0.6.4-5** — redesigned graphite UI with a new logo, built on **Electron + Chromium** (the Tauri/Rust notes below are historical).
 >
 > ```bash
 > npm ci
-> npm run build:appimage   # release/Freedom-Browser-0.6.4-4-x86_64.AppImage
-> npm run build:win        # release/Freedom-Browser-0.6.4-4-x64-Setup.exe — installer (CI builds it on windows-latest)
+> npm run build:appimage   # release/Freedom-Browser-0.6.4-5-x86_64.AppImage
+> npm run build:win        # release/Freedom-Browser-0.6.4-5-x64-Setup.exe — installer (CI builds it on windows-latest)
 > ```
 > Design tokens and the redesign notes: [REDESIGN_REPORT.md](REDESIGN_REPORT.md).
 
@@ -228,6 +228,7 @@ bash scripts/build-linux.sh
 Freedom has **ZERO remote telemetry by default**:
 - No usage statistics, browsing history, URLs, or device IDs are sent to developers or third parties.
 - No Google Analytics, no Sentry, no tracking pixels.
+- **Update checks**: once per start the browser asks GitHub for the latest release (switch: `Settings -> Privacy`), and Chrome Web Store extensions are checked for updates at Google's update server, as in Chrome. No browsing data is included.
 - **Telemetry Setting**: Under `Settings -> Telemetry`, a single switch controls `[ OFF ] Local diagnostic logs`.
 - When enabled, logs are written strictly to the local device (`~/.config/freedom-browser/diagnostic.log` on Linux or `%APPDATA%\freedom-browser\diagnostic.log` on Windows) and can be cleared or exported by the user at any time.
 

@@ -1,10 +1,29 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
+// Runs sandboxed. The UI gets named functions and these events only, never raw access to IPC.
+const EVENT_CHANNELS = new Set([
+  'download-completed',
+  'download-progress',
+  'download-start',
+  'open-external-url',
+  'request-app-close',
+  'webview-html-fullscreen',
+  'webview-new-window',
+  'webview-open-tab',
+  'webview-search-text',
+  'webview-shortcut',
+  'webview-zoom-in',
+  'webview-zoom-out',
+  'webview-zoom-reset',
+  'window-fullscreen-change',
+  'window-maximized-change',
+]);
+
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   platform: process.platform,
-  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
   on: (channel, listener) => {
+    if (!EVENT_CHANNELS.has(channel)) throw new Error(`Unknown event channel: ${channel}`);
     const subscription = (event, ...args) => listener(...args);
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
@@ -39,6 +58,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setBrowserMode: (mode) => ipcRenderer.invoke('set_browser_mode', mode),
   setPrivacySettings: (settings) => ipcRenderer.invoke('set_privacy_settings', settings),
   setDownloadSpeedLimit: (kbps) => ipcRenderer.invoke('set_download_speed_limit', kbps),
+  sitePermissions: {
+    list: () => ipcRenderer.invoke('permissions_list'),
+    remove: (origin, permission) => ipcRenderer.invoke('permissions_remove', origin, permission),
+  },
   extensions: {
     list: () => ipcRenderer.invoke('extensions_list'),
     installFolder: () => ipcRenderer.invoke('extensions_install_folder'),
@@ -68,10 +91,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setFullScreen: (flag) => ipcRenderer.invoke('window_fullscreen_set', flag),
   isFullScreen: () => ipcRenderer.invoke('window_is_fullscreen'),
   forceCloseApp: () => ipcRenderer.invoke('force_close_app'),
-  webviewPreload: (() => {
-    const p = require('path').join(__dirname, 'webview-preload.cjs');
-    return process.platform === 'win32'
-      ? 'file:///' + p.replace(/\\/g, '/')
-      : 'file://' + p;
-  })(),
 });

@@ -90,6 +90,7 @@ export interface BrowserSettings {
   popupsBlocked: boolean;
   /** Built-in ad & tracker blocker (electron/adblock.cjs) */
   adBlockEnabled: boolean;
+  checkForUpdates: boolean;
 
   // Telemetry & Diagnostics (strictly local, off by default)
   localDiagnosticLogs: boolean;

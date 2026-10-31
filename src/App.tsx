@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TabBar } from './components/TabBar';
 import { Navigation } from './components/Navigation';
 import { StarCanvas } from './components/StarCanvas';
@@ -216,6 +216,8 @@ export default function App() {
 
   // Fullscreen state (F11 / HTML5 fullscreen for games/video)
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [fullscreenSite, setFullscreenSite] = useState<string | null>(null);
+  const fullscreenNoticeTimer = useRef<number | undefined>(undefined);
 
   // Close & Session Restore Confirmation Modal state
   const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
@@ -297,7 +299,8 @@ export default function App() {
   // Persist completed downloads
   useEffect(() => {
     try {
-      const toSave = downloads.filter((d) => d.id !== 'dl-1' && d.state === 'completed');
+      // Incognito downloads stay in the panel until the browser closes, never in saved history
+      const toSave = downloads.filter((d) => d.id !== 'dl-1' && d.state === 'completed' && !d.isPrivate);
       localStorage.setItem(DOWNLOADS_KEY, JSON.stringify(toSave));
     } catch (err) {
       console.warn('Failed to save downloads:', err);
@@ -689,8 +692,18 @@ export default function App() {
     if ((window as any).electronAPI?.on) {
       const unsubFs = (window as any).electronAPI.on('window-fullscreen-change', (fs: boolean) => {
         setIsFullScreen(fs);
+        if (!fs) setFullscreenSite(null);
       });
-      return unsubFs;
+      const unsubHtmlFs = (window as any).electronAPI.on('webview-html-fullscreen', ({ site }: { site: string }) => {
+        setFullscreenSite(site || '');
+        window.clearTimeout(fullscreenNoticeTimer.current);
+        fullscreenNoticeTimer.current = window.setTimeout(() => setFullscreenSite(null), 5000);
+      });
+      return () => {
+        unsubFs();
+        unsubHtmlFs();
+        window.clearTimeout(fullscreenNoticeTimer.current);
+      };
     }
   }, []);
 
@@ -1618,9 +1631,9 @@ export default function App() {
           handleNewTab(url, { background: active === false, isPrivate });
         }
       );
-      const unsubSearchText = (window as any).electronAPI.on('webview-search-text', ({ text }: { text: string }) => {
+      const unsubSearchText = (window as any).electronAPI.on('webview-search-text', ({ text, isPrivate }: { text: string; isPrivate?: boolean }) => {
         const targetUrl = SearchEngineService.resolveInputToUrl(text, settings.defaultSearchEngine);
-        handleNewTab(targetUrl);
+        handleNewTab(targetUrl, { isPrivate });
       });
       const unsubDlStart = (window as any).electronAPI.on('download-start', (item: DownloadItem) => {
         setDownloads((prev) => [item, ...prev.filter((d) => d.id !== item.id)]);
@@ -2146,8 +2159,9 @@ export default function App() {
       blockThirdPartyCookies: settings.blockThirdPartyCookies,
       popupsBlocked: settings.popupsBlocked,
       adBlockEnabled: settings.adBlockEnabled,
+      checkForUpdates: settings.checkForUpdates,
     });
-  }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled]);
+  }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled, settings.checkForUpdates]);
 
   // Download speed cap is enforced by the main-process download governor
   useEffect(() => {
@@ -2535,6 +2549,16 @@ export default function App() {
           activeEdge={dockDrag.edge}
           edges={['top', 'bottom', 'left', 'right']}
         />
+      )}
+
+      {/* A full-screen page can imitate browser UI: always name the site and the way out */}
+      {fullscreenSite !== null && (
+        <div
+          role="status"
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2 rounded-lg bg-black/85 border border-white/15 text-xs text-white shadow-lg pointer-events-none"
+        >
+          {translate(normalizeLanguage(settings.language), 'fullscreen.notice').replace('%s', fullscreenSite)}
+        </div>
       )}
 
       {/* Developer Tools Drawer */}
