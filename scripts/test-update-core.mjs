@@ -1,12 +1,14 @@
 // Checks the update logic that protects users: run with `npm run test:update`.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { isNewerVersion, verifyUpdateFile, nextAppImagePath } = require('../electron/update-core.cjs');
+const { isNewerVersion, verifyUpdateFile, isInstalledCopy, nextAppImagePath } = require('../electron/update-core.cjs');
 
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
 const PUBLIC = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
@@ -48,6 +50,19 @@ test('signed but malformed contents are rejected', () => {
   assert.throws(() => verifyUpdateFile(signed({ ...BASE, files: { appimage: http } }), PUBLIC), /bad file entry/);
   assert.throws(() => verifyUpdateFile(signed({ ...BASE, files: { appimage: { ...FILE, sha256: 'x' } } }), PUBLIC), /bad file entry/);
   assert.throws(() => verifyUpdateFile('{}', PUBLIC), /malformed/);
+});
+
+test('an installed copy is told from an unpacked one by its uninstaller', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'freedom-update-test-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'freedom-browser.exe'), '');
+    assert.equal(isInstalledCopy(dir), false);
+    fs.writeFileSync(path.join(dir, 'Uninstall freedom-browser.exe'), '');
+    assert.equal(isInstalledCopy(dir), true);
+    assert.equal(isInstalledCopy(path.join(dir, 'missing')), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true });
+  }
 });
 
 test('the AppImage keeps a custom name and renews a versioned one', () => {

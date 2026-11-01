@@ -1,6 +1,7 @@
 // Freedom Browser - the parts of the updater that need no Electron, so plain Node can test them
 // (scripts/test-update-core.mjs, and the Windows installer test in CI runs windowsInstallerCommand for real).
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -66,6 +67,15 @@ function verifyUpdateFile(text, publicKeyBase64) {
   };
 }
 
+/** The installer leaves its uninstaller next to the program; a copy unpacked from the zip has none. */
+function isInstalledCopy(appDir) {
+  try {
+    return fs.readdirSync(appDir).some((name) => /^Uninstall .+\.exe$/i.test(name));
+  } catch {
+    return false;
+  }
+}
+
 /** Where the new AppImage goes: a name with the old version in it gets the new one, any other name is kept. */
 function nextAppImagePath(currentPath, currentVersion, newVersion) {
   const name = path.basename(currentPath);
@@ -106,4 +116,4 @@ function startAfterExit(target, pid, cwd) {
   child.unref();
 }
 
-module.exports = { isNewerVersion, verifyUpdateFile, nextAppImagePath, windowsInstallerCommand, startAfterExit };
+module.exports = { isNewerVersion, verifyUpdateFile, isInstalledCopy, nextAppImagePath, windowsInstallerCommand, startAfterExit };

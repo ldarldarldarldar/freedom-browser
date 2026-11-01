@@ -8,7 +8,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
-const { isNewerVersion, verifyUpdateFile, nextAppImagePath, windowsInstallerCommand, startAfterExit } = require('./update-core.cjs');
+const { isNewerVersion, verifyUpdateFile, isInstalledCopy, nextAppImagePath, windowsInstallerCommand, startAfterExit } = require('./update-core.cjs');
 const { freedomUpdate } = require('../package.json');
 
 const MAX_FEED_BYTES = 1024 * 1024;
@@ -36,10 +36,7 @@ function createUpdater({ app, session, onAvailable, onProgress, quitApp, getSkip
   function installKind() {
     if (!app.isPackaged) return null;
     if (process.platform === 'linux' && process.env.APPIMAGE) return 'appimage';
-    if (process.platform === 'win32') {
-      const uninstaller = path.join(path.dirname(process.execPath), 'Uninstall Freedom Browser.exe');
-      if (fs.existsSync(uninstaller)) return 'nsis';
-    }
+    if (process.platform === 'win32' && isInstalledCopy(path.dirname(process.execPath))) return 'nsis';
     return null; // zip, tar.gz: the user chose where this folder lives, so only link to the release
   }
 

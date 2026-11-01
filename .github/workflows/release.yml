@@ -140,6 +140,11 @@ jobs:
           Start-Sleep 5
           if (-not (Test-Path $customExe)) { throw 'Install to a custom folder failed' }
           Remove-Item $links.desktop
+          # What the updater uses to tell an installed copy from a zip
+          node -e "process.exit(require('./electron/update-core.cjs').isInstalledCopy(process.argv[1])?0:1)" $custom
+          if ($LASTEXITCODE -ne 0) { throw 'The updater does not recognise the installed copy' }
+          node -e "process.exit(require('./electron/update-core.cjs').isInstalledCopy(process.argv[1])?1:0)" 'release\win-unpacked'
+          if ($LASTEXITCODE -ne 0) { throw 'The updater takes an unpacked copy for an installed one' }
           $env:UPDATE_TEST_SETUP = $setup.FullName
           node -e "const {windowsInstallerCommand:w}=require('./electron/update-core.cjs');const c=w(process.env.UPDATE_TEST_SETUP);const r=require('child_process').spawnSync(c.file,c.args,{env:c.env,stdio:'inherit'});process.exit(r.status)"
           if ($LASTEXITCODE -ne 0) { throw "Update command failed ($LASTEXITCODE)" }
@@ -154,8 +159,8 @@ jobs:
           if (-not (Test-Path $customExe)) { throw 'The update lost the app files' }
           if (Test-Path $links.desktop) { throw 'The update brought back a removed desktop shortcut' }
           if (-not (Test-Path $links.startMenu)) { throw 'The update removed the Start menu shortcut' }
-          if ((Test-Path "$env:ProgramFiles\Freedom Browser\freedom-browser.exe")) { throw 'The update moved the app out of its custom folder' }
-          $unCustom = "$custom\Uninstall Freedom Browser.exe"
+          if ((Test-Path "$env:ProgramFiles\freedom-browser\freedom-browser.exe")) { throw 'The update moved the app out of its custom folder' }
+          $unCustom = (Get-ChildItem "$custom\Uninstall *.exe" | Select-Object -First 1).FullName
           Start-Process $unCustom -ArgumentList '/S', '/allusers' -Wait
           for ($i = 0; $i -lt 30 -and (Test-Path $customExe); $i++) { Start-Sleep 2 }
           Write-Host 'Self-update test passed'
