@@ -6,6 +6,7 @@ const url = require('url');
 const { execFile } = require('child_process');
 const { UI_ORIGIN, UI_PARTITION, registerUiScheme, serveUi, migrateUiStorage } = require('./ui-host.cjs');
 const { createPermissionManager, originOf } = require('./permissions.cjs');
+const { createUpdater } = require('./updater.cjs');
 
 // Must happen before app ready
 registerUiScheme(protocol);
@@ -2093,45 +2094,24 @@ handleUi('permissions_remove', (event, origin, permission) => permissionManager?
 // Security fixes reach users only through new releases, so tell them. Installing stays a user action:
 // the builds are not code-signed, and silently replacing a browser binary needs signatures to be safe.
 const EXTENSION_UPDATE_DELAY_MS = 60 * 1000;
-const UPDATE_CHECK_DELAY_MS = 30 * 1000;
-const RELEASES_API = 'https://api.github.com/repos/ldarldarldarldar/freedom-browser/releases/latest';
-const RELEASES_PAGE = 'https://github.com/ldarldarldarldar/freedom-browser/releases/';
-
-// "0.6.4-5" is newer than "0.6.4-4" and "0.6.4" in this project's numbering
-function isNewerVersion(candidate, current) {
-  const parts = (v) => String(v).replace(/^v/, '').split(/[.-]/).map((n) => parseInt(n, 10) || 0);
-  const a = parts(candidate);
-  const b = parts(current);
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
-  }
-  return false;
-}
-
-async function checkForNewVersion() {
-  if (!privacyState.checkForUpdates || !app.isPackaged) return;
-  const response = await net.fetch(RELEASES_API, { headers: { accept: 'application/vnd.github+json' }, credentials: 'omit' });
-  if (!response.ok) return;
-  const { tag_name: tag, html_url: page } = await response.json();
-  const config = readStorageConfig();
-  if (!tag || !isNewerVersion(tag, app.getVersion()) || config.lastNotifiedVersion === tag) return;
-  writeStorageConfig({ lastNotifiedVersion: tag });
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const ru = currentAppLanguage === 'ru';
-  const { response: choice } = await dialog.showMessageBox(mainWindow, {
-    type: 'info',
-    title: 'Freedom Browser',
-    message: ru ? `Доступна новая версия: ${tag}` : `A new version is available: ${tag}`,
-    detail: ru ? `Сейчас установлена ${app.getVersion()}. Обновления закрывают уязвимости движка браузера.` : `You have ${app.getVersion()}. Updates fix security holes in the browser engine.`,
-    buttons: [ru ? 'Позже' : 'Later', ru ? 'Открыть страницу загрузки' : 'Open download page'],
-    defaultId: 1,
-    cancelId: 0,
-    noLink: true,
-  });
-  if (choice === 1 && typeof page === 'string' && page.startsWith(RELEASES_PAGE) && mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('webview-open-tab', { url: page, active: true });
-  }
-}
+const updater = createUpdater({
+  app,
+  session,
+  onAvailable: (update) => mainWindow?.webContents.send('update-available', update),
+  onProgress: (progress) => mainWindow?.webContents.send('update-progress', progress),
+  quitApp: () => {
+    isForceQuitting = true;
+    app.quit();
+  },
+  isAutoCheckEnabled: () => privacyState.checkForUpdates,
+  getSkippedVersion: () => readStorageConfig().skippedUpdateVersion,
+  setSkippedVersion: (version) => writeStorageConfig({ skippedUpdateVersion: version }),
+});
+handleUi('update_check', () => updater.check());
+handleUi('update_download', () => updater.download());
+handleUi('update_cancel', () => updater.cancel());
+handleUi('update_install', () => updater.install());
+handleUi('update_skip', () => updater.skip());
 
 // Versions before cookie encryption left values in plain text, and Chromium only encrypts a cookie when it is
 // next written. Writing them all back once covers the ones a site would otherwise never touch again.
@@ -2193,7 +2173,7 @@ app.whenReady().then(async () => {
   registerLinuxDesktopIntegration();
   createWindow();
   startupComplete = true;
-  setTimeout(() => checkForNewVersion().catch((err) => console.warn('[update check]', err.message)), UPDATE_CHECK_DELAY_MS);
+  updater.start();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

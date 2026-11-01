@@ -6,7 +6,7 @@ import { SearchEngineId, ThemePalette } from '../settings/types';
 import { NewTabWallpaper } from '../components/NewTabWallpaper';
 import { useDragOffset, RESET_LAYOUT_EVENT } from '../hooks/useDragOffset';
 import { NewTabElementId, useNewTabElements } from '../hooks/useNewTabElements';
-import { ScaleStepper } from '../components/ScaleStepper';
+import { ResizeHandle } from '../components/ResizeHandle';
 import { SearchEngineService } from '../services/searchEngineService';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { FaviconService } from '../services/faviconService';
@@ -247,15 +247,10 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
       </button>
     );
 
-  // Layout edit mode: − 100% + above an element changes its size (the zoom sits on an inner wrapper, so the drag
-  // offset on the outer element keeps following the pointer 1:1)
-  const sizeControl = (id: NewTabElementId) =>
-    isEditingLayout && (
-      <ScaleStepper
-        id={id}
-        className="absolute -top-3 left-0 z-10 border border-[var(--fb-border-strong)] bg-[var(--fb-surface-3)]"
-      />
-    );
+  // Layout edit mode: the handle in the corner of an element changes its size (the zoom sits on an inner wrapper,
+  // so the drag offset on the outer element keeps following the pointer 1:1)
+  const sizeControl = (id: NewTabElementId, anchor?: { x: number; y: number }) =>
+    isEditingLayout && <ResizeHandle id={id} anchor={anchor} />;
   const zoomOf = (id: NewTabElementId): React.CSSProperties => ({ zoom: getScale(id) });
 
   const useBigClock = showClock && clockStyle === 'big';
@@ -293,7 +288,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             </h1>
             <p className="mt-1.5 text-[14px] text-[var(--fb-text-2)]">{t('newtab.tagline')}</p>
           </div>
-          {sizeControl('title')}
+          {sizeControl('title', { x: 0, y: 0 })}
           {removeButton('title')}
         </header>
         )}
@@ -350,7 +345,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             </button>
           </div>
         </form>
-        {sizeControl('search')}
+        {sizeControl('search', { x: 0.5, y: 0 })}
         {removeButton('search')}
         </div>
         )}
@@ -443,7 +438,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             <span className="mt-1.5 text-[11px] text-[var(--fb-text-2)] group-hover:text-[var(--fb-text)]">{t('newtab.add')}</span>
           </button>
           </div>
-          {sizeControl('links')}
+          {sizeControl('links', { x: 0.5, y: 0 })}
           {removeButton('links')}
         </div>
         )}
@@ -463,7 +458,8 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
                 {t('newtab.quote')}
                 <span className="block mt-1">— {t('newtab.quoteAuthor')}</span>
               </p>
-              {sizeControl('quote')}
+              {/* At the bottom left the edit bar covers the quote's lower corners, so its handle goes on top */}
+              {isEditingLayout && <ResizeHandle id="quote" anchor={{ x: 1, y: 1 }} corner="top-left" />}
               {removeButton('quote')}
             </div>
           )}

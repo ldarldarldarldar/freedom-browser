@@ -2,10 +2,14 @@
   "name": "freedom-browser",
   "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.6.4-5",
+  "version": "0.6.5",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
+  "freedomUpdate": {
+    "feedUrl": "https://github.com/ldarldarldarldar/freedom-browser/releases/latest/download/update.json",
+    "publicKey": "MCowBQYDK2VwAyEA33EPEh5M66BpAShG4cBwo+2m8rpOXeQyfokuJN/nIjQ="
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=127.0.0.1",
@@ -13,6 +17,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist release",
     "lint": "tsc --noEmit",
+    "test:update": "node --test scripts/test-update-core.mjs",
     "electron:dev": "electron . --dev",
     "electron:start": "electron .",
     "build:appimage": "npm run build && electron-builder --linux AppImage --publish never",

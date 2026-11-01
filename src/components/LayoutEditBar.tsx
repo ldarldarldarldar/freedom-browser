@@ -3,7 +3,6 @@ import { Move, RotateCcw, Check, LayoutGrid, Plus, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { TranslationKey } from '../i18n/translations';
 import { ClockStyle, NEW_TAB_ELEMENTS, NewTabElementId, ScalableElementId, useNewTabElements } from '../hooks/useNewTabElements';
-import { ScaleStepper } from './ScaleStepper';
 
 interface LayoutEditBarProps {
   onReset: () => void;
@@ -35,8 +34,22 @@ const CLOCK_STYLES: { id: ClockStyle; label: TranslationKey }[] = [
 /** Floating bar shown while the layout edit mode is on (main menu → Edit layout). Esc also finishes. */
 export const LayoutEditBar: React.FC<LayoutEditBarProps> = ({ onReset, onDone, isNewTabActive, onOpenNewTab }) => {
   const { t } = useTranslation();
-  const { isVisible, setElementVisible, clockStyle, setClockStyle } = useNewTabElements();
+  const { isVisible, setElementVisible, clockStyle, setClockStyle, getScale, setElementScale } = useNewTabElements();
   const [isElementsOpen, setIsElementsOpen] = useState(false);
+
+  // The size itself is dragged on the element; here it can be read and returned to normal
+  const sizeReset = (id: ScalableElementId) => (
+    <button
+      type="button"
+      data-scale-value={id}
+      title={t('layout.sizeReset')}
+      aria-label={t('layout.sizeReset')}
+      onClick={() => setElementScale(id, 1)}
+      className="min-w-[38px] px-1 py-0.5 rounded-[var(--fb-radius-sm)] text-center text-[10.5px] tabular-nums text-[var(--fb-text-2)] hover:text-[var(--fb-text)] hover:bg-[var(--fb-surface-hover)] cursor-pointer"
+    >
+      {Math.round(getScale(id) * 100)}%
+    </button>
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -67,7 +80,7 @@ export const LayoutEditBar: React.FC<LayoutEditBarProps> = ({ onReset, onDone, i
             return (
               <div key={id} className="flex items-center justify-between gap-2 pl-2 py-0.5">
                 <span className={`text-xs flex-1 min-w-0 truncate ${visible ? '' : 'text-[var(--fb-text-3)]'}`}>{t(ELEMENT_LABELS[id])}</span>
-                {visible && <ScaleStepper id={id} />}
+                {visible && sizeReset(id)}
                 <button
                   type="button"
                   id={`layout-element-${id}`}
@@ -84,7 +97,7 @@ export const LayoutEditBar: React.FC<LayoutEditBarProps> = ({ onReset, onDone, i
             {CHROME_ELEMENTS.map(({ id, label }) => (
               <div key={id} className="flex items-center justify-between gap-2 px-2 py-1">
                 <span className="text-xs flex-1 min-w-0 truncate">{t(label)}</span>
-                <ScaleStepper id={id} />
+                {sizeReset(id)}
               </div>
             ))}
           </div>

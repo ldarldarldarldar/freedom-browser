@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Shield, Code2, Zap, CheckCircle2, Heart, ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { RefreshCw, X, Shield, Code2, Zap, CheckCircle2, Heart, ExternalLink } from 'lucide-react';
 import { FreedomLogo } from '../components/FreedomLogo';
 import { useTranslation } from '../i18n';
 import { APP_VERSION } from '../version';
@@ -8,10 +8,24 @@ import { DeveloperLink } from '../components/DeveloperLink';
 interface AboutModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onUpdateAvailable: (update: FreedomUpdateInfo) => void;
 }
 
-export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
+export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, onUpdateAvailable }) => {
   const { t } = useTranslation();
+  const [check, setCheck] = useState<'idle' | 'checking' | 'none' | 'error'>('idle');
+  const updates = window.electronAPI?.updates;
+
+  const checkForUpdates = async () => {
+    setCheck('checking');
+    const result = await updates?.check();
+    if (result?.status === 'available') {
+      onUpdateAvailable(result.update);
+    } else {
+      setCheck(result?.status === 'none' ? 'none' : 'error');
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -50,6 +64,23 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose }) => {
           <p className="text-xs text-neutral-300 leading-relaxed max-w-md mx-auto">
             {t('about.description')}
           </p>
+
+          {updates && (
+            <div className="flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                id="about-check-updates"
+                disabled={check === 'checking'}
+                onClick={checkForUpdates}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-xs text-neutral-200 transition-colors disabled:opacity-60"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${check === 'checking' ? 'animate-spin' : ''}`} />
+                {t('about.checkUpdates')}
+              </button>
+              {check === 'none' && <span id="about-update-status" className="text-xs text-emerald-300">{t('about.upToDate')}</span>}
+              {check === 'error' && <span id="about-update-status" className="text-xs text-[var(--fb-danger)]">{t('about.updateCheckFailed')}</span>}
+            </div>
+          )}
 
           <DeveloperLink onOpen={onClose} />
 

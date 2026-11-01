@@ -7,6 +7,8 @@ const EVENT_CHANNELS = new Set([
   'download-start',
   'open-external-url',
   'request-app-close',
+  'update-available',
+  'update-progress',
   'webview-html-fullscreen',
   'webview-new-window',
   'webview-open-tab',
@@ -58,6 +60,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setBrowserMode: (mode) => ipcRenderer.invoke('set_browser_mode', mode),
   setPrivacySettings: (settings) => ipcRenderer.invoke('set_privacy_settings', settings),
   setDownloadSpeedLimit: (kbps) => ipcRenderer.invoke('set_download_speed_limit', kbps),
+  updates: {
+    check: () => ipcRenderer.invoke('update_check'),
+    download: () => ipcRenderer.invoke('update_download'),
+    cancel: () => ipcRenderer.invoke('update_cancel'),
+    install: () => ipcRenderer.invoke('update_install'),
+    skip: () => ipcRenderer.invoke('update_skip'),
+  },
   sitePermissions: {
     list: () => ipcRenderer.invoke('permissions_list'),
     remove: (origin, permission) => ipcRenderer.invoke('permissions_remove', origin, permission),

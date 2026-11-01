@@ -1,6 +1,17 @@
 import type * as React from 'react';
 
 declare global {
+  /** A newer signed release, as reported by electron/updater.cjs */
+  interface FreedomUpdateInfo {
+    version: string;
+    currentVersion: string;
+    notes: { ru: string; en: string };
+    releaseUrl: string;
+    /** install: this copy can update itself. link: zip / tar.gz, only the release page is offered */
+    mode: 'install' | 'link';
+    size: number;
+  }
+
   /** Installed Chrome extension as reported by electron/extensions.cjs */
   interface FreedomExtensionInfo {
     folder: string;
@@ -67,6 +78,13 @@ declare global {
       sitePermissions?: {
         list: () => Promise<Array<{ origin: string; permission: string; decision: 'allow' | 'block' }>>;
         remove: (origin: string, permission: string) => Promise<boolean>;
+      };
+      updates?: {
+        check: () => Promise<{ status: 'none' | 'error'; currentVersion: string } | { status: 'available'; update: FreedomUpdateInfo }>;
+        download: () => Promise<{ ok: boolean; error?: string }>;
+        cancel: () => Promise<void>;
+        install: () => Promise<{ ok: boolean; error?: string }>;
+        skip: () => Promise<void>;
       };
       extensions?: {
         list: () => Promise<FreedomExtensionInfo[]>;

@@ -41,6 +41,7 @@ import { tauriBridge } from '../services/tauriBridge';
 import { TabSortMode } from '../services/tabSortService';
 import { useTranslation } from '../i18n';
 import { useNewTabElements } from '../hooks/useNewTabElements';
+import { ResizeHandle } from './ResizeHandle';
 
 interface NavigationProps {
   currentTab: BrowserTab | undefined;
@@ -222,6 +223,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         }
       }}
     >
+      {onDockDragStart && <ResizeHandle id="toolbar" dock={dock} />}
       {/* Navigation History Controls (+ dock grip) */}
       <div className="flex items-center gap-0.5 app-no-drag">
         {onDockDragStart && (

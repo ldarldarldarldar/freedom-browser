@@ -3,6 +3,7 @@ import { House, PanelsTopLeft, Bookmark, History, Download, Settings, PanelLeftC
 import { DockEdge } from '../settings/types';
 import { useTranslation } from '../i18n';
 import { useNewTabElements } from '../hooks/useNewTabElements';
+import { ResizeHandle } from './ResizeHandle';
 
 export type SidebarSection = 'home' | 'tabs' | 'bookmarks' | 'history' | 'downloads' | null;
 
@@ -65,6 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }`}
       style={{ zoom: getScale('sidebar'), ...(horizontal ? {} : { width: collapsed ? 'var(--fb-sidebar-w-collapsed)' : 'var(--fb-sidebar-w)' }) }}
     >
+      {onDockDragStart && <ResizeHandle id="sidebar" dock={dock} />}
       {onDockDragStart && (
         <button
           id="sidebar-dock-grip"

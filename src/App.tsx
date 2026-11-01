@@ -6,6 +6,7 @@ import { WebviewContainer } from './browser/WebviewContainer';
 import { TaskManagerModal } from './pages/TaskManagerModal';
 import { SettingsModal } from './pages/SettingsModal';
 import { AboutModal } from './pages/AboutModal';
+import { UpdateDialog } from './components/UpdateDialog';
 import { DownloadDrawer } from './components/DownloadDrawer';
 import { DevToolsDrawer } from './components/DevToolsDrawer';
 import { FreenMascot } from './components/FreenMascot';
@@ -55,10 +56,16 @@ export default function App() {
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (!stored) return DEFAULT_SETTINGS;
-      const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+      const storedSettings = JSON.parse(stored);
+      const parsed = { ...DEFAULT_SETTINGS, ...storedSettings };
       // Bing and Ecosia were removed in 0.6.3: fall back to the default engine
       if (!SEARCH_ENGINES.some((engine) => engine.id === parsed.defaultSearchEngine) && parsed.defaultSearchEngine !== 'custom') {
         parsed.defaultSearchEngine = DEFAULT_SETTINGS.defaultSearchEngine;
+      }
+      // DuckDuckGo was the default before 0.6.5: move those profiles to Startpage once, later choices are respected
+      if (!storedSettings.startpageDefaultApplied) {
+        parsed.startpageDefaultApplied = true;
+        if (parsed.defaultSearchEngine === 'duckduckgo') parsed.defaultSearchEngine = DEFAULT_SETTINGS.defaultSearchEngine;
       }
       // One-time switch to the redesigned default theme; later choices are respected
       if (!parsed.uiDesignVersion || parsed.uiDesignVersion < 2) {
@@ -228,6 +235,9 @@ export default function App() {
   // Layout edit mode: panels and New Tab elements can be moved only while it is on
   const [isEditingLayout, setIsEditingLayout] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<FreedomUpdateInfo | null>(null);
+  // "Later" holds for this run: the periodic check does not ask again about the same version
+  const dismissedUpdateVersion = useRef<string | null>(null);
   const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -673,6 +683,12 @@ export default function App() {
 
   const handleCancelClose = useCallback(() => {
     setShowCloseConfirmModal(false);
+  }, []);
+
+  useEffect(() => {
+    return window.electronAPI?.on?.('update-available', (update: FreedomUpdateInfo) => {
+      if (dismissedUpdateVersion.current !== update.version) setAvailableUpdate(update);
+    });
   }, []);
 
   // Listen for native window close interception from Electron
@@ -2657,7 +2673,28 @@ export default function App() {
 
       {/* About Modal */}
       {isAboutOpen && (
-        <AboutModal isOpen={isAboutOpen} onClose={() => setIsAboutOpen(false)} />
+        <AboutModal
+          isOpen={isAboutOpen}
+          onClose={() => setIsAboutOpen(false)}
+          onUpdateAvailable={(update) => {
+            setIsAboutOpen(false);
+            setAvailableUpdate(update);
+          }}
+        />
+      )}
+
+      {availableUpdate && (
+        <UpdateDialog
+          key={availableUpdate.version}
+          update={availableUpdate}
+          activeDownloads={downloads.filter((d) => d.state === 'progressing').length}
+          onBeforeInstall={() => SessionRestoreService.saveSession(tabs, activeTabId)}
+          onOpenUrl={(url) => handleNewTab(url)}
+          onClose={() => {
+            dismissedUpdateVersion.current = availableUpdate.version;
+            setAvailableUpdate(null);
+          }}
+        />
       )}
 
       {/* Drag & Drop Visual Overlay (covers window and webviews during dragging) */}

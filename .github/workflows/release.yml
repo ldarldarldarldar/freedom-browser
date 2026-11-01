@@ -31,6 +31,9 @@ jobs:
       - name: Type check
         run: npm run lint
 
+      - name: Update logic tests
+        run: npm run test:update
+
       - name: Build Linux AppImage
         run: npm run build:appimage
 
@@ -128,6 +131,34 @@ jobs:
           Write-Host 'Options respected: no shortcuts'
           Start-Process $un -ArgumentList '/S', '/allusers' -Wait
           for ($i = 0; $i -lt 30 -and (Test-Path $exe); $i++) { Start-Sleep 2 }
+
+          # Self-update: runs the updater's own elevation command, in a custom folder, with some shortcuts removed
+          $custom = 'C:\FreedomCustom'
+          $customExe = "$custom\freedom-browser.exe"
+          $p = Start-Process $setup.FullName -ArgumentList '/S', "/D=$custom" -Wait -PassThru
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $customExe); $i++) { Start-Sleep 2 }
+          Start-Sleep 5
+          if (-not (Test-Path $customExe)) { throw 'Install to a custom folder failed' }
+          Remove-Item $links.desktop
+          $env:UPDATE_TEST_SETUP = $setup.FullName
+          node -e "const {windowsInstallerCommand:w}=require('./electron/update-core.cjs');const c=w(process.env.UPDATE_TEST_SETUP);const r=require('child_process').spawnSync(c.file,c.args,{env:c.env,stdio:'inherit'});process.exit(r.status)"
+          if ($LASTEXITCODE -ne 0) { throw "Update command failed ($LASTEXITCODE)" }
+          $running = $null
+          for ($i = 0; $i -lt 90 -and -not $running; $i++) {
+            Start-Sleep 2
+            $running = Get-Process freedom-browser -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $customExe } | Select-Object -First 1
+          }
+          if (-not $running) { throw 'The update did not start the new version' }
+          Write-Host "New version started from $($running.Path)"
+          Stop-Process -Name freedom-browser -Force -ErrorAction SilentlyContinue
+          if (-not (Test-Path $customExe)) { throw 'The update lost the app files' }
+          if (Test-Path $links.desktop) { throw 'The update brought back a removed desktop shortcut' }
+          if (-not (Test-Path $links.startMenu)) { throw 'The update removed the Start menu shortcut' }
+          if ((Test-Path "$env:ProgramFiles\Freedom Browser\freedom-browser.exe")) { throw 'The update moved the app out of its custom folder' }
+          $unCustom = "$custom\Uninstall Freedom Browser.exe"
+          Start-Process $unCustom -ArgumentList '/S', '/allusers' -Wait
+          for ($i = 0; $i -lt 30 -and (Test-Path $customExe); $i++) { Start-Sleep 2 }
+          Write-Host 'Self-update test passed'
           Write-Host 'Installer test passed'
 
       - name: Upload Windows artifacts
@@ -157,6 +188,7 @@ jobs:
 
       # The AppImage is built and verified locally before tagging and attached to the
       # release by the maintainer; CI adds the Windows binaries built on a real Windows runner.
+      # update.json is signed locally and uploaded last: only then do installed browsers see the release.
       - name: Attach Windows binaries to the GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:

@@ -107,20 +107,23 @@
 !macroend
 
 !macro customInstall
-  ; Shortcuts chosen on the options page (all users for the per-machine install)
-  Delete "$DESKTOP\${FB_LINK}"
-  Delete "$SMPROGRAMS\${FB_LINK}"
-  Delete "$SMSTARTUP\${FB_LINK}"
-  ${If} $FBDesktop == ${BST_CHECKED}
-    CreateShortCut "$DESKTOP\${FB_LINK}" "${FB_EXE}" "" "${FB_EXE}" 0
-    WinShell::SetLnkAUMI "$DESKTOP\${FB_LINK}" "${APP_ID}"
-  ${EndIf}
-  ${If} $FBStartMenu == ${BST_CHECKED}
-    CreateShortCut "$SMPROGRAMS\${FB_LINK}" "${FB_EXE}" "" "${FB_EXE}" 0
-    WinShell::SetLnkAUMI "$SMPROGRAMS\${FB_LINK}" "${APP_ID}"
-  ${EndIf}
-  ${If} $FBStartup == ${BST_CHECKED}
-    CreateShortCut "$SMSTARTUP\${FB_LINK}" "${FB_EXE}" "" "${FB_EXE}" 0
+  ; Shortcuts chosen on the options page (all users for the per-machine install).
+  ; An update (--updated, from the browser's own updater) leaves what the user has now alone.
+  ${IfNot} ${isUpdated}
+    Delete "$DESKTOP\${FB_LINK}"
+    Delete "$SMPROGRAMS\${FB_LINK}"
+    Delete "$SMSTARTUP\${FB_LINK}"
+    ${If} $FBDesktop == ${BST_CHECKED}
+      CreateShortCut "$DESKTOP\${FB_LINK}" "${FB_EXE}" "" "${FB_EXE}" 0
+      WinShell::SetLnkAUMI "$DESKTOP\${FB_LINK}" "${APP_ID}"
+    ${EndIf}
+    ${If} $FBStartMenu == ${BST_CHECKED}
+      CreateShortCut "$SMPROGRAMS\${FB_LINK}" "${FB_EXE}" "" "${FB_EXE}" 0
+      WinShell::SetLnkAUMI "$SMPROGRAMS\${FB_LINK}" "${APP_ID}"
+    ${EndIf}
+    ${If} $FBStartup == ${BST_CHECKED}
+      CreateShortCut "$SMSTARTUP\${FB_LINK}" "${FB_EXE}" "" "${FB_EXE}" 0
+    ${EndIf}
   ${EndIf}
 
   ; URL handler (http/https) and HTML document ProgIDs
@@ -168,9 +171,12 @@
 !macroend
 
 !macro customUnInstall
-  Delete "$DESKTOP\${FB_LINK}"
-  Delete "$SMPROGRAMS\${FB_LINK}"
-  Delete "$SMSTARTUP\${FB_LINK}"
+  ; The old version's uninstaller also runs during an update: shortcuts stay then
+  ${IfNot} ${isUpdated}
+    Delete "$DESKTOP\${FB_LINK}"
+    Delete "$SMPROGRAMS\${FB_LINK}"
+    Delete "$SMSTARTUP\${FB_LINK}"
+  ${EndIf}
   DeleteRegKey SHCTX "Software\Classes\FreedomBrowserURL"
   DeleteRegKey SHCTX "Software\Classes\FreedomBrowserHTML"
   DeleteRegKey SHCTX "${FB_CLIENT}"

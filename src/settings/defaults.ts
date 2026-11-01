@@ -3,6 +3,12 @@ import { THEME_PRESETS } from './themePresets';
 
 export const SEARCH_ENGINES: SearchEngine[] = [
   {
+    id: 'startpage',
+    name: 'Startpage',
+    searchUrl: 'https://www.startpage.com/sp/search?query=%s',
+    icon: '🛡️',
+  },
+  {
     id: 'duckduckgo',
     name: 'DuckDuckGo',
     searchUrl: 'https://duckduckgo.com/?q=%s',
@@ -26,7 +32,8 @@ export const SEARCH_ENGINES: SearchEngine[] = [
 
 export const DEFAULT_SETTINGS: BrowserSettings = {
   // Main Settings
-  defaultSearchEngine: 'duckduckgo',
+  defaultSearchEngine: 'startpage',
+  startpageDefaultApplied: true,
   customSearchUrl: '',
   homepage: 'freedom://newtab',
   startupBehavior: 'new-tab',

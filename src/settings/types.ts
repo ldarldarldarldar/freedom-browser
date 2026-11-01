@@ -1,4 +1,4 @@
-export type SearchEngineId = 'duckduckgo' | 'google' | 'brave' | 'custom';
+export type SearchEngineId = 'startpage' | 'duckduckgo' | 'google' | 'brave' | 'custom';
 
 export interface SearchEngine {
   id: SearchEngineId;
@@ -64,6 +64,8 @@ export interface BrowserSettings {
   /** Shared cap for all active downloads in KB/s; 0 = unlimited */
   downloadSpeedLimitKBps?: number;
   uiDesignVersion?: number;
+  /** Set once the 0.6.5 switch of the default search engine to Startpage has been applied to this profile */
+  startpageDefaultApplied?: boolean;
   // Main Settings
   defaultSearchEngine: SearchEngineId;
   customSearchUrl: string;
