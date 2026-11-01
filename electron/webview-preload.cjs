@@ -70,7 +70,9 @@
       const start = ipcRenderer.sendSync('freedom-adblock-start', pageUrl);
       if (start) {
         for (const script of start.scripts || []) {
-          webFrame.executeJavaScript(script).catch(() => {});
+          // Each in its own function: at global scope their top-level declarations collide (class JSONPath),
+          // and on YouTube that left the page blank
+          webFrame.executeJavaScript(`(function(){\n${script}\n})();`).catch(() => {});
         }
 
         // Generic hiding rules depend on the classes/ids/links present in the DOM

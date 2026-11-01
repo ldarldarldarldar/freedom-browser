@@ -24,6 +24,7 @@ const EVENT_CHANNELS = new Set([
 contextBridge.exposeInMainWorld('electronAPI', {
   isElectron: true,
   platform: process.platform,
+  homeDir: decodeURIComponent((process.argv.find((a) => a.startsWith('--freedom-home-dir=')) || '=').split('=')[1]),
   on: (channel, listener) => {
     if (!EVENT_CHANNELS.has(channel)) throw new Error(`Unknown event channel: ${channel}`);
     const subscription = (event, ...args) => listener(...args);

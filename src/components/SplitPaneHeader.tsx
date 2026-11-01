@@ -56,7 +56,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
 }) => {
   const { t } = useTranslation();
   const [inputValue, setInputValue] = useState(
-    tab.url === 'freedom://newtab' ? '' : tab.url
+    tab.url === 'freedom://newtab' ? '' : SearchEngineService.addressOf(tab.url)
   );
   const [isFocused, setIsFocused] = useState(false);
   const [isTabMenuOpen, setIsTabMenuOpen] = useState(false);
@@ -65,7 +65,7 @@ export const SplitPaneHeader: React.FC<SplitPaneHeaderProps> = ({
 
   useEffect(() => {
     if (!isFocused) {
-      setInputValue(tab.url === 'freedom://newtab' ? '' : tab.url);
+      setInputValue(tab.url === 'freedom://newtab' ? '' : SearchEngineService.addressOf(tab.url));
     }
   }, [tab.url, isFocused]);
 

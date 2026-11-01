@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   // Main Settings
   defaultSearchEngine: 'startpage',
   startpageDefaultApplied: true,
+  uiDesignVersion: 2,
   customSearchUrl: '',
   homepage: 'freedom://newtab',
   startupBehavior: 'new-tab',

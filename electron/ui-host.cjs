@@ -42,9 +42,11 @@ const MIME = {
   '.ttf': 'font/ttf',
 };
 
-function registerUiScheme(protocol) {
+// Electron honours one registerSchemesAsPrivileged call, so other modules' schemes come through here
+function registerUiScheme(protocol, otherSchemes = []) {
   protocol.registerSchemesAsPrivileged([
     { scheme: UI_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } },
+    ...otherSchemes,
   ]);
 }
 

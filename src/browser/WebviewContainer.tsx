@@ -681,6 +681,27 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
                       />
                     </div>
 
+                    {SearchEngineService.isUnknownInternalPage(paneTab.url) && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: `calc(${box.top} + 36px)`,
+                          left: box.left,
+                          width: box.width,
+                          height: `calc(${box.height} - 36px)`,
+                        }}
+                        className="overflow-hidden z-10"
+                        onClick={() => onSelectPane?.(pane.id)}
+                      >
+                        <ErrorPage
+                          errorType="invalid_url"
+                          url={SearchEngineService.addressOf(paneTab.url)}
+                          onReload={() => onPaneReload?.(paneTab.id)}
+                          onHome={() => onPaneNavigate?.(paneTab.id, 'freedom://newtab')}
+                        />
+                      </div>
+                    )}
+
                     {/* New Tab Page (if tab is freedom://newtab) */}
                     {paneTab.url === 'freedom://newtab' && (
                       <div
@@ -774,6 +795,18 @@ export const WebviewContainer: React.FC<WebviewContainerProps> = ({
                 onOpenSettings={onOpenSettings}
                 showSettingsIcon={showNewTabSettingsIcon}
                 showFreedomIcon={showFreedomIcon}
+              />
+            </div>
+          )}
+
+          {/* 2a. SINGLE TAB VIEW: an address Freedom does not open */}
+          {!isSplit && SearchEngineService.isUnknownInternalPage(activeTab.url) && (
+            <div className="relative w-full h-full overflow-hidden z-10">
+              <ErrorPage
+                errorType="invalid_url"
+                url={SearchEngineService.addressOf(activeTab.url)}
+                onReload={onReload}
+                onHome={() => onNavigate('freedom://newtab')}
               />
             </div>
           )}

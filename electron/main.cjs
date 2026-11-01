@@ -5,11 +5,12 @@ const fs = require('fs');
 const url = require('url');
 const { execFile } = require('child_process');
 const { UI_ORIGIN, UI_PARTITION, registerUiScheme, serveUi, migrateUiStorage } = require('./ui-host.cjs');
+const { createAdBlocker, STUB_SCHEME_PRIVILEGES } = require('./adblock.cjs');
 const { createPermissionManager, originOf } = require('./permissions.cjs');
 const { createUpdater } = require('./updater.cjs');
 
 // Must happen before app ready
-registerUiScheme(protocol);
+registerUiScheme(protocol, [STUB_SCHEME_PRIVILEGES]);
 
 // User Data Storage Path & System Configuration
 // Separates application binaries (e.g. Program Files\Freedom Browser) from user data (profiles, history, bookmarks, cookies).
@@ -127,7 +128,6 @@ app.commandLine.appendSwitch('enable-features', 'V8FlushBaselineCode,V8FlushByte
 app.commandLine.appendSwitch('renderer-process-limit', '6'); // Prevents runaway process explosion
 app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache (keeps working set lean)
 // Never add --expose-gc here: it would give every web page a deterministic gc(), a classic exploit primitive
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
 // Blocks third-party cookies inside the network stack, including document.cookie in cross-site iframes.
 // Read at startup only, so a change in Settings applies after a restart.
 if (initialStorageConfig.blockThirdPartyCookies !== false) {
@@ -583,6 +583,7 @@ function createWindow() {
       contextIsolation: true,
       spellcheck: false, // Disables background spellcheck memory footprint
       sandbox: true,
+      additionalArguments: [`--freedom-home-dir=${encodeURIComponent(os.homedir())}`],
     },
   });
 
@@ -923,11 +924,14 @@ app.on('web-contents-created', (event, contents) => {
       webPreferences.sandbox = true;
       webPreferences.webviewTag = false;
       webPreferences.allowRunningInsecureContent = false;
+      // A guest is transparent by default: an unstyled page would put black text on the dark browser window.
+      // Opaque, it gets the canvas of its own color scheme: white, or dark for pages that ask for dark.
+      webPreferences.transparent = false;
       delete webPreferences.enableBlinkFeatures;
       delete webPreferences.disableBlinkFeatures;
       // Tabs use the default profile or an in-memory incognito partition, never the UI's own session
       const partitionOk = !params.partition || /^freedom-incognito-[a-z0-9]+$/.test(params.partition);
-      if (!partitionOk || !/^(https?|file):/.test(params.src || '')) attachEvent.preventDefault();
+      if (!partitionOk || !/^((https?|file):|about:blank$)/.test(params.src || '')) attachEvent.preventDefault();
     });
   }
 
@@ -1576,7 +1580,6 @@ handleUi('set_privacy_settings', (event, next) => {
 });
 
 // ---- Built-in ad blocker (electron/adblock.cjs), created on app ready ----
-const { createAdBlocker } = require('./adblock.cjs');
 let adBlocker = null;
 // Sync call from electron/webview-preload.cjs at document start: page CSS is inserted, scriptlets returned
 ipcMain.on('freedom-adblock-start', (event, pageUrl) => {
@@ -1973,6 +1976,7 @@ function configureBrowsingSession(ses) {
   });
 
   // Ad & tracker blocking for pages in browser tabs
+  adBlocker?.serveStubs(ses);
   ses.webRequest.onBeforeRequest((details, callback) => {
     let verdict = null;
     try { verdict = adBlocker?.matchRequest(details); } catch {}

@@ -58,6 +58,7 @@ declare global {
   interface Window {
     electronAPI?: {
       isElectron: boolean;
+      homeDir?: string;
       platform: string;
       invoke: (channel: string, ...args: any[]) => Promise<any>;
       on: (channel: string, listener: (...args: any[]) => void) => () => void;

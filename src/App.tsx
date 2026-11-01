@@ -68,7 +68,7 @@ export default function App() {
         if (parsed.defaultSearchEngine === 'duckduckgo') parsed.defaultSearchEngine = DEFAULT_SETTINGS.defaultSearchEngine;
       }
       // One-time switch to the redesigned default theme; later choices are respected
-      if (!parsed.uiDesignVersion || parsed.uiDesignVersion < 2) {
+      if (!storedSettings.uiDesignVersion || storedSettings.uiDesignVersion < 2) {
         parsed.uiDesignVersion = 2;
         parsed.themePreset = DEFAULT_SETTINGS.themePreset;
         parsed.palette = DEFAULT_SETTINGS.palette;

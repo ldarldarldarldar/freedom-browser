@@ -2,12 +2,21 @@
 // Network filtering via webRequest + cosmetic filtering (CSS hiding, scriptlets) for webview pages.
 // Filter lists: Ghostery's prebuilt EasyList/EasyPrivacy-based engine, cached on disk and refreshed weekly.
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { FiltersEngine, Request } = require('@ghostery/adblocker');
 const ENGINE_VERSION = require('@ghostery/adblocker/package.json').version;
 
 const REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Harmless stand-ins for blocked scripts ($redirect rules), so pages that call e.g. ga() keep working.
+// They travel over a scheme of their own: Chromium refuses a redirect from the network to a data: URL.
+const STUB_SCHEME = 'freedom-adblock';
+const STUB_SCHEME_PRIVILEGES = {
+  scheme: STUB_SCHEME,
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+};
 
 function createAdBlocker({ app, net }) {
   const cacheDir = path.join(app.getPath('userData'), 'adblock');
@@ -18,6 +27,40 @@ function createAdBlocker({ app, net }) {
   let engine = null;
   let loading = null;
   let blockedCount = 0;
+  const stubs = new Map(); // id -> { body, contentType }
+  const stubSessions = new WeakSet();
+
+  // The engine hands stubs out as data: URLs
+  function stubUrl(dataUrl) {
+    const id = crypto.createHash('sha256').update(dataUrl).digest('hex').slice(0, 32);
+    if (!stubs.has(id)) {
+      const comma = dataUrl.indexOf(',');
+      const meta = dataUrl.slice('data:'.length, comma);
+      const isBase64 = meta.endsWith(';base64');
+      const payload = dataUrl.slice(comma + 1);
+      stubs.set(id, {
+        contentType: (isBase64 ? meta.slice(0, -';base64'.length) : meta) || 'text/plain',
+        body: isBase64 ? Buffer.from(payload, 'base64') : Buffer.from(decodeURIComponent(payload)),
+      });
+    }
+    return `${STUB_SCHEME}://stub/${id}`;
+  }
+
+  function serveStubs(ses) {
+    if (stubSessions.has(ses)) return;
+    stubSessions.add(ses);
+    ses.protocol.handle(STUB_SCHEME, (request) => {
+      const stub = stubs.get(new URL(request.url).pathname.slice(1));
+      if (!stub) return new Response('', { status: 404 });
+      return new Response(stub.body, {
+        headers: {
+          'content-type': stub.contentType,
+          'access-control-allow-origin': '*',
+          'x-content-type-options': 'nosniff',
+        },
+      });
+    });
+  }
 
   const fetchLists = (...args) => net.fetch(...args);
 
@@ -86,7 +129,7 @@ function createAdBlocker({ app, net }) {
     }));
     if (redirect) {
       blockedCount++;
-      return { redirectURL: redirect.dataUrl };
+      return { redirectURL: stubUrl(redirect.dataUrl) };
     }
     if (match) {
       blockedCount++;
@@ -140,8 +183,9 @@ function createAdBlocker({ app, net }) {
     matchRequest,
     pageStart,
     pageDom,
+    serveStubs,
     stats: () => ({ enabled, ready: Boolean(engine), blockedCount }),
   };
 }
 
-module.exports = { createAdBlocker };
+module.exports = { createAdBlocker, STUB_SCHEME_PRIVILEGES };

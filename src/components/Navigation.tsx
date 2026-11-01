@@ -160,7 +160,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       if (currentTab.url === 'freedom://newtab') {
         setInputValue('');
       } else {
-        setInputValue(currentTab.url);
+        setInputValue(SearchEngineService.addressOf(currentTab.url));
       }
     }
   }, [currentTab?.id, currentTab?.url]);

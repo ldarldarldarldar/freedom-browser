@@ -1,6 +1,10 @@
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { SearchEngineId } from '../settings/types';
 
+const INVALID_PAGE = 'freedom://invalid?url=';
+const CYRILLIC_TLDS = 'рф|рус|москва|онлайн|сайт|орг|ком|укр|бел|дети|қаз|срб|мкд|мон|бг|ею';
+const HOST_TAIL = '(?::\\d{1,5})?(?:[/?#].*)?';
+
 export class SearchEngineService {
   /**
    * Determine if input is a valid URL or a search query
@@ -10,7 +14,7 @@ export class SearchEngineService {
     if (!trimmed) return false;
 
     // Check internal protocols
-    if (trimmed.startsWith('freedom://') || trimmed.startsWith('about:') || trimmed.startsWith('file://')) {
+    if (trimmed.startsWith('freedom://') || /^about:/i.test(trimmed) || trimmed.startsWith('file://')) {
       return true;
     }
 
@@ -25,7 +29,7 @@ export class SearchEngineService {
     }
 
     // Check standard protocol
-    if (/^[a-zA-Z]+:\/\//.test(trimmed)) {
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)) {
       return true;
     }
 
@@ -34,17 +38,49 @@ export class SearchEngineService {
       return false;
     }
 
-    // Check for localhost or IP address
-    if (/^localhost(:\d+)?(\/.*)?$/i.test(trimmed)) {
-      return true;
-    }
-    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(\/.*)?$/.test(trimmed)) {
-      return true;
-    }
+    if (this.isLocalAddress(trimmed)) return true;
 
-    // Check for domain with valid TLD (e.g. example.com, github.io, rust-lang.org/learn)
-    const domainMatch = trimmed.match(/^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}(:\d+)?(\/.*)?$/);
-    return !!domainMatch;
+    // Domain with a real-looking TLD (example.com, github.io, rust-lang.org/learn, мир.рф, кафе.com)
+    const domain = new RegExp(`^(?:[\\p{L}\\p{N}](?:[\\p{L}\\p{N}-]*[\\p{L}\\p{N}])?\\.)+(?:[a-z]{2,}|xn--[a-z0-9-]+|${CYRILLIC_TLDS})${HOST_TAIL}$`, 'iu');
+    return domain.test(trimmed);
+  }
+
+  /** localhost, an IP address, a .local name or "server:8080": rarely has a certificate, so it opens over http */
+  private static isLocalAddress(input: string): boolean {
+    return new RegExp(
+      `^(?:localhost|[\\w-]+\\.(?:localhost|local)|\\d{1,3}(?:\\.\\d{1,3}){3}|\\[[0-9a-f:.]+\\])(?::\\d{1,5})?(?:[/?#].*)?$|^[\\p{L}\\p{N}-]+:\\d{1,5}(?:[/?#].*)?$`,
+      'iu'
+    ).test(input);
+  }
+
+  private static webUrlOf(input: string): string | null {
+    const candidate = `${this.isLocalAddress(input) ? 'http' : 'https'}://${input}`;
+    try {
+      new URL(candidate);
+      return candidate;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Internal page shown for an address Freedom does not open (chrome://, ftp://, an unknown freedom:// page) */
+  public static invalidPageUrl(address: string): string {
+    return `${INVALID_PAGE}${encodeURIComponent(address)}`;
+  }
+
+  /** The address the user meant: what the address bar and the error screen show for a tab's URL */
+  public static addressOf(url: string): string {
+    if (!url.startsWith(INVALID_PAGE)) return url;
+    try {
+      return decodeURIComponent(url.slice(INVALID_PAGE.length));
+    } catch {
+      return url;
+    }
+  }
+
+  /** freedom:// URLs with no page behind them */
+  public static isUnknownInternalPage(url: string): boolean {
+    return url.startsWith('freedom://') && url !== 'freedom://newtab' && url !== 'freedom://memory';
   }
 
   /**
@@ -64,6 +100,9 @@ export class SearchEngineService {
       return trimmed;
     }
 
+    if (/^about:blank$/i.test(trimmed)) return 'about:blank';
+    if (/^about:/i.test(trimmed)) return this.invalidPageUrl(trimmed);
+
     // Local filesystem paths (Unix or Windows drive letter)
     if (/^(\/|[a-zA-Z]:[/\\])/.test(trimmed)) {
       const normalized = trimmed.replace(/\\/g, '/');
@@ -72,6 +111,8 @@ export class SearchEngineService {
 
     // Home directory path (~/...)
     if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+      const home = typeof window !== 'undefined' ? window.electronAPI?.homeDir : undefined;
+      if (home) return this.resolveInputToUrl(`${home}${trimmed.slice(1)}`, engineId, customUrl);
       const normalized = trimmed.slice(1).replace(/\\/g, '/');
       return `file://${normalized}`;
     }
@@ -83,11 +124,20 @@ export class SearchEngineService {
     }
 
     if (this.isLikelyUrl(trimmed)) {
-      // Add https:// if protocol missing
-      if (!/^[a-zA-Z]+:\/\//.test(trimmed)) {
-        return `https://${trimmed}`;
+      const scheme = trimmed.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):\/\//)?.[1].toLowerCase();
+      if (!scheme) {
+        const webUrl = this.webUrlOf(trimmed);
+        if (webUrl) return webUrl;
+      } else if (scheme !== 'http' && scheme !== 'https') {
+        return this.invalidPageUrl(trimmed);
+      } else if (!/\s/.test(trimmed)) {
+        try {
+          new URL(trimmed);
+          return trimmed;
+        } catch {
+          // "http://" alone and the like: not an address, so it is searched for
+        }
       }
-      return trimmed;
     }
 
     // Format as search query
@@ -119,9 +169,9 @@ export class SearchEngineService {
         return null;
       }
     };
-    // Bare host names ("example.com/page", "localhost:3000") open as https; local paths are searched
-    const bareHost = /^(localhost|[\w-]+(\.[\w-]+)+)(:\d+)?([/?#]\S*)?$/i.test(text);
-    const direct = asWebUrl(text) || (bareHost && this.isLikelyUrl(text) ? asWebUrl(`https://${text}`) : null);
+    // Bare host names ("example.com/page", "localhost:3000", "мир.рф") open directly; local paths are searched
+    const bareHost = /^(localhost|[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)+)(:\d+)?([/?#]\S*)?$/iu.test(text);
+    const direct = asWebUrl(text) || (bareHost && this.isLikelyUrl(text) ? asWebUrl(this.webUrlOf(text) ?? '') : null);
     if (direct) return direct;
     const encoded = encodeURIComponent(text);
     if (engineId === 'custom' && customUrl) return customUrl.replace('%s', encoded);
@@ -140,7 +190,7 @@ export class SearchEngineService {
    * Format display URL (clean view without https:// for cleaner address bar)
    */
   public static formatDisplayUrl(url: string): string {
-    if (url.startsWith('freedom://')) return url;
+    if (url.startsWith('freedom://')) return this.addressOf(url);
     if (url.startsWith('file://')) {
       try {
         return decodeURI(url);
