@@ -14,12 +14,12 @@
 2. **Programming** — Integrated developer console, network inspector, WebAssembly & DOM inspection.
 3. **Speed** — Low RAM usage, idle tab hibernation, hardware acceleration, and rapid startup.
 
-> **Freedom Browser 0.6.5-1** — redesigned graphite UI with a new logo, built on **Electron + Chromium** (the Tauri/Rust notes below are historical).
+> **Freedom Browser 0.6.5-91** — redesigned graphite UI with a new logo, built on **Electron + Chromium** (the Tauri/Rust notes below are historical).
 >
 > ```bash
 > npm ci
-> npm run build:appimage   # release/Freedom-Browser-0.6.5-1-x86_64.AppImage
-> npm run build:win        # release/Freedom-Browser-0.6.5-1-x64-Setup.exe — installer (CI builds it on windows-latest)
+> npm run build:appimage   # release/Freedom-Browser-0.6.5-91-x86_64.AppImage
+> npm run build:win        # release/Freedom-Browser-0.6.5-91-x64-Setup.exe — installer (CI builds it on windows-latest)
 > ```
 > Design tokens and the redesign notes: [REDESIGN_REPORT.md](REDESIGN_REPORT.md).
 
@@ -224,6 +224,8 @@ bash scripts/build-linux.sh
 ---
 
 ## 6. Privacy & Telemetry Architecture
+
+> **Widevine test builds (branch `widevine`):** the browser downloads and updates the Widevine CDM from Google's component update servers, so these builds contact Google even without any page open.
 
 Freedom has **ZERO remote telemetry by default**:
 - No usage statistics, browsing history, URLs, or device IDs are sent to developers or third parties.

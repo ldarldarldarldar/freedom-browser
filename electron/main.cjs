@@ -113,7 +113,7 @@ try {
 // 1. Performance & Memory Optimization Command-Line Switches
 // Applied before app ready to strip telemetry, background daemons, and reduce process bloat
 app.commandLine.appendSwitch('disable-breakpad'); // Disables crash reporter threads & telemetry
-app.commandLine.appendSwitch('disable-component-update'); // Prevents background component updater polling
+// No --disable-component-update: the Widevine CDM is installed and updated through the component updater
 app.commandLine.appendSwitch('disable-domain-reliability'); // Disables diagnostic network tracking
 app.commandLine.appendSwitch('disable-sync'); // Disables cloud synchronization services
 app.commandLine.appendSwitch('disable-speech-api'); // Disables speech recognition daemon
@@ -2178,6 +2178,12 @@ app.whenReady().then(async () => {
   createWindow();
   startupComplete = true;
   updater.start();
+
+  // castLabs Electron only. Never awaited: the browser must start and work without Widevine.
+  // castLabs documents that on Linux a first-time CDM may need the next launch.
+  require('electron').components?.whenReady()
+    .then(() => console.log('[widevine] ready:', JSON.stringify(require('electron').components.status())))
+    .catch((err) => console.warn('[widevine] not installed:', err?.message || err));
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
