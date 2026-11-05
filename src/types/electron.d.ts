@@ -12,6 +12,19 @@ declare global {
     size: number;
   }
 
+  /** The certificate a tab's last load was refused for (electron/main.cjs, certificate-error) */
+  interface CertificateErrorInfo {
+    url: string;
+    host: string;
+    /** Chromium's name, e.g. net::ERR_CERT_DATE_INVALID */
+    error: string;
+    subjectName: string;
+    issuerName: string;
+    /** Seconds since the epoch */
+    validStart: number;
+    validExpiry: number;
+  }
+
   /** Installed Chrome extension as reported by electron/extensions.cjs */
   interface FreedomExtensionInfo {
     folder: string;
@@ -76,6 +89,10 @@ declare global {
       pickCustomBackground: () => Promise<string | null>;
       setBrowserMode: (mode: 'performance' | 'quality') => Promise<boolean>;
       setDownloadSpeedLimit?: (kbps: number) => Promise<number>;
+      certificateError?: {
+        info: (webContentsId: number, url: string) => Promise<CertificateErrorInfo | null>;
+        allow: (webContentsId: number, url: string) => Promise<boolean>;
+      };
       sitePermissions?: {
         list: () => Promise<Array<{ origin: string; permission: string; decision: 'allow' | 'block' }>>;
         remove: (origin: string, permission: string) => Promise<boolean>;
@@ -99,6 +116,9 @@ declare global {
       setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean; adBlockEnabled: boolean; checkForUpdates?: boolean }) => Promise<unknown>;
       getHardwareAcceleration?: () => Promise<boolean>;
       setHardwareAcceleration?: (enabled: boolean) => Promise<boolean>;
+      /** null = automatic (Chromium decides). Takes effect after a restart. */
+      getRendererProcessLimit?: () => Promise<number | null>;
+      setRendererProcessLimit?: (limit: number | null) => Promise<boolean>;
       relaunchApp?: () => Promise<void>;
       getUserDataPath?: () => Promise<string>;
       chooseUserDataPath?: () => Promise<string | null>;

@@ -33,6 +33,8 @@ interface WebviewContainerProps {
       favicon?: string;
       canGoBack: boolean;
       canGoForward: boolean;
+      /** https page with a refused certificate, or one the user chose to trust anyway */
+      insecure?: boolean;
     }
   ) => void;
   onNewTabRequested?: (url: string) => void;
@@ -80,6 +82,8 @@ const ElectronWebviewTab: React.FC<{
       favicon?: string;
       canGoBack: boolean;
       canGoForward: boolean;
+      /** https page with a refused certificate, or one the user chose to trust anyway */
+      insecure?: boolean;
     }
   ) => void;
   onNewTabRequested?: (url: string) => void;
@@ -107,6 +111,11 @@ const ElectronWebviewTab: React.FC<{
   const [initialSrc] = useState(tab.url);
   // Failed load shown over the webview, which stays mounted so "Try again" and the toolbar keep working
   const [loadError, setLoadError] = useState<LoadError | null>(null);
+  const [certInfo, setCertInfo] = useState<CertificateErrorInfo | null>(null);
+  // Hosts this tab was told to trust despite their certificate, and the URL whose certificate was just refused:
+  // the address bar must never show a lock for them
+  const certBypassHostsRef = useRef<Set<string>>(new Set());
+  const certFailedUrlRef = useRef('');
   const currentTabRef = useRef(tab);
   currentTabRef.current = tab;
 
@@ -184,12 +193,15 @@ const ElectronWebviewTab: React.FC<{
         const canBack = typeof el.canGoBack === 'function' ? el.canGoBack() : false;
         const canFwd = typeof el.canGoForward === 'function' ? el.canGoForward() : false;
 
+        let host = '';
+        try { host = new URL(rawUrl).host; } catch {}
         callbacksRef.current.onTabNavigationChange?.(tab.id, {
           url: rawUrl,
           title: rawTitle,
           favicon,
           canGoBack: canBack,
           canGoForward: canFwd,
+          insecure: certFailedUrlRef.current === rawUrl || (Boolean(host) && certBypassHostsRef.current.has(host)),
         });
 
         applySiteZoom(rawUrl);
@@ -208,6 +220,7 @@ const ElectronWebviewTab: React.FC<{
     const handleStartNavigation = (e: any) => {
       if (e.isMainFrame && !e.isInPlace) {
         pendingHttpError = null;
+        certFailedUrlRef.current = '';
         setLoadError(null);
       }
     };
@@ -259,6 +272,14 @@ const ElectronWebviewTab: React.FC<{
       if (e?.isMainFrame) {
         const failure = loadErrorFromNetError(e.errorCode, e.errorDescription, e.validatedURL || currentTabRef.current.url);
         if (failure) setLoadError(failure);
+        setCertInfo(null);
+        if (failure?.type === 'certificate') {
+          certFailedUrlRef.current = failure.url;
+          try {
+            const api = (window as any).electronAPI?.certificateError;
+            api?.info(el.getWebContentsId(), failure.url).then((info: CertificateErrorInfo | null) => setCertInfo(info)).catch(() => {});
+          } catch {}
+        }
       }
       syncState(e?.isMainFrame && e.validatedURL ? e.validatedURL : undefined);
     };
@@ -379,6 +400,20 @@ const ElectronWebviewTab: React.FC<{
             onReload={() => wvRef.current?.loadURL(loadError.url)}
             onHome={() => onGoHome?.()}
             onShowResponse={loadError.type === 'http' ? () => setLoadError(null) : undefined}
+            onBack={loadError.type === 'certificate' ? () => {
+              const el = wvRef.current;
+              if (el && typeof el.canGoBack === 'function' && el.canGoBack()) el.goBack();
+              else onGoHome?.();
+            } : undefined}
+            certInfo={certInfo}
+            onProceedUnsafe={loadError.type === 'certificate' && (window as any).electronAPI?.certificateError ? async () => {
+              const el = wvRef.current;
+              if (!el) return;
+              const allowed = await (window as any).electronAPI.certificateError.allow(el.getWebContentsId(), loadError.url).catch(() => false);
+              if (!allowed) return;
+              try { certBypassHostsRef.current.add(new URL(loadError.url).host); } catch {}
+              el.loadURL(loadError.url);
+            } : undefined}
           />
         </div>
       )}

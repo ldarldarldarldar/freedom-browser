@@ -8,6 +8,7 @@ const { UI_ORIGIN, UI_PARTITION, registerUiScheme, serveUi, migrateUiStorage } =
 const { createAdBlocker, STUB_SCHEME_PRIVILEGES } = require('./adblock.cjs');
 const { createPermissionManager, originOf } = require('./permissions.cjs');
 const { createUpdater } = require('./updater.cjs');
+const downloadNames = require('./download-names.cjs');
 
 // Must happen before app ready
 registerUiScheme(protocol, [STUB_SCHEME_PRIVILEGES]);
@@ -98,18 +99,6 @@ if (!isHardwareAccelerationEnabled) {
   app.disableHardwareAcceleration();
 }
 
-// Expose V8 GC isolate hook in main process for deterministic memory reclamation
-const v8 = require('v8');
-const vm = require('vm');
-try {
-  v8.setFlagsFromString('--expose-gc');
-  if (!global.gc) {
-    global.gc = vm.runInNewContext('gc');
-  }
-} catch (err) {
-  console.warn('Failed to expose V8 gc in main process:', err);
-}
-
 // 1. Performance & Memory Optimization Command-Line Switches
 // Applied before app ready to strip telemetry, background daemons, and reduce process bloat
 app.commandLine.appendSwitch('disable-breakpad'); // Disables crash reporter threads & telemetry
@@ -125,7 +114,13 @@ const disableFeaturesList = process.platform === 'linux'
   : 'MediaRouter,OptimizationHints,InterestFeedContentSuggestions,Translate,CalculateNativeWinOcclusion';
 app.commandLine.appendSwitch('disable-features', disableFeaturesList);
 app.commandLine.appendSwitch('enable-features', 'V8FlushBaselineCode,V8FlushBytecode,V8MemoryReducer');
-app.commandLine.appendSwitch('renderer-process-limit', '6'); // Prevents runaway process explosion
+// Renderer process limit: Chromium decides by default (every site in its own process, as in Chrome).
+// A number can be set in Settings → Performance; read at startup only, so it applies after a restart.
+const RENDERER_LIMIT_MIN = 1;
+const RENDERER_LIMIT_MAX = 64;
+const validRendererLimit = (v) => (Number.isInteger(v) && v >= RENDERER_LIMIT_MIN && v <= RENDERER_LIMIT_MAX ? v : null);
+const startupRendererLimit = validRendererLimit(initialStorageConfig.rendererProcessLimit);
+if (startupRendererLimit) app.commandLine.appendSwitch('renderer-process-limit', String(startupRendererLimit));
 app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache (keeps working set lean)
 // Never add --expose-gc here: it would give every web page a deterministic gc(), a classic exploit primitive
 // Blocks third-party cookies inside the network stack, including document.cookie in cross-site iframes.
@@ -240,7 +235,7 @@ function takeDownloadCredit(bytes) {
   return limiter.tokens >= 0 ? 0 : Math.ceil((-limiter.tokens / downloadSpeedLimitBps) * 1000);
 }
 
-function startThrottledDownload({ url, ses, savePath, downloadId, referrer, isPrivate }) {
+function startThrottledDownload({ url, ses, savePath, downloadId, referrer, isPrivate, onEnd }) {
   const startTime = Date.now();
   let received = 0;
   let total = 0;
@@ -271,8 +266,9 @@ function startThrottledDownload({ url, ses, savePath, downloadId, referrer, isPr
     finished = true;
     activeDownloads.delete(downloadId);
     out.end(() => {
-      if (state !== 'completed') fs.rm(savePath, { force: true }, () => {});
+      if (state !== 'completed') fs.rm(savePath, { force: true }, () => onEnd?.());
       else {
+        onEnd?.();
         browserDownloads.add(savePath);
         markFromInternet(savePath, url, referrer);
       }
@@ -544,20 +540,17 @@ const MENU_STRINGS = {
   },
 };
 
-// Helper: Generate safe non-colliding filepath in destination directory
-function getUniqueFilePath(dir, originalFilename) {
-  let filename = (originalFilename || 'download').replace(/[\\/:*?"<>|]/g, '_');
-  const ext = path.extname(filename);
-  const base = path.basename(filename, ext);
-  let target = path.join(dir, filename);
-  let counter = 1;
-  while (fs.existsSync(target)) {
-    filename = `${base} (${counter})${ext}`;
-    target = path.join(dir, filename);
-    counter++;
-  }
+// Paths held by downloads that have not ended yet (including ones waiting for approval as ".pending"),
+// so two downloads of the same name started together never get the same file
+const reservedDownloadPaths = new Set();
+
+// Safe, non-colliding path in the destination folder, reserved until releaseDownloadPath
+function reserveDownloadPath(dir, originalFilename) {
+  const target = downloadNames.getUniqueFilePath(dir, originalFilename, { reserved: reservedDownloadPaths });
+  reservedDownloadPaths.add(target);
   return target;
 }
+const releaseDownloadPath = (target) => reservedDownloadPaths.delete(target);
 
 function createWindow() {
   const iconPath = process.platform === 'win32'
@@ -711,7 +704,7 @@ function createWindow() {
     }
 
     const originalFilename = item.getFilename() || 'download';
-    const finalDownloadPath = getUniqueFilePath(downloadDir, originalFilename);
+    const finalDownloadPath = reserveDownloadPath(downloadDir, originalFilename);
 
     const downloadId = 'dl-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
     const isPrivate = Boolean(webContents && !webContents.isDestroyed() && webContents.session !== session.defaultSession);
@@ -723,8 +716,9 @@ function createWindow() {
       const ses = webContents?.session || session.defaultSession;
       const referrer = webContents && !webContents.isDestroyed() ? webContents.getURL() : '';
       approveDownload(webContents, shownName, itemUrl).then((approved) => {
-        if (approved) startThrottledDownload({ url: itemUrl, ses, savePath: finalDownloadPath, downloadId, referrer, isPrivate });
-      });
+        if (approved) startThrottledDownload({ url: itemUrl, ses, savePath: finalDownloadPath, downloadId, referrer, isPrivate, onEnd: () => releaseDownloadPath(finalDownloadPath) });
+        else releaseDownloadPath(finalDownloadPath);
+      }, () => releaseDownloadPath(finalDownloadPath));
       return;
     }
 
@@ -761,6 +755,7 @@ function createWindow() {
 
     const reportDone = () => {
       activeDownloads.delete(downloadId);
+      releaseDownloadPath(finalDownloadPath);
       const isCompleted = finished === 'completed' && fs.existsSync(finalDownloadPath);
       const finalState = isCompleted ? 'completed' : (finished === 'cancelled' ? 'cancelled' : 'interrupted');
       if (isCompleted) browserDownloads.add(finalDownloadPath);
@@ -800,7 +795,7 @@ function createWindow() {
       const refuse = () => {
         activeDownloads.delete(downloadId);
         try { item.cancel(); } catch {}
-        fs.rm(pendingPath, { force: true }, () => {});
+        fs.rm(pendingPath, { force: true }, () => releaseDownloadPath(finalDownloadPath));
       };
       approveDownload(webContents, shownName, downloadUrl).then((allowed) => {
         if (!allowed) return refuse();
@@ -905,6 +900,67 @@ function routeNewWindows(pageContents) {
     showSite();
   });
 }
+
+// ---- Certificate errors ----
+// Chromium rejects a bad certificate by default; the tab then shows the "connection is not private" page.
+// "Proceed anyway" adds an exception for one host and one certificate (fingerprint) in one tab only.
+// It lives in memory and goes away when the tab (and with it a private session's tab) is closed.
+const certExceptions = new Map(); // webContents id -> Set of `${host}|${fingerprint}`
+const lastCertErrors = new Map(); // webContents id -> details of the last main-frame certificate error
+const CERT_ERROR_TTL_MS = 30 * 60 * 1000;
+const hostOf = (u) => { try { return new URL(u).host.toLowerCase(); } catch { return ''; } };
+
+function forgetCertState(id) {
+  certExceptions.delete(id);
+  lastCertErrors.delete(id);
+}
+
+app.on('certificate-error', (event, contents, requestUrl, error, certificate, callback, isMainFrame) => {
+  const host = hostOf(requestUrl);
+  const fingerprint = certificate?.fingerprint || '';
+  const isTab = Boolean(contents) && !contents.isDestroyed() && contents.getType() === 'webview';
+  // Subresources and iframes are always refused, and only web tabs can ever get an exception
+  if (!isTab || !isMainFrame || !host || !fingerprint) return callback(false);
+  if (certExceptions.get(contents.id)?.has(`${host}|${fingerprint}`)) {
+    event.preventDefault();
+    return callback(true);
+  }
+  if (!lastCertErrors.has(contents.id) && !certExceptions.has(contents.id)) {
+    contents.once('destroyed', () => forgetCertState(contents.id));
+  }
+  lastCertErrors.set(contents.id, {
+    url: requestUrl,
+    host,
+    fingerprint,
+    error: String(error || ''),
+    subjectName: certificate.subjectName || '',
+    issuerName: certificate.issuerName || '',
+    validStart: certificate.validStart || 0,
+    validExpiry: certificate.validExpiry || 0,
+    at: Date.now(),
+  });
+  callback(false);
+});
+
+// What the error page shows about the certificate of this tab's last failed load
+handleUi('cert_error_info', (event, webContentsId, pageUrl) => {
+  const info = lastCertErrors.get(Number(webContentsId));
+  if (!info || info.host !== hostOf(pageUrl) || Date.now() - info.at > CERT_ERROR_TTL_MS) return null;
+  const { fingerprint, at, ...shown } = info;
+  return shown;
+});
+
+// "Proceed anyway (unsafe)": trusts exactly the certificate this tab was shown for this host
+handleUi('cert_allow', (event, webContentsId, pageUrl) => {
+  const id = Number(webContentsId);
+  const target = webContents.fromId(id);
+  const info = lastCertErrors.get(id);
+  if (!target || target.isDestroyed() || target.getType() !== 'webview') return false;
+  if (!info || info.host !== hostOf(pageUrl) || Date.now() - info.at > CERT_ERROR_TTL_MS) return false;
+  if (!certExceptions.has(id)) certExceptions.set(id, new Set());
+  certExceptions.get(id).add(`${info.host}|${info.fingerprint}`);
+  return true;
+});
 
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
@@ -1477,11 +1533,7 @@ handleUi('clean_ram', async () => {
       }
     }
 
-    // 1. Invoke V8 isolate GC in main process
-    if (global.gc) {
-      try { global.gc(); } catch {}
-    }
-
+    // No forced V8 gc here: measured in 0.6.5-2, it freed 1-4 MB of main-process heap and no RSS
     const allWebContents = webContents.getAllWebContents();
 
     // 3. Clear Chromium caches across all active webContents and defaultSession
@@ -1620,15 +1672,8 @@ function isThirdPartyRequest(details) {
 }
 
 // Performance mode notification to main process
-handleUi('set_browser_mode', (event, mode) => {
-  if (mode === 'performance') {
-    // In performance mode, trigger GC in all web contents and main process to reclaim idle heap
-    if (global.gc) {
-      try { global.gc(); } catch {}
-    }
-  }
-  return true;
-});
+// Kept for the UI; the mode itself is applied in the renderer (a forced main-process gc gave nothing measurable)
+handleUi('set_browser_mode', () => true);
 
 // DevTools
 handleUi('open_devtools', () => {
@@ -1897,6 +1942,15 @@ handleUi('get_hardware_acceleration', () => {
 
 handleUi('set_hardware_acceleration', (event, enabled) => {
   writeStorageConfig({ hardwareAcceleration: Boolean(enabled) });
+  return true;
+});
+
+// Renderer process limit (null = automatic). Applied at the next start.
+handleUi('get_renderer_process_limit', () => validRendererLimit(readStorageConfig().rendererProcessLimit));
+handleUi('set_renderer_process_limit', (event, limit) => {
+  const value = limit === null ? null : validRendererLimit(Number(limit));
+  if (limit !== null && value === null) return false;
+  writeStorageConfig({ rendererProcessLimit: value });
   return true;
 });
 

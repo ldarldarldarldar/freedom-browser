@@ -9,7 +9,6 @@ import { AboutModal } from './pages/AboutModal';
 import { UpdateDialog } from './components/UpdateDialog';
 import { DownloadDrawer } from './components/DownloadDrawer';
 import { DevToolsDrawer } from './components/DevToolsDrawer';
-import { FreenMascot } from './components/FreenMascot';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { BookmarksDrawer } from './components/BookmarksDrawer';
 import { BookmarksBar } from './components/BookmarksBar';
@@ -58,6 +57,10 @@ export default function App() {
       if (!stored) return DEFAULT_SETTINGS;
       const storedSettings = JSON.parse(stored);
       const parsed = { ...DEFAULT_SETTINGS, ...storedSettings };
+      // Settings of removed features (an old profile keeps them) are dropped, so saving never writes them back
+      for (const key of Object.keys(parsed)) {
+        if (!Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) delete (parsed as Record<string, unknown>)[key];
+      }
       // Bing and Ecosia were removed in 0.6.3: fall back to the default engine
       if (!SEARCH_ENGINES.some((engine) => engine.id === parsed.defaultSearchEngine) && parsed.defaultSearchEngine !== 'custom') {
         parsed.defaultSearchEngine = DEFAULT_SETTINGS.defaultSearchEngine;
@@ -1528,6 +1531,7 @@ export default function App() {
         favicon?: string;
         canGoBack: boolean;
         canGoForward: boolean;
+        insecure?: boolean;
       }
     ) => {
       setTabs((prev) =>
@@ -1559,7 +1563,7 @@ export default function App() {
                 data.canGoBack ||
                 (!isInternal && (t.history[t.historyIndex - 1] || '').startsWith('freedom://')),
               canGoForward: data.canGoForward,
-              security: isInternal ? 'internal' : url.startsWith('https://') ? 'secure' : 'insecure',
+              security: isInternal ? 'internal' : url.startsWith('https://') && !data.insecure ? 'secure' : 'insecure',
               lastActive: Date.now(),
             };
           }
@@ -2726,9 +2730,6 @@ export default function App() {
         onConfirmSaveAndClose={handleConfirmSaveAndClose}
         onCancel={handleCancelClose}
       />
-
-      {/* Freedom Mascot: Freen in bottom-right corner */}
-      <FreenMascot enabled={settings.showFreenMascot} />
     </div>
     </I18nProvider>
   );

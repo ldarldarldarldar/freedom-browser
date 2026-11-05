@@ -86,8 +86,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   starDensity: 'medium',
   animationIntensity: 'subtle',
 
-  // Mascot & UI Badges
-  showFreenMascot: true,
+  // UI Badges
   showNewTabSettingsIcon: true,
   showFreedomIcon: true,
 

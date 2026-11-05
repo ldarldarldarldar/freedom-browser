@@ -204,7 +204,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     inputRef.current?.blur();
   };
 
-  const isSecure = currentTab?.url.startsWith('https://') || currentTab?.url.startsWith('freedom://');
+  // https alone is not enough: a page with a refused or bypassed certificate is marked insecure by the tab
+  const isSecure = currentTab?.url.startsWith('freedom://') || (currentTab?.url.startsWith('https://') && currentTab?.security !== 'insecure');
   const activeEngine = SEARCH_ENGINES.find((e) => e.id === defaultSearchEngine) || SEARCH_ENGINES[0];
 
   return (

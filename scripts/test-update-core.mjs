@@ -23,6 +23,10 @@ const signed = (manifest, key = privateKey) => {
 test('version order follows the project numbering', () => {
   assert.equal(isNewerVersion('0.6.5-1', '0.6.5'), true);
   assert.equal(isNewerVersion('0.6.5', '0.6.5-1'), false);
+  // 0.6.5-1 clients must be offered 0.6.5-2 (semver would not order these as a release line)
+  assert.equal(isNewerVersion('0.6.5-2', '0.6.5-1'), true);
+  assert.equal(isNewerVersion('0.6.5-1', '0.6.5-2'), false);
+  assert.equal(isNewerVersion('0.6.5-2', '0.6.5'), true);
   assert.equal(isNewerVersion('0.6.6', '0.6.5-9'), true);
   assert.equal(isNewerVersion('0.10.0', '0.9.9'), true);
   assert.equal(isNewerVersion('0.6.5', '0.6.5'), false);

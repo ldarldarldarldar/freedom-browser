@@ -25,7 +25,6 @@ import { SEARCH_ENGINES } from '../settings/defaults';
 import { THEME_PRESETS } from '../settings/themePresets';
 import { logger } from '../services/loggerService';
 import { tauriBridge } from '../services/tauriBridge';
-import freenImg from '../assets/freen-mascot.png';
 import { useTranslation, TranslationKey } from '../i18n';
 import { FreedomMark } from '../components/FreedomLogo';
 import { APP_VERSION } from '../version';
@@ -66,6 +65,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [hardwareAcc, setHardwareAcc] = useState<boolean>(settings.hardwareAcceleration ?? true);
   const [showRestartBanner, setShowRestartBanner] = useState<boolean>(false);
+  // Renderer process limit: '' = automatic. Kept in storage-config.json by the main process, read at startup.
+  const [processLimit, setProcessLimit] = useState<string>('');
+
+  useEffect(() => {
+    (window as any).electronAPI?.getRendererProcessLimit?.().then((limit: number | null) => {
+      setProcessLimit(typeof limit === 'number' ? String(limit) : '');
+    }).catch(() => {});
+  }, []);
+
+  const handleProcessLimitChange = async (value: string) => {
+    const ok = await (window as any).electronAPI?.setRendererProcessLimit?.(value ? Number(value) : null);
+    if (ok) {
+      setProcessLimit(value);
+      setShowRestartBanner(true);
+    }
+  };
 
   useEffect(() => {
     if ((window as any).electronAPI?.getHardwareAcceleration) {
@@ -456,6 +471,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                     </div>
 
+                    {/* Renderer process limit (applies after a restart, like hardware acceleration) */}
+                    {(window as any).electronAPI?.setRendererProcessLimit && (
+                      <div className="mt-3 flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>{t('settings.processLimitTitle')}</span>
+                          </div>
+                          <div className="text-[11px] text-neutral-400 leading-relaxed mt-0.5">
+                            {t('settings.processLimitDesc')}
+                          </div>
+                        </div>
+                        <select
+                          id="settings-process-limit"
+                          value={processLimit}
+                          onChange={(e) => handleProcessLimitChange(e.target.value)}
+                          className="bg-[var(--fb-input)] border border-[var(--fb-border)] rounded-lg px-2 py-1 text-xs text-white cursor-pointer shrink-0"
+                        >
+                          <option value="">{t('settings.processLimitAuto')}</option>
+                          {[2, 4, 6, 8, 12, 16, 24, 32].map((n) => (
+                            <option key={n} value={String(n)}>{n}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {showRestartBanner && (
                       <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 animate-fade-in">
                         <div className="flex items-center gap-2 text-[11px] text-amber-300">
@@ -750,38 +791,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   )}
-                </div>
-
-                {/* Freedom Mascot (Freen) Option */}
-                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-xs">
-                      <img
-                        src={freenImg}
-                        alt="Freen Mascot"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-white flex items-center gap-2">
-                        <span>Freen Browser Mascot</span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/15 text-emerald-400 font-mono">
-                          Native
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-neutral-400 mt-0.5">
-                        Displays the subtle Freedom skeleton character in the bottom-right corner.
-                      </div>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings.showFreenMascot)}
-                    onChange={(e) =>
-                      onUpdateSettings({ showFreenMascot: e.target.checked })
-                    }
-                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
-                  />
                 </div>
 
                 {/* Individual Visual Feature Toggles */}

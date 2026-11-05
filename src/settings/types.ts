@@ -118,8 +118,7 @@ export interface BrowserSettings {
   starDensity: StarDensity;
   animationIntensity: AnimationIntensity;
 
-  // Mascot & UI Badges
-  showFreenMascot: boolean;
+  // UI Badges
   showNewTabSettingsIcon?: boolean;
   showFreedomIcon?: boolean;
 
