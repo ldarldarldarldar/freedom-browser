@@ -8,7 +8,8 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { isNewerVersion, verifyUpdateFile, isInstalledCopy, nextAppImagePath } = require('../electron/update-core.cjs');
+const { isNewerVersion, verifyUpdateFile, isInstalledCopy, nextAppImagePath, relaunchCommand } = require('../electron/update-core.cjs');
+import { spawnSync } from 'node:child_process';
 
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
 const PUBLIC = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
@@ -73,4 +74,36 @@ test('the AppImage keeps a custom name and renews a versioned one', () => {
   const dir = path.join(path.sep, 'apps');
   assert.equal(nextAppImagePath(path.join(dir, 'Freedom-Browser-0.6.5-x86_64.AppImage'), '0.6.5', '0.6.6'), path.join(dir, 'Freedom-Browser-0.6.6-x86_64.AppImage'));
   assert.equal(nextAppImagePath(path.join(dir, 'Freedom.AppImage'), '0.6.5', '0.6.6'), path.join(dir, 'Freedom.AppImage'));
+});
+
+// The relaunched AppImage must not inherit the old one's open files, or its FUSE mount never goes away
+test('the relaunch helper does not pass inherited descriptors to the new version', { skip: process.platform !== 'linux' }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fb-relaunch-'));
+  try {
+    const report = path.join(dir, 'fds.txt');
+    const target = path.join(dir, 'target.sh');
+    fs.writeFileSync(target, `#!/bin/sh\nls /proc/$$/fd > "${report}"\n`, { mode: 0o755 });
+    const held = fs.openSync(path.join(dir, 'held'), 'w');
+    // The parent of the helper keeps descriptors 3, 12 and 20 open, as Electron does with its own files
+    const stdio = Array.from({ length: 21 }, () => 'ignore');
+    stdio[3] = held; stdio[12] = held; stdio[20] = held;
+    const run = (bash) => {
+      const { file, args } = relaunchCommand(target, 999999999, { bash });
+      const r = spawnSync(file, args, { stdio, timeout: 10000 });
+      assert.equal(r.status, 0, String(r.stderr));
+      return fs.readFileSync(report, 'utf8').split(/\s+/).filter(Boolean).map(Number);
+    };
+    const bash = ['/bin/bash', '/usr/bin/bash'].find((p) => fs.existsSync(p));
+    if (bash) {
+      const fds = run(bash);
+      // 0-2 plus the one ls uses to read /proc
+      assert.ok(!fds.includes(3) && !fds.includes(12) && !fds.includes(20), fds.join(' '));
+      assert.ok(fds.length <= 4, fds.join(' '));
+    }
+    // Plain sh can only close 3-9
+    assert.ok(!run(null).includes(3));
+    fs.closeSync(held);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
