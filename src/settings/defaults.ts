@@ -46,6 +46,8 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   hardwareAcceleration: true,
   smoothScrolling: true,
   restoreTabsAfterRestart: true,
+  onCloseWithTabs: 'ask',
+  spellcheck: true,
 
   // Browser Performance Mode (default to Quality with optimizations, toggleable to Performance)
   browserMode: 'quality',
@@ -59,6 +61,9 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   popupsBlocked: true,
   adBlockEnabled: true,
   checkForUpdates: true,
+  httpsOnly: false,
+  secureDns: 'off',
+  secureDnsCustomUrl: '',
 
   // Telemetry: Stored strictly locally, OFF by default
   localDiagnosticLogs: false,
@@ -86,8 +91,7 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   starDensity: 'medium',
   animationIntensity: 'subtle',
 
-  // Mascot & UI Badges
-  showFreenMascot: true,
+  // UI Badges
   showNewTabSettingsIcon: true,
   showFreedomIcon: true,
 

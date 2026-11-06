@@ -20,12 +20,11 @@ import {
   ChevronRight,
   Puzzle,
 } from 'lucide-react';
-import { BrowserSettings, BrowserMode, ThemePresetId, ThemePalette, BackgroundImageScale } from '../settings/types';
+import { BrowserSettings, BrowserMode, ThemePresetId, ThemePalette, BackgroundImageScale, CloseTabsAction, SecureDnsChoice } from '../settings/types';
 import { SEARCH_ENGINES } from '../settings/defaults';
 import { THEME_PRESETS } from '../settings/themePresets';
 import { logger } from '../services/loggerService';
 import { tauriBridge } from '../services/tauriBridge';
-import freenImg from '../assets/freen-mascot.png';
 import { useTranslation, TranslationKey } from '../i18n';
 import { FreedomMark } from '../components/FreedomLogo';
 import { APP_VERSION } from '../version';
@@ -34,6 +33,30 @@ import { ExtensionsSettings } from '../components/ExtensionsSettings';
 import { SitePermissionsSettings } from '../components/SitePermissionsSettings';
 import { DataLocationSettings } from '../components/DataLocationSettings';
 import { DeveloperLink } from '../components/DeveloperLink';
+
+// Custom DoH address: applied when the field is left or Enter is pressed, never on every keystroke
+const SecureDnsCustomField: React.FC<{ value: string; placeholder: string; invalidText: string; onCommit: (v: string) => void }> = ({ value, placeholder, invalidText, onCommit }) => {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const valid = /^https:\/\/[^\s/@]+(\/\S*)?$/.test(draft.trim());
+  const commit = () => { if (draft.trim() !== value) onCommit(draft.trim()); };
+  return (
+    <div>
+      <input
+        type="url"
+        id="settings-secure-dns-custom"
+        value={draft}
+        placeholder={placeholder}
+        spellCheck={false}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+        className="w-full max-w-md bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/50"
+      />
+      {draft.trim() !== '' && !valid && <p className="text-[11px] text-amber-400 mt-1">{invalidText}</p>}
+    </div>
+  );
+};
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -66,6 +89,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [hardwareAcc, setHardwareAcc] = useState<boolean>(settings.hardwareAcceleration ?? true);
   const [showRestartBanner, setShowRestartBanner] = useState<boolean>(false);
+  // Renderer process limit: '' = automatic. Kept in storage-config.json by the main process, read at startup.
+  const [processLimit, setProcessLimit] = useState<string>('');
+
+  useEffect(() => {
+    (window as any).electronAPI?.getRendererProcessLimit?.().then((limit: number | null) => {
+      setProcessLimit(typeof limit === 'number' ? String(limit) : '');
+    }).catch(() => {});
+  }, []);
+
+  const handleProcessLimitChange = async (value: string) => {
+    const ok = await (window as any).electronAPI?.setRendererProcessLimit?.(value ? Number(value) : null);
+    if (ok) {
+      setProcessLimit(value);
+      setShowRestartBanner(true);
+    }
+  };
 
   useEffect(() => {
     if ((window as any).electronAPI?.getHardwareAcceleration) {
@@ -456,6 +495,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                     </div>
 
+                    {/* Renderer process limit (applies after a restart, like hardware acceleration) */}
+                    {(window as any).electronAPI?.setRendererProcessLimit && (
+                      <div className="mt-3 flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>{t('settings.processLimitTitle')}</span>
+                          </div>
+                          <div className="text-[11px] text-neutral-400 leading-relaxed mt-0.5">
+                            {t('settings.processLimitDesc')}
+                          </div>
+                        </div>
+                        <select
+                          id="settings-process-limit"
+                          value={processLimit}
+                          onChange={(e) => handleProcessLimitChange(e.target.value)}
+                          className="bg-[var(--fb-input)] border border-[var(--fb-border)] rounded-lg px-2 py-1 text-xs text-white cursor-pointer shrink-0"
+                        >
+                          <option value="">{t('settings.processLimitAuto')}</option>
+                          {[2, 4, 6, 8, 12, 16, 24, 32].map((n) => (
+                            <option key={n} value={String(n)}>{n}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {showRestartBanner && (
                       <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 animate-fade-in">
                         <div className="flex items-center gap-2 text-[11px] text-amber-300">
@@ -752,38 +817,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {/* Freedom Mascot (Freen) Option */}
-                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-xs">
-                      <img
-                        src={freenImg}
-                        alt="Freen Mascot"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-white flex items-center gap-2">
-                        <span>Freen Browser Mascot</span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/15 text-emerald-400 font-mono">
-                          Native
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-neutral-400 mt-0.5">
-                        Displays the subtle Freedom skeleton character in the bottom-right corner.
-                      </div>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings.showFreenMascot)}
-                    onChange={(e) =>
-                      onUpdateSettings({ showFreenMascot: e.target.checked })
-                    }
-                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
-                  />
-                </div>
-
                 {/* Individual Visual Feature Toggles */}
                 <div className="border-t border-white/[0.06] pt-3.5 space-y-2.5">
                   <div className="text-xs font-medium text-neutral-300 mb-1">
@@ -870,6 +903,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <option value="ru">{t('settings.langRussian')}</option>
                   </select>
                 </div>
+
+                {/* Closing the browser with open tabs */}
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
+                  <div>
+                    <label htmlFor="settings-close-tabs" className="text-xs font-semibold text-white block">
+                      {t('settings.closeTabsTitle')}
+                    </label>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">{t('settings.closeTabsDesc')}</div>
+                  </div>
+                  <select
+                    id="settings-close-tabs"
+                    value={settings.onCloseWithTabs}
+                    onChange={(e) => onUpdateSettings({ onCloseWithTabs: e.target.value as CloseTabsAction })}
+                    className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+                  >
+                    <option value="ask">{t('settings.closeTabsAsk')}</option>
+                    <option value="save">{t('settings.closeTabsSave')}</option>
+                    <option value="discard">{t('settings.closeTabsDiscard')}</option>
+                  </select>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 py-1 cursor-pointer">
+                  <span>
+                    <span className="text-xs text-neutral-200 font-medium block">{t('settings.spellcheck')}</span>
+                    <span className="text-[11px] text-neutral-500 block">{t('settings.spellcheckDesc')}</span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    id="settings-spellcheck"
+                    checked={settings.spellcheck}
+                    onChange={(e) => onUpdateSettings({ spellcheck: e.target.checked })}
+                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                  />
+                </label>
 
                 <div>
                   <label className="text-xs font-medium text-neutral-300 block mb-1.5">
@@ -987,6 +1054,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                     </div>
                   ))}
+                </div>
+
+                <div className="pt-3.5 border-t border-white/[0.06] space-y-4">
+                  <label className="flex items-center justify-between gap-3 cursor-pointer">
+                    <span>
+                      <span className="text-xs text-neutral-200 font-medium block">{t('settings.httpsOnly')}</span>
+                      <span className="text-[11px] text-neutral-500 block">{t('settings.httpsOnlyDesc')}</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      id="settings-https-only"
+                      checked={settings.httpsOnly}
+                      onChange={(e) => onUpdateSettings({ httpsOnly: e.target.checked })}
+                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                    />
+                  </label>
+
+                  <div className="space-y-2">
+                    <div>
+                      <label htmlFor="settings-secure-dns" className="text-xs text-neutral-200 font-medium block">{t('settings.secureDns')}</label>
+                      <span className="text-[11px] text-neutral-500 block">{t('settings.secureDnsDesc')}</span>
+                    </div>
+                    <select
+                      id="settings-secure-dns"
+                      value={settings.secureDns}
+                      onChange={(e) => onUpdateSettings({ secureDns: e.target.value as SecureDnsChoice })}
+                      className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+                    >
+                      <option value="off">{t('settings.secureDnsOff')}</option>
+                      <option value="cloudflare">Cloudflare (1.1.1.1)</option>
+                      <option value="quad9">Quad9</option>
+                      <option value="adguard">{t('settings.secureDnsAdguard')}</option>
+                      <option value="mullvad">Mullvad</option>
+                      <option value="custom">{t('settings.secureDnsCustom')}</option>
+                    </select>
+                    {settings.secureDns === 'custom' && (
+                      <SecureDnsCustomField
+                        value={settings.secureDnsCustomUrl}
+                        placeholder="https://dns.example.com/dns-query"
+                        invalidText={t('settings.secureDnsInvalid')}
+                        onCommit={(v) => onUpdateSettings({ secureDnsCustomUrl: v })}
+                      />
+                    )}
+                    {settings.secureDns !== 'off' && (
+                      <p className="text-[11px] text-amber-400/90">{t('settings.secureDnsStrict')}</p>
+                    )}
+                  </div>
                 </div>
 
                 <SitePermissionsSettings />

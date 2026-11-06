@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertTriangle,
+  ArrowLeft,
   Ban,
   Eye,
   Hourglass,
@@ -16,10 +17,11 @@ import {
   Hand,
   Gauge,
   Coffee,
+  LockOpen,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { TranslationKey } from '../i18n/translations';
-import { LoadErrorType } from '../browser/loadErrors';
+import { LoadErrorType, certErrorReason } from '../browser/loadErrors';
 
 interface ErrorPageProps {
   errorType: LoadErrorType;
@@ -32,6 +34,14 @@ interface ErrorPageProps {
   onHome: () => void;
   /** The server did send something: let the user see it instead of this screen */
   onShowResponse?: () => void;
+  /** Leave the failed page (history back, or home when there is no history) */
+  onBack?: () => void;
+  /** Certificate errors: what the browser knows about the refused certificate */
+  certInfo?: CertificateErrorInfo | null;
+  /** Certificate errors: trust this certificate for this host in this tab and load the page */
+  onProceedUnsafe?: () => void;
+  /** HTTPS-only mode: open the site over unencrypted http after all */
+  onOpenHttp?: () => void;
 }
 
 type IconType = React.ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -49,6 +59,7 @@ const COPY: Record<Exclude<LoadErrorType, 'http'>, ErrorCopy> = {
   timeout: { icon: Hourglass, title: 'error.timeoutTitle', desc: 'error.timeoutDesc' },
   reset: { icon: Unplug, title: 'error.resetTitle', desc: 'error.resetDesc' },
   certificate: { icon: ShieldAlert, title: 'error.certTitle', desc: 'error.certDesc' },
+  httpsOnly: { icon: LockOpen, title: 'error.httpsOnlyTitle', desc: 'error.httpsOnlyDesc' },
   blocked: { icon: Ban, title: 'error.blockedTitle', desc: 'error.blockedDesc' },
   invalid_url: { icon: AlertTriangle, title: 'error.invalidUrlTitle', desc: 'error.invalidUrlDesc' },
   crashed: { icon: ServerCrash, title: 'error.crashedTitle', desc: 'error.crashedDesc' },
@@ -73,9 +84,29 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
   onReload,
   onHome,
   onShowResponse,
+  onBack,
+  certInfo,
+  onProceedUnsafe,
+  onOpenHttp,
 }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const { icon: Icon, title, desc } = errorType === 'http' ? httpCopy(httpStatus) : COPY[errorType];
+  let host = '';
+  try { host = new URL(url).host; } catch {}
+  const isCert = errorType === 'certificate';
+
+  let certReasonText = '';
+  if (isCert) {
+    const reason = certErrorReason(certInfo?.error || code || '', certInfo?.validStart);
+    const dateOf = (sec?: number) => (sec ? new Date(sec * 1000).toLocaleDateString(language === 'ru' ? 'ru-RU' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '?');
+    certReasonText = t(`error.certReason.${reason}` as TranslationKey, {
+      host: host || url,
+      date: dateOf(reason === 'notYetValid' ? certInfo?.validStart : certInfo?.validExpiry),
+      subject: certInfo?.subjectName || '?',
+      issuer: certInfo?.issuerName || '?',
+    });
+  }
 
   return (
     <div
@@ -95,18 +126,35 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
 
       <h2 className="text-[22px] font-normal tracking-tight mb-2.5">{t(title)}</h2>
 
-      <p className="text-[13px] text-[var(--fb-text-2)] max-w-[480px] mb-5 leading-relaxed">{t(desc)}</p>
+      <p className="text-[13px] text-[var(--fb-text-2)] max-w-[480px] mb-5 leading-relaxed">{t(desc, { host: host || url })}</p>
+
+      {certReasonText && (
+        <p id="error-cert-reason" className="text-[13px] text-[var(--fb-text)] max-w-[480px] mb-5 leading-relaxed">{certReasonText}</p>
+      )}
 
       {errorMessage && (
         <p className="text-[12px] text-[var(--fb-text-2)] max-w-[480px] mb-5 break-words">{errorMessage}</p>
       )}
 
       <div className="flex items-center gap-2.5 mb-6">
+        {onBack && (
+          <button
+            type="button"
+            id="error-back"
+            onClick={onBack}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[var(--fb-radius-md)] bg-[var(--fb-accent)] text-[var(--fb-on-accent)] text-xs font-medium hover:opacity-90 transition-opacity"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>{t('error.back')}</span>
+          </button>
+        )}
         <button
           type="button"
           id="error-try-again"
           onClick={onReload}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-[var(--fb-radius-md)] bg-[var(--fb-accent)] text-[var(--fb-on-accent)] text-xs font-medium hover:opacity-90 transition-opacity"
+          className={onBack
+            ? 'flex items-center gap-1.5 px-3.5 py-2 rounded-[var(--fb-radius-md)] border border-[var(--fb-border)] bg-[var(--fb-surface)] hover:bg-[var(--fb-surface-hover)] text-xs transition-colors'
+            : 'flex items-center gap-1.5 px-3.5 py-2 rounded-[var(--fb-radius-md)] bg-[var(--fb-accent)] text-[var(--fb-on-accent)] text-xs font-medium hover:opacity-90 transition-opacity'}
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>{t('error.tryAgain')}</span>
@@ -137,6 +185,48 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
         {url}
         {code && <span className="block mt-1">{code}</span>}
       </div>
+
+      {errorType === 'httpsOnly' && onOpenHttp && (
+        <div className="mt-5 max-w-[480px] flex flex-col items-center gap-2.5">
+          <p className="text-[12px] text-[var(--fb-text-2)] leading-relaxed">{t('error.httpsOnlyHint')}</p>
+          <button
+            type="button"
+            id="error-open-http"
+            onClick={onOpenHttp}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[var(--fb-radius-md)] border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 text-xs transition-colors"
+          >
+            <LockOpen className="w-3.5 h-3.5" />
+            <span>{t('error.httpsOnlyOpenHttp')}</span>
+          </button>
+        </div>
+      )}
+
+      {isCert && onProceedUnsafe && (
+        <div className="mt-5 max-w-[480px] flex flex-col items-center">
+          <button
+            type="button"
+            id="error-cert-advanced"
+            aria-expanded={showAdvanced}
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="text-[11px] text-[var(--fb-text-3)] underline underline-offset-2 hover:text-[var(--fb-text-2)]"
+          >
+            {t('error.certAdvanced')}
+          </button>
+          {showAdvanced && (
+            <div className="mt-3 flex flex-col items-center gap-3">
+              <p className="text-[12px] text-[var(--fb-text-2)] leading-relaxed">{t('error.certProceedHint', { host: host || url })}</p>
+              <button
+                type="button"
+                id="error-cert-proceed"
+                onClick={onProceedUnsafe}
+                className="text-[12px] text-red-400 underline underline-offset-2 hover:text-red-300"
+              >
+                {t('error.certProceed')}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

@@ -6,6 +6,8 @@ export type LoadErrorType =
   | 'timeout'
   | 'reset'
   | 'certificate'
+  /** HTTPS-only mode upgraded an http address and the https page failed */
+  | 'httpsOnly'
   | 'blocked'
   | 'invalid_url'
   | 'crashed'
@@ -17,6 +19,33 @@ export interface LoadError {
   /** Shown under the text: Chromium's error name or the HTTP status line */
   code: string;
   httpStatus?: number;
+}
+
+/** Why a certificate was refused, as shown on the "connection is not private" page */
+export type CertErrorReason = 'expired' | 'notYetValid' | 'name' | 'authority' | 'revoked' | 'weak' | 'invalid';
+
+const CERT_REASONS: Record<string, CertErrorReason> = {
+  ERR_CERT_COMMON_NAME_INVALID: 'name',
+  ERR_CERT_NON_UNIQUE_NAME: 'name',
+  ERR_CERT_NAME_CONSTRAINT_VIOLATION: 'name',
+  ERR_CERT_DATE_INVALID: 'expired',
+  ERR_CERT_AUTHORITY_INVALID: 'authority',
+  ERR_CERT_SYMANTEC_LEGACY: 'authority',
+  ERR_CERT_KNOWN_INTERCEPTION_BLOCKED: 'authority',
+  ERR_CERT_REVOKED: 'revoked',
+  ERR_CERT_WEAK_SIGNATURE_ALGORITHM: 'weak',
+  ERR_CERT_WEAK_KEY: 'weak',
+};
+
+/**
+ * Reason for a certificate error from Chromium's error name ("ERR_CERT_DATE_INVALID" or
+ * "net::ERR_CERT_DATE_INVALID"). A date error is "expired" unless the certificate is not valid yet.
+ */
+export function certErrorReason(code: string, validStartSec = 0, nowMs = Date.now()): CertErrorReason {
+  const name = String(code || '').replace(/^net::/, '').trim().toUpperCase();
+  const reason = CERT_REASONS[name] ?? 'invalid';
+  if (reason === 'expired' && validStartSec > 0 && validStartSec * 1000 > nowMs) return 'notYetValid';
+  return reason;
 }
 
 // Chromium net error codes (net/base/net_error_list.h)

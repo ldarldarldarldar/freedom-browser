@@ -12,6 +12,19 @@ declare global {
     size: number;
   }
 
+  /** The certificate a tab's last load was refused for (electron/main.cjs, certificate-error) */
+  interface CertificateErrorInfo {
+    url: string;
+    host: string;
+    /** Chromium's name, e.g. net::ERR_CERT_DATE_INVALID */
+    error: string;
+    subjectName: string;
+    issuerName: string;
+    /** Seconds since the epoch */
+    validStart: number;
+    validExpiry: number;
+  }
+
   /** Installed Chrome extension as reported by electron/extensions.cjs */
   interface FreedomExtensionInfo {
     folder: string;
@@ -76,6 +89,18 @@ declare global {
       pickCustomBackground: () => Promise<string | null>;
       setBrowserMode: (mode: 'performance' | 'quality') => Promise<boolean>;
       setDownloadSpeedLimit?: (kbps: number) => Promise<number>;
+      certificateError?: {
+        info: (webContentsId: number, url: string) => Promise<CertificateErrorInfo | null>;
+        allow: (webContentsId: number, url: string) => Promise<boolean>;
+      };
+      /** HTTPS-only mode: the http address a failed https page was upgraded from */
+      httpsOnly?: {
+        info: (webContentsId: number, url: string) => Promise<{ httpUrl: string; host: string } | null>;
+        /** Stops upgrading this host until the browser closes; resolves to the http address to load */
+        allowHttp: (webContentsId: number, url: string) => Promise<string | null>;
+      };
+      /** Toggles picture in picture for the playing (or largest) video of a tab */
+      pictureInPicture?: (webContentsId: number) => Promise<'entered' | 'exited' | 'none'>;
       sitePermissions?: {
         list: () => Promise<Array<{ origin: string; permission: string; decision: 'allow' | 'block' }>>;
         remove: (origin: string, permission: string) => Promise<boolean>;
@@ -96,9 +121,22 @@ declare global {
         remove: (folder: string) => Promise<void>;
         open: (folder: string, kind: 'popup' | 'options', anchor?: { x: number; y: number }) => Promise<boolean>;
       };
-      setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean; adBlockEnabled: boolean; checkForUpdates?: boolean }) => Promise<unknown>;
+      setPrivacySettings?: (settings: {
+        doNotTrack: boolean;
+        blockThirdPartyCookies: boolean;
+        popupsBlocked: boolean;
+        adBlockEnabled: boolean;
+        checkForUpdates?: boolean;
+        httpsOnly?: boolean;
+        spellcheck?: boolean;
+        secureDns?: string;
+        secureDnsCustomUrl?: string;
+      }) => Promise<unknown>;
       getHardwareAcceleration?: () => Promise<boolean>;
       setHardwareAcceleration?: (enabled: boolean) => Promise<boolean>;
+      /** null = automatic (Chromium decides). Takes effect after a restart. */
+      getRendererProcessLimit?: () => Promise<number | null>;
+      setRendererProcessLimit?: (limit: number | null) => Promise<boolean>;
       relaunchApp?: () => Promise<void>;
       getUserDataPath?: () => Promise<string>;
       chooseUserDataPath?: () => Promise<string | null>;

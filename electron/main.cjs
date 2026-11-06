@@ -8,6 +8,8 @@ const { UI_ORIGIN, UI_PARTITION, registerUiScheme, serveUi, migrateUiStorage } =
 const { createAdBlocker, STUB_SCHEME_PRIVILEGES } = require('./adblock.cjs');
 const { createPermissionManager, originOf } = require('./permissions.cjs');
 const { createUpdater } = require('./updater.cjs');
+const downloadNames = require('./download-names.cjs');
+const netPrivacy = require('./net-privacy.cjs');
 
 // Must happen before app ready
 registerUiScheme(protocol, [STUB_SCHEME_PRIVILEGES]);
@@ -98,18 +100,6 @@ if (!isHardwareAccelerationEnabled) {
   app.disableHardwareAcceleration();
 }
 
-// Expose V8 GC isolate hook in main process for deterministic memory reclamation
-const v8 = require('v8');
-const vm = require('vm');
-try {
-  v8.setFlagsFromString('--expose-gc');
-  if (!global.gc) {
-    global.gc = vm.runInNewContext('gc');
-  }
-} catch (err) {
-  console.warn('Failed to expose V8 gc in main process:', err);
-}
-
 // 1. Performance & Memory Optimization Command-Line Switches
 // Applied before app ready to strip telemetry, background daemons, and reduce process bloat
 app.commandLine.appendSwitch('disable-breakpad'); // Disables crash reporter threads & telemetry
@@ -125,7 +115,13 @@ const disableFeaturesList = process.platform === 'linux'
   : 'MediaRouter,OptimizationHints,InterestFeedContentSuggestions,Translate,CalculateNativeWinOcclusion';
 app.commandLine.appendSwitch('disable-features', disableFeaturesList);
 app.commandLine.appendSwitch('enable-features', 'V8FlushBaselineCode,V8FlushBytecode,V8MemoryReducer');
-app.commandLine.appendSwitch('renderer-process-limit', '6'); // Prevents runaway process explosion
+// Renderer process limit: Chromium decides by default (every site in its own process, as in Chrome).
+// A number can be set in Settings → Performance; read at startup only, so it applies after a restart.
+const RENDERER_LIMIT_MIN = 1;
+const RENDERER_LIMIT_MAX = 64;
+const validRendererLimit = (v) => (Number.isInteger(v) && v >= RENDERER_LIMIT_MIN && v <= RENDERER_LIMIT_MAX ? v : null);
+const startupRendererLimit = validRendererLimit(initialStorageConfig.rendererProcessLimit);
+if (startupRendererLimit) app.commandLine.appendSwitch('renderer-process-limit', String(startupRendererLimit));
 app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache (keeps working set lean)
 // Never add --expose-gc here: it would give every web page a deterministic gc(), a classic exploit primitive
 // Blocks third-party cookies inside the network stack, including document.cookie in cross-site iframes.
@@ -240,7 +236,7 @@ function takeDownloadCredit(bytes) {
   return limiter.tokens >= 0 ? 0 : Math.ceil((-limiter.tokens / downloadSpeedLimitBps) * 1000);
 }
 
-function startThrottledDownload({ url, ses, savePath, downloadId, referrer, isPrivate }) {
+function startThrottledDownload({ url, ses, savePath, downloadId, referrer, isPrivate, onEnd }) {
   const startTime = Date.now();
   let received = 0;
   let total = 0;
@@ -271,8 +267,9 @@ function startThrottledDownload({ url, ses, savePath, downloadId, referrer, isPr
     finished = true;
     activeDownloads.delete(downloadId);
     out.end(() => {
-      if (state !== 'completed') fs.rm(savePath, { force: true }, () => {});
+      if (state !== 'completed') fs.rm(savePath, { force: true }, () => onEnd?.());
       else {
+        onEnd?.();
         browserDownloads.add(savePath);
         markFromInternet(savePath, url, referrer);
       }
@@ -523,6 +520,9 @@ const MENU_STRINGS = {
     forward: 'Forward',
     reload: 'Reload',
     inspectElement: 'Inspect Element',
+    noSpellingSuggestions: 'No spelling suggestions',
+    addToDictionary: 'Add to Dictionary',
+    pictureInPicture: 'Picture in Picture',
   },
   ru: {
     openLink: 'Открыть ссылку',
@@ -541,23 +541,23 @@ const MENU_STRINGS = {
     forward: 'Вперед',
     reload: 'Перезагрузить',
     inspectElement: 'Исследовать элемент',
+    noSpellingSuggestions: 'Нет вариантов исправления',
+    addToDictionary: 'Добавить в словарь',
+    pictureInPicture: 'Картинка в картинке',
   },
 };
 
-// Helper: Generate safe non-colliding filepath in destination directory
-function getUniqueFilePath(dir, originalFilename) {
-  let filename = (originalFilename || 'download').replace(/[\\/:*?"<>|]/g, '_');
-  const ext = path.extname(filename);
-  const base = path.basename(filename, ext);
-  let target = path.join(dir, filename);
-  let counter = 1;
-  while (fs.existsSync(target)) {
-    filename = `${base} (${counter})${ext}`;
-    target = path.join(dir, filename);
-    counter++;
-  }
+// Paths held by downloads that have not ended yet (including ones waiting for approval as ".pending"),
+// so two downloads of the same name started together never get the same file
+const reservedDownloadPaths = new Set();
+
+// Safe, non-colliding path in the destination folder, reserved until releaseDownloadPath
+function reserveDownloadPath(dir, originalFilename) {
+  const target = downloadNames.getUniqueFilePath(dir, originalFilename, { reserved: reservedDownloadPaths });
+  reservedDownloadPaths.add(target);
   return target;
 }
+const releaseDownloadPath = (target) => reservedDownloadPaths.delete(target);
 
 function createWindow() {
   const iconPath = process.platform === 'win32'
@@ -711,7 +711,7 @@ function createWindow() {
     }
 
     const originalFilename = item.getFilename() || 'download';
-    const finalDownloadPath = getUniqueFilePath(downloadDir, originalFilename);
+    const finalDownloadPath = reserveDownloadPath(downloadDir, originalFilename);
 
     const downloadId = 'dl-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
     const isPrivate = Boolean(webContents && !webContents.isDestroyed() && webContents.session !== session.defaultSession);
@@ -723,8 +723,9 @@ function createWindow() {
       const ses = webContents?.session || session.defaultSession;
       const referrer = webContents && !webContents.isDestroyed() ? webContents.getURL() : '';
       approveDownload(webContents, shownName, itemUrl).then((approved) => {
-        if (approved) startThrottledDownload({ url: itemUrl, ses, savePath: finalDownloadPath, downloadId, referrer, isPrivate });
-      });
+        if (approved) startThrottledDownload({ url: itemUrl, ses, savePath: finalDownloadPath, downloadId, referrer, isPrivate, onEnd: () => releaseDownloadPath(finalDownloadPath) });
+        else releaseDownloadPath(finalDownloadPath);
+      }, () => releaseDownloadPath(finalDownloadPath));
       return;
     }
 
@@ -761,6 +762,7 @@ function createWindow() {
 
     const reportDone = () => {
       activeDownloads.delete(downloadId);
+      releaseDownloadPath(finalDownloadPath);
       const isCompleted = finished === 'completed' && fs.existsSync(finalDownloadPath);
       const finalState = isCompleted ? 'completed' : (finished === 'cancelled' ? 'cancelled' : 'interrupted');
       if (isCompleted) browserDownloads.add(finalDownloadPath);
@@ -800,7 +802,7 @@ function createWindow() {
       const refuse = () => {
         activeDownloads.delete(downloadId);
         try { item.cancel(); } catch {}
-        fs.rm(pendingPath, { force: true }, () => {});
+        fs.rm(pendingPath, { force: true }, () => releaseDownloadPath(finalDownloadPath));
       };
       approveDownload(webContents, shownName, downloadUrl).then((allowed) => {
         if (!allowed) return refuse();
@@ -906,6 +908,67 @@ function routeNewWindows(pageContents) {
   });
 }
 
+// ---- Certificate errors ----
+// Chromium rejects a bad certificate by default; the tab then shows the "connection is not private" page.
+// "Proceed anyway" adds an exception for one host and one certificate (fingerprint) in one tab only.
+// It lives in memory and goes away when the tab (and with it a private session's tab) is closed.
+const certExceptions = new Map(); // webContents id -> Set of `${host}|${fingerprint}`
+const lastCertErrors = new Map(); // webContents id -> details of the last main-frame certificate error
+const CERT_ERROR_TTL_MS = 30 * 60 * 1000;
+const hostOf = (u) => { try { return new URL(u).host.toLowerCase(); } catch { return ''; } };
+
+function forgetCertState(id) {
+  certExceptions.delete(id);
+  lastCertErrors.delete(id);
+}
+
+app.on('certificate-error', (event, contents, requestUrl, error, certificate, callback, isMainFrame) => {
+  const host = hostOf(requestUrl);
+  const fingerprint = certificate?.fingerprint || '';
+  const isTab = Boolean(contents) && !contents.isDestroyed() && contents.getType() === 'webview';
+  // Subresources and iframes are always refused, and only web tabs can ever get an exception
+  if (!isTab || !isMainFrame || !host || !fingerprint) return callback(false);
+  if (certExceptions.get(contents.id)?.has(`${host}|${fingerprint}`)) {
+    event.preventDefault();
+    return callback(true);
+  }
+  if (!lastCertErrors.has(contents.id) && !certExceptions.has(contents.id)) {
+    contents.once('destroyed', () => forgetCertState(contents.id));
+  }
+  lastCertErrors.set(contents.id, {
+    url: requestUrl,
+    host,
+    fingerprint,
+    error: String(error || ''),
+    subjectName: certificate.subjectName || '',
+    issuerName: certificate.issuerName || '',
+    validStart: certificate.validStart || 0,
+    validExpiry: certificate.validExpiry || 0,
+    at: Date.now(),
+  });
+  callback(false);
+});
+
+// What the error page shows about the certificate of this tab's last failed load
+handleUi('cert_error_info', (event, webContentsId, pageUrl) => {
+  const info = lastCertErrors.get(Number(webContentsId));
+  if (!info || info.host !== hostOf(pageUrl) || Date.now() - info.at > CERT_ERROR_TTL_MS) return null;
+  const { fingerprint, at, ...shown } = info;
+  return shown;
+});
+
+// "Proceed anyway (unsafe)": trusts exactly the certificate this tab was shown for this host
+handleUi('cert_allow', (event, webContentsId, pageUrl) => {
+  const id = Number(webContentsId);
+  const target = webContents.fromId(id);
+  const info = lastCertErrors.get(id);
+  if (!target || target.isDestroyed() || target.getType() !== 'webview') return false;
+  if (!info || info.host !== hostOf(pageUrl) || Date.now() - info.at > CERT_ERROR_TTL_MS) return false;
+  if (!certExceptions.has(id)) certExceptions.set(id, new Set());
+  certExceptions.get(id).add(`${info.host}|${info.fingerprint}`);
+  return true;
+});
+
 // Webview contents creation & security
 app.on('web-contents-created', (event, contents) => {
   // Pages see only the public address, never LAN addresses of the machine (also after camera/microphone access)
@@ -924,6 +987,9 @@ app.on('web-contents-created', (event, contents) => {
       webPreferences.sandbox = true;
       webPreferences.webviewTag = false;
       webPreferences.allowRunningInsecureContent = false;
+      // Chromium's built-in PDF viewer: without plugins a PDF link was only downloaded
+      webPreferences.plugins = true;
+      webPreferences.spellcheck = true;
       // A guest is transparent by default: an unstyled page would put black text on the dark browser window.
       // Opaque, it gets the canvas of its own color scheme: white, or dark for pages that ask for dark.
       webPreferences.transparent = false;
@@ -938,6 +1004,13 @@ app.on('web-contents-created', (event, contents) => {
   if (contents.getType() === 'webview') {
     configureBrowsingSession(contents.session);
     contents.setBackgroundThrottling(true);
+
+    // Speaker icon on the tab (src/components/TabBar.tsx): the renderer matches the id to its <webview>
+    contents.on('audio-state-changed', ({ audible }) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('webview-audio-state', { webContentsId: contents.id, audible: Boolean(audible) });
+      }
+    });
 
     routeNewWindows(contents);
 
@@ -1091,6 +1164,21 @@ app.on('web-contents-created', (event, contents) => {
       const isPrivate = contents.session !== session.defaultSession;
       const canOpen = (target) => isWebTabUrl(target, contents);
 
+      // 0. Spelling: suggestions for the word under the cursor (Settings → Main → Spell check)
+      if (params.isEditable && params.misspelledWord) {
+        const suggestions = (params.dictionarySuggestions || []).slice(0, 6);
+        for (const word of suggestions) {
+          menu.append(new MenuItem({ label: word, click: () => contents.replaceMisspelling(word) }));
+        }
+        if (suggestions.length === 0) menu.append(new MenuItem({ label: i18n.noSpellingSuggestions, enabled: false }));
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({
+          label: i18n.addToDictionary,
+          click: () => contents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
       // 1. Link Actions
       if (params.linkURL) {
         if (canOpen(params.linkURL)) {
@@ -1148,13 +1236,25 @@ app.on('web-contents-created', (event, contents) => {
         menu.append(new MenuItem({ type: 'separator' }));
       }
 
+      // 2b. Video: picture in picture (also in the tab's own menu, for players that hide this menu)
+      if (params.mediaType === 'video') {
+        menu.append(new MenuItem({
+          label: i18n.pictureInPicture,
+          click: () => { togglePictureInPicture(contents, params.frame).catch(() => {}); },
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
       // 3. Text Selection Actions
       if (params.selectionText && params.selectionText.trim().length > 0) {
         const text = params.selectionText.trim();
-        menu.append(new MenuItem({
-          label: i18n.copy,
-          role: 'copy',
-        }));
+        // In a text field the editing block below has its own Copy
+        if (!params.isEditable) {
+          menu.append(new MenuItem({
+            label: i18n.copy,
+            role: 'copy',
+          }));
+        }
         const truncated = text.length > 25 ? text.substring(0, 25) + '...' : text;
         menu.append(new MenuItem({
           label: i18n.searchWebFor.replace('%s', truncated),
@@ -1477,11 +1577,7 @@ handleUi('clean_ram', async () => {
       }
     }
 
-    // 1. Invoke V8 isolate GC in main process
-    if (global.gc) {
-      try { global.gc(); } catch {}
-    }
-
+    // No forced V8 gc here: measured in 0.6.5-2, it freed 1-4 MB of main-process heap and no RSS
     const allWebContents = webContents.getAllWebContents();
 
     // 3. Clear Chromium caches across all active webContents and defaultSession
@@ -1563,20 +1659,160 @@ handleUi('pick_custom_background', async () => {
   }
 });
 
-// Privacy settings mirrored from the renderer (Settings → Privacy). Defaults match src/settings/defaults.ts
-const privacyState = { doNotTrack: true, blockThirdPartyCookies: true, popupsBlocked: true, adBlockEnabled: true, checkForUpdates: true };
+// Privacy settings mirrored from the renderer (Settings → Privacy). Defaults match src/settings/defaults.ts.
+// HTTPS-only, secure DNS and spell check are also kept in storage-config.json, so they are in force
+// for the tabs restored at startup, before the UI has sent its settings.
+const privacyState = {
+  doNotTrack: true,
+  blockThirdPartyCookies: true,
+  popupsBlocked: true,
+  adBlockEnabled: true,
+  checkForUpdates: true,
+  httpsOnly: initialStorageConfig.httpsOnly === true,
+  spellcheck: initialStorageConfig.spellcheck !== false,
+  secureDns: netPrivacy.SECURE_DNS_CHOICES.includes(initialStorageConfig.secureDns) ? initialStorageConfig.secureDns : 'off',
+  secureDnsCustomUrl: typeof initialStorageConfig.secureDnsCustomUrl === 'string' ? initialStorageConfig.secureDnsCustomUrl : '',
+};
+const PERSISTED_PRIVACY_KEYS = ['blockThirdPartyCookies', 'httpsOnly', 'spellcheck', 'secureDns', 'secureDnsCustomUrl'];
+
+let appliedDnsKey = '';
+function applySecureDns() {
+  if (!app.isReady()) return;
+  const options = netPrivacy.secureDnsOptions(privacyState.secureDns, privacyState.secureDnsCustomUrl);
+  const key = JSON.stringify(options);
+  if (key === appliedDnsKey) return;
+  try {
+    app.configureHostResolver(options);
+    appliedDnsKey = key;
+  } catch (err) {
+    console.warn('[dns] configureHostResolver failed:', err.message);
+  }
+}
+
+// Russian and English dictionaries in every tab session (Chromium downloads them on first use)
+const SPELLCHECK_LANGUAGES = ['ru', 'en-US'];
+function applySpellcheck(ses) {
+  try {
+    ses.setSpellCheckerEnabled(privacyState.spellcheck);
+    if (privacyState.spellcheck && process.platform !== 'darwin') {
+      const available = new Set(ses.availableSpellCheckerLanguages || []);
+      const langs = SPELLCHECK_LANGUAGES.filter((l) => available.size === 0 || available.has(l));
+      if (langs.length) ses.setSpellCheckerLanguages(langs);
+    }
+  } catch (err) {
+    console.warn('[spellcheck]', err.message);
+  }
+}
+function applySpellcheckEverywhere() {
+  const sessions = new Set([session.defaultSession]);
+  for (const wc of webContents.getAllWebContents()) if (wc.getType() === 'webview') sessions.add(wc.session);
+  for (const ses of sessions) applySpellcheck(ses);
+}
+
 handleUi('set_privacy_settings', (event, next) => {
   if (next && typeof next === 'object') {
-    for (const key of Object.keys(privacyState)) {
+    for (const key of ['doNotTrack', 'blockThirdPartyCookies', 'popupsBlocked', 'adBlockEnabled', 'checkForUpdates', 'httpsOnly', 'spellcheck']) {
       if (typeof next[key] === 'boolean') privacyState[key] = next[key];
     }
+    if (netPrivacy.SECURE_DNS_CHOICES.includes(next.secureDns)) privacyState.secureDns = next.secureDns;
+    if (typeof next.secureDnsCustomUrl === 'string') privacyState.secureDnsCustomUrl = next.secureDnsCustomUrl.slice(0, 512);
   }
   adBlocker?.setEnabled(privacyState.adBlockEnabled);
-  // Applied by the command line switch at the next start
-  if (readStorageConfig().blockThirdPartyCookies !== privacyState.blockThirdPartyCookies) {
-    writeStorageConfig({ blockThirdPartyCookies: privacyState.blockThirdPartyCookies });
-  }
+  applySecureDns();
+  applySpellcheckEverywhere();
+  // Third-party cookies take effect through a command line switch at the next start; the rest is read at startup
+  const stored = readStorageConfig();
+  const changed = {};
+  for (const key of PERSISTED_PRIVACY_KEYS) if (stored[key] !== privacyState[key]) changed[key] = privacyState[key];
+  if (Object.keys(changed).length) writeStorageConfig(changed);
   return { ...privacyState };
+});
+
+// ---- HTTPS-only mode ----
+// Top-level http:// navigations are redirected to https:// (electron/net-privacy.cjs decides which).
+// When the https page then fails, the tab asks https_only_info and offers the http page instead.
+const allowedHttpHosts = new Set(); // hosts the user opened over http anyway, until the browser closes
+const httpsUpgrades = new Map(); // webContentsId -> { host, httpUrl, at }
+const HTTPS_UPGRADE_TTL_MS = 5 * 60 * 1000;
+
+function httpsOnlyRedirect(details) {
+  if (!privacyState.httpsOnly || details.resourceType !== 'mainFrame' || details.method !== 'GET') return null;
+  const wc = details.webContents;
+  if (!wc || wc.isDestroyed() || wc.getType() !== 'webview') return null;
+  const target = netPrivacy.httpsUpgradeTarget(details.url, allowedHttpHosts);
+  if (!target) return null;
+  if (!httpsUpgrades.has(wc.id)) wc.once('destroyed', () => httpsUpgrades.delete(wc.id));
+  httpsUpgrades.set(wc.id, { host: new URL(target).hostname, httpUrl: details.url, at: Date.now() });
+  return { redirectURL: target };
+}
+
+function upgradeFor(webContentsId, pageUrl) {
+  const entry = httpsUpgrades.get(webContentsId);
+  if (!entry || Date.now() - entry.at > HTTPS_UPGRADE_TTL_MS) return null;
+  try {
+    const u = new URL(pageUrl);
+    if (u.protocol !== 'https:' || u.hostname !== entry.host) return null;
+  } catch {
+    return null;
+  }
+  return entry;
+}
+
+const isWebviewId = (id) => {
+  const wc = webContents.fromId(Number(id));
+  return Boolean(wc && !wc.isDestroyed() && wc.getType() === 'webview');
+};
+
+// The http address this failed https page was upgraded from, or null when the browser did not upgrade it
+handleUi('https_only_info', (event, webContentsId, pageUrl) => {
+  if (!isWebviewId(webContentsId)) return null;
+  const entry = upgradeFor(Number(webContentsId), pageUrl);
+  return entry ? { httpUrl: entry.httpUrl, host: entry.host } : null;
+});
+
+// "Open the http site": no more upgrades for this host until the browser closes
+handleUi('https_only_allow', (event, webContentsId, pageUrl) => {
+  if (!isWebviewId(webContentsId)) return null;
+  const entry = upgradeFor(Number(webContentsId), pageUrl);
+  if (!entry) return null;
+  allowedHttpHosts.add(entry.host);
+  httpsUpgrades.delete(Number(webContentsId));
+  return entry.httpUrl;
+});
+
+// ---- Picture in picture ----
+// Runs in each frame with a user gesture (requestPictureInPicture needs one). Leaves picture in picture
+// when a video is already in it, otherwise takes the playing video, or the largest one.
+const PIP_SCRIPT = `(async () => {
+  if (document.pictureInPictureElement) { await document.exitPictureInPicture(); return 'exited'; }
+  if (!document.pictureInPictureEnabled) return 'none';
+  const videos = [...document.querySelectorAll('video')].filter((v) => v.readyState > 0);
+  if (!videos.length) return 'none';
+  const area = (v) => { const r = v.getBoundingClientRect(); return r.width * r.height; };
+  videos.sort((a, b) => (Number(!b.paused) - Number(!a.paused)) || (area(b) - area(a)));
+  const video = videos[0];
+  video.disablePictureInPicture = false;
+  await video.requestPictureInPicture();
+  return 'entered';
+})().catch((err) => 'error: ' + err.message)`;
+
+async function togglePictureInPicture(contents, preferredFrame) {
+  if (!contents || contents.isDestroyed()) return 'none';
+  const frames = [];
+  if (preferredFrame && !preferredFrame.isDestroyed?.()) frames.push(preferredFrame);
+  for (const frame of contents.mainFrame.framesInSubtree) if (!frames.includes(frame)) frames.push(frame);
+  for (const frame of frames) {
+    try {
+      const result = await frame.executeJavaScript(PIP_SCRIPT, true);
+      if (result === 'entered' || result === 'exited') return result;
+    } catch {}
+  }
+  return 'none';
+}
+
+handleUi('tab_picture_in_picture', async (event, webContentsId) => {
+  if (!isWebviewId(webContentsId)) return 'none';
+  return togglePictureInPicture(webContents.fromId(Number(webContentsId)));
 });
 
 // ---- Built-in ad blocker (electron/adblock.cjs), created on app ready ----
@@ -1620,15 +1856,8 @@ function isThirdPartyRequest(details) {
 }
 
 // Performance mode notification to main process
-handleUi('set_browser_mode', (event, mode) => {
-  if (mode === 'performance') {
-    // In performance mode, trigger GC in all web contents and main process to reclaim idle heap
-    if (global.gc) {
-      try { global.gc(); } catch {}
-    }
-  }
-  return true;
-});
+// Kept for the UI; the mode itself is applied in the renderer (a forced main-process gc gave nothing measurable)
+handleUi('set_browser_mode', () => true);
 
 // DevTools
 handleUi('open_devtools', () => {
@@ -1900,6 +2129,15 @@ handleUi('set_hardware_acceleration', (event, enabled) => {
   return true;
 });
 
+// Renderer process limit (null = automatic). Applied at the next start.
+handleUi('get_renderer_process_limit', () => validRendererLimit(readStorageConfig().rendererProcessLimit));
+handleUi('set_renderer_process_limit', (event, limit) => {
+  const value = limit === null ? null : validRendererLimit(Number(limit));
+  if (limit !== null && value === null) return false;
+  writeStorageConfig({ rendererProcessLimit: value });
+  return true;
+});
+
 handleUi('relaunch_app', () => {
   app.relaunch();
   app.exit(0);
@@ -1958,6 +2196,7 @@ function configureBrowsingSession(ses) {
   if (!ses || configuredSessions.has(ses)) return;
   configuredSessions.add(ses);
   permissionManager?.attach(ses);
+  applySpellcheck(ses);
   ses.setUserAgent(desktopChromeUA);
   // Guarantee all outgoing HTTP/HTTPS requests advertise desktop Chrome without mobile hints
   ses.webRequest.onBeforeSendHeaders((details, callback) => {
@@ -1977,9 +2216,13 @@ function configureBrowsingSession(ses) {
 
   // Ad & tracker blocking for pages in browser tabs
   adBlocker?.serveStubs(ses);
+  // One listener per session: HTTPS-only upgrades first, then the ad blocker
   ses.webRequest.onBeforeRequest((details, callback) => {
     let verdict = null;
-    try { verdict = adBlocker?.matchRequest(details); } catch {}
+    try { verdict = httpsOnlyRedirect(details); } catch (err) { console.warn('[https-only]', err.message); }
+    if (!verdict) {
+      try { verdict = adBlocker?.matchRequest(details); } catch {}
+    }
     callback(verdict || {});
   });
 
@@ -2148,6 +2391,8 @@ async function encryptOldCookies() {
 app.whenReady().then(async () => {
   app.userAgentFallback = desktopChromeUA;
   session.defaultSession.setUserAgent(desktopChromeUA);
+  // Before any tab exists, so restored tabs never resolve names through the system first
+  applySecureDns();
 
   permissionManager = createPermissionManager({
     app,

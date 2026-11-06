@@ -9,7 +9,6 @@ import { AboutModal } from './pages/AboutModal';
 import { UpdateDialog } from './components/UpdateDialog';
 import { DownloadDrawer } from './components/DownloadDrawer';
 import { DevToolsDrawer } from './components/DevToolsDrawer';
-import { FreenMascot } from './components/FreenMascot';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { BookmarksDrawer } from './components/BookmarksDrawer';
 import { BookmarksBar } from './components/BookmarksBar';
@@ -58,6 +57,10 @@ export default function App() {
       if (!stored) return DEFAULT_SETTINGS;
       const storedSettings = JSON.parse(stored);
       const parsed = { ...DEFAULT_SETTINGS, ...storedSettings };
+      // Settings of removed features (an old profile keeps them) are dropped, so saving never writes them back
+      for (const key of Object.keys(parsed)) {
+        if (!Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) delete (parsed as Record<string, unknown>)[key];
+      }
       // Bing and Ecosia were removed in 0.6.3: fall back to the default engine
       if (!SEARCH_ENGINES.some((engine) => engine.id === parsed.defaultSearchEngine) && parsed.defaultSearchEngine !== 'custom') {
         parsed.defaultSearchEngine = DEFAULT_SETTINGS.defaultSearchEngine;
@@ -660,26 +663,47 @@ export default function App() {
   );
 
   // Session Restore & Application Close Handlers
-  const handleAttemptClose = useCallback(() => {
-    if (SessionRestoreService.hasRestorableTabs(tabs)) {
-      setShowCloseConfirmModal(true);
-    } else {
-      SessionRestoreService.clearSavedSession();
-      tauriBridge.forceClose();
-    }
-  }, [tabs]);
+  // "Remember my choice" in the close dialog, or Settings → Main → When closing with open tabs
+  const rememberCloseChoice = useCallback((action: 'save' | 'discard') => {
+    const next = { ...settings, onCloseWithTabs: action };
+    setSettings(next);
+    // Written right away: the window closes before the effect that persists settings would run
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {}
+  }, [settings]);
 
-  const handleConfirmCloseWithoutSaving = useCallback(() => {
+  const closeKeepingTabs = useCallback(() => {
+    setShowCloseConfirmModal(false);
+    SessionRestoreService.saveSession(tabs, activeTabId);
+    tauriBridge.forceClose();
+  }, [tabs, activeTabId]);
+
+  const closeDiscardingTabs = useCallback(() => {
     setShowCloseConfirmModal(false);
     SessionRestoreService.clearSavedSession();
     tauriBridge.forceClose();
   }, []);
 
-  const handleConfirmSaveAndClose = useCallback(() => {
-    setShowCloseConfirmModal(false);
-    SessionRestoreService.saveSession(tabs, activeTabId);
-    tauriBridge.forceClose();
-  }, [tabs, activeTabId]);
+  const handleAttemptClose = useCallback(() => {
+    if (!SessionRestoreService.hasRestorableTabs(tabs)) {
+      closeDiscardingTabs();
+    } else if (settings.onCloseWithTabs === 'save') {
+      closeKeepingTabs();
+    } else if (settings.onCloseWithTabs === 'discard') {
+      closeDiscardingTabs();
+    } else {
+      setShowCloseConfirmModal(true);
+    }
+  }, [tabs, settings.onCloseWithTabs, closeKeepingTabs, closeDiscardingTabs]);
+
+  const handleConfirmCloseWithoutSaving = useCallback((remember: boolean) => {
+    if (remember) rememberCloseChoice('discard');
+    closeDiscardingTabs();
+  }, [rememberCloseChoice, closeDiscardingTabs]);
+
+  const handleConfirmSaveAndClose = useCallback((remember: boolean) => {
+    if (remember) rememberCloseChoice('save');
+    closeKeepingTabs();
+  }, [rememberCloseChoice, closeKeepingTabs]);
 
   const handleCancelClose = useCallback(() => {
     setShowCloseConfirmModal(false);
@@ -1163,6 +1187,30 @@ export default function App() {
     [activeTabId, handleReload]
   );
 
+  // Speaker icon: the main process reports audio per webContents, matched here to the tab's <webview>
+  const tabsForAudioRef = useRef(tabs);
+  tabsForAudioRef.current = tabs;
+  useEffect(() => {
+    return window.electronAPI?.on?.('webview-audio-state', ({ webContentsId, audible }: { webContentsId: number; audible: boolean }) => {
+      const tab = tabsForAudioRef.current.find((t) => {
+        try { return tauriBridge.getWebview(t.id)?.getWebContentsId?.() === webContentsId; } catch { return false; }
+      });
+      if (!tab || Boolean(tab.isAudioPlaying) === audible) return;
+      setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, isAudioPlaying: audible } : t)));
+    });
+  }, []);
+
+  const handleToggleMuteTab = useCallback((tabId: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isMuted: !t.isMuted } : t)));
+  }, []);
+
+  const handlePictureInPicture = useCallback((tabId: string) => {
+    try {
+      const id = tauriBridge.getWebview(tabId)?.getWebContentsId?.();
+      if (id) window.electronAPI?.pictureInPicture?.(id);
+    } catch {}
+  }, []);
+
   const handleSortTabs = useCallback(
     async (mode: TabSortMode) => {
       setActiveSortMode(mode);
@@ -1528,6 +1576,7 @@ export default function App() {
         favicon?: string;
         canGoBack: boolean;
         canGoForward: boolean;
+        insecure?: boolean;
       }
     ) => {
       setTabs((prev) =>
@@ -1559,7 +1608,7 @@ export default function App() {
                 data.canGoBack ||
                 (!isInternal && (t.history[t.historyIndex - 1] || '').startsWith('freedom://')),
               canGoForward: data.canGoForward,
-              security: isInternal ? 'internal' : url.startsWith('https://') ? 'secure' : 'insecure',
+              security: isInternal ? 'internal' : url.startsWith('https://') && !data.insecure ? 'secure' : 'insecure',
               lastActive: Date.now(),
             };
           }
@@ -2176,8 +2225,15 @@ export default function App() {
       popupsBlocked: settings.popupsBlocked,
       adBlockEnabled: settings.adBlockEnabled,
       checkForUpdates: settings.checkForUpdates,
+      httpsOnly: settings.httpsOnly,
+      spellcheck: settings.spellcheck,
+      secureDns: settings.secureDns,
+      secureDnsCustomUrl: settings.secureDnsCustomUrl,
     });
-  }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled, settings.checkForUpdates]);
+  }, [
+    settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled, settings.checkForUpdates,
+    settings.httpsOnly, settings.spellcheck, settings.secureDns, settings.secureDnsCustomUrl,
+  ]);
 
   // Download speed cap is enforced by the main-process download governor
   useEffect(() => {
@@ -2448,6 +2504,8 @@ export default function App() {
             splitViewState={splitViewState}
             onOpenInSplitView={handleOpenInSplitView}
             onCloseWindow={handleAttemptClose}
+            onToggleMuteTab={handleToggleMuteTab}
+            onPictureInPicture={handlePictureInPicture}
           />
 
           {toolbarDock === 'top' && navigationBar}
@@ -2721,14 +2779,11 @@ export default function App() {
       {/* Close & Session Restore Confirmation Modal */}
       <CloseConfirmationModal
         isOpen={showCloseConfirmModal}
-        tabsCount={tabs.length}
+        tabs={tabs}
         onConfirmCloseWithoutSaving={handleConfirmCloseWithoutSaving}
         onConfirmSaveAndClose={handleConfirmSaveAndClose}
         onCancel={handleCancelClose}
       />
-
-      {/* Freedom Mascot: Freen in bottom-right corner */}
-      <FreenMascot enabled={settings.showFreenMascot} />
     </div>
     </I18nProvider>
   );

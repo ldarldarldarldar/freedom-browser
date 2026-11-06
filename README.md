@@ -14,12 +14,12 @@
 2. **Programming** — Integrated developer console, network inspector, WebAssembly & DOM inspection.
 3. **Speed** — Low RAM usage, idle tab hibernation, hardware acceleration, and rapid startup.
 
-> **Freedom Browser 0.6.5-91** — redesigned graphite UI with a new logo, built on **Electron + Chromium** (the Tauri/Rust notes below are historical).
+> **Freedom Browser 0.6.6-91** — redesigned graphite UI with a new logo, built on **Electron + Chromium**.
 >
 > ```bash
 > npm ci
-> npm run build:appimage   # release/Freedom-Browser-0.6.5-91-x86_64.AppImage
-> npm run build:win        # release/Freedom-Browser-0.6.5-91-x64-Setup.exe — installer (CI builds it on windows-latest)
+> npm run build:appimage   # release/Freedom-Browser-0.6.6-91-x86_64.AppImage
+> npm run build:win        # release/Freedom-Browser-0.6.6-91-x64-Setup.exe — installer (CI builds it on windows-latest)
 > ```
 > Design tokens and the redesign notes: [REDESIGN_REPORT.md](REDESIGN_REPORT.md).
 
@@ -27,9 +27,9 @@
 
 ## 1. Project Overview
 
-Freedom is an actual desktop application built with a native Rust backend and Tauri 2.x, interfacing with the operating system's native modern browser engine:
-- **Windows 10/11**: Microsoft Edge WebView2 (Chromium engine with system-level optimization).
-- **Linux (Arch, Fedora, Debian/Ubuntu)**: WebKitGTK (Safari/WebKit engine with native GTK3 integration).
+Freedom is a desktop browser built on **Electron + Chromium**: the browser UI is a React + TypeScript app,
+and every tab is a sandboxed Chromium `<webview>` with its own renderer process. The same build runs on
+Windows 10/11 and Linux (Arch, CachyOS, Fedora, Debian/Ubuntu).
 
 Freedom delivers compatibility with modern web standards:
 - **HTML5 & CSS3**: Flexbox, CSS Grid, animations, modern viewport units.
@@ -43,69 +43,30 @@ Freedom delivers compatibility with modern web standards:
 
 ## 2. Architecture & Directory Structure
 
-Freedom uses a strict separation between the native platform layer and the minimal browser user interface:
-
 ```
-├── src/                               # Frontend Browser UI & Shell
-│   ├── browser/
-│   │   ├── types.ts                   # Tab, download, log, bookmark types
-│   │   └── WebviewContainer.tsx       # Embedded webview container & sandbox host
-│   ├── components/
-│   │   ├── DevToolsDrawer.tsx         # In-browser developer tools, console & network inspector
-│   │   ├── DownloadDrawer.tsx         # Download manager popover & progress tracker
-│   │   ├── FreedomLogo.tsx            # Minimalist mint "F" in dark green shield
-│   │   ├── Navigation.tsx             # Back, Forward, Reload, Home, Omni bar, Menu
-│   │   ├── StarCanvas.tsx             # GPU-accelerated subtle moving star field
-│   │   └── TabBar.tsx                 # Desktop tab bar with audio & hibernation indicators
-│   ├── pages/
-│   │   ├── AboutModal.tsx             # Freedom version, engine details & open-source license
-│   │   ├── ErrorPage.tsx              # Error handler (DNS, offline, certificate, crashed tab)
-│   │   ├── NewTabPage.tsx             # Clean start page with digital clock & quick shortcuts
-│   │   ├── SettingsModal.tsx          # Full settings (Search, Privacy, Telemetry, Visual, RAM)
-│   │   └── TaskManagerModal.tsx       # Real-time process inspector with CPU & RAM metrics
-│   ├── services/
-│   │   ├── loggerService.ts           # Zero-telemetry local diagnostics logger
-│   │   ├── searchEngineService.ts     # Omni bar URL resolution & search engine provider
-│   │   └── tauriBridge.ts             # Safe IPC bridge between React and Rust Tauri backend
-│   ├── settings/
-│   │   ├── defaults.ts                # Default browser settings & search engines
-│   │   └── types.ts                   # Settings schema
-│   ├── taskmanager/
-│   │   └── types.ts                   # Task manager process metric definitions
-│   ├── App.tsx                        # Main application orchestrator & keyboard shortcuts
-│   └── main.tsx                       # Entry point
-│
-├── src-tauri/                         # Native Rust Core (Desktop Backend)
-│   ├── Cargo.toml                     # Rust 2021 crate dependencies
-│   ├── tauri.conf.json                # Tauri 2 configuration (window, permissions, bundles)
-│   ├── build.rs                       # Tauri build script
-│   ├── icons/                         # Desktop application icons (32x32, 128x128, 512x512, ico)
-│   └── src/
-│       ├── main.rs                    # Entry point for native binary
-│       ├── lib.rs                     # Tauri plugin initialization & IPC handlers
-│       ├── commands/
-│       │   ├── browser.rs             # Window title, devtools, close app
-│       │   ├── downloads.rs           # Native file download & folder launcher
-│       │   ├── logging.rs             # Local diagnostic file writer
-│       │   ├── settings.rs            # Native settings persistence
-│       │   └── taskmanager.rs         # Real system process metrics & termination
-│       ├── browser/
-│       │   └── manager.rs             # Webview tab memory management
-│       ├── system/
-│       │   └── metrics.rs             # Real OS memory & CPU inspection using sysinfo
-│       └── taskmanager/
-│           └── process_info.rs        # Process termination & memory reclamation
-│
-├── scripts/
-│   ├── AppRun                         # AppImage execution launcher
-│   ├── Freedom.desktop                # Linux desktop menu & mime-type entry
-│   ├── build-linux.sh                 # Linux compilation & AppImage generator
-│   ├── build-windows.ps1              # Windows PowerShell compilation script
-│   ├── generate-icons.js              # Vector-to-raster icon asset generator
-│   └── package-appimage.sh            # Standalone AppImage bundler
-└── public/
-    ├── logo.svg                       # Official brand vector
-    └── icon.png                       # High-resolution raster asset
+├── electron/                          # Main process (Node.js side of Electron)
+│   ├── main.cjs                       # Windows, tabs, downloads, certificates, IPC handlers
+│   ├── preload.cjs                    # The only API the browser UI gets (window.electronAPI)
+│   ├── webview-preload.cjs            # Compatibility layer injected into web pages
+│   ├── ui-host.cjs                    # Serves the UI from freedom-app://ui/ in its own session
+│   ├── adblock.cjs                    # Ghostery ad & tracker blocker
+│   ├── extensions.cjs                 # Chrome extensions (folder, .crx, Chrome Web Store)
+│   ├── permissions.cjs                # Per-site permission prompts and decisions
+│   ├── download-names.cjs             # Safe, non-colliding download file names
+│   ├── net-privacy.cjs                # HTTPS-only upgrades and DNS-over-HTTPS options
+│   ├── updater.cjs, update-core.cjs   # Signed self-update (update.json)
+│   └── leveldb-reader.cjs             # One-time migration of old file:// localStorage
+├── src/                               # Browser UI (React + TypeScript, built by Vite into dist/)
+│   ├── browser/                       # Tab types, webview container, load error mapping
+│   ├── components/                    # Tab bar, navigation, drawers, settings sections
+│   ├── pages/                         # New Tab, Settings, error page, Task Manager, About
+│   ├── services/                      # History, bookmarks, sessions, search, IPC bridge
+│   ├── settings/                      # Settings schema, defaults, theme presets
+│   ├── i18n/                          # English and Russian strings
+│   └── App.tsx                        # Main application orchestrator & keyboard shortcuts
+├── scripts/                           # Tests and the update manifest signer
+├── build/                             # App icons and the NSIS installer script
+└── .github/workflows/release.yml      # CI: tests, Linux AppImage, Windows installer + zip
 ```
 
 ---
@@ -114,112 +75,39 @@ Freedom uses a strict separation between the native platform layer and the minim
 
 ### End-User Dependencies (ZERO Runtime Requirements)
 
-The final distributed application is a self-contained native executable:
-- **Windows**: `Freedom.exe` or `Freedom-setup.exe` (uses built-in Windows WebView2 runtime).
-- **Linux**: `Freedom.AppImage` (runs on Arch, CachyOS, Fedora, Debian, Ubuntu).
-- **Node.js, npm, Rust, Cargo, or Python are NOT required** on the user's computer to run Freedom.
+The release files carry their own Chromium runtime:
+- **Windows**: `Freedom-Browser-<version>-x64-Setup.exe` (installer) or the portable `-x64.zip`.
+- **Linux**: `Freedom-Browser-<version>-x86_64.AppImage` or the `linux-x64.tar.gz` archive.
+- **Node.js and npm are NOT required** on the user's computer to run Freedom.
 
 ### Developer Build-Time Requirements
 
-To compile Freedom from source:
-1. **Node.js & npm** (v18 or higher) — for bundling the UI.
-2. **Rust & Cargo** (v1.75 or higher) — for compiling the native browser core.
-3. Platform-specific build tools:
-   - **Linux**: `gcc`, `pkg-config`, `libwebkit2gtk-4.1-dev` (or `4.0`), `libgtk-3-dev`, `libayatana-appindicator3-dev`.
-   - **Windows**: Microsoft C++ Build Tools (Visual Studio Build Tools) and Windows 10/11 SDK.
+- **Node.js 22+ & npm** — everything else (Electron, electron-builder, Vite) comes from `npm ci`.
+- A Windows installer is best built by CI on `windows-latest` (see `.github/workflows/release.yml`).
 
 ---
 
 ## 4. Development Commands
 
-Run the browser in development mode with live interface reloading:
-
 ```bash
-# Install frontend dependencies
-npm install
-
-# Run the local preview (port 3000)
-npm run dev
-
-# Run inside native desktop window with Tauri 2
-cargo tauri dev
+npm ci                 # install dependencies
+npm run dev            # UI dev server on http://127.0.0.1:3000
+npm run electron:dev   # Electron window that loads the dev server
+npm run lint           # type check
+npm run test:update && npm run test:address && npm run test:downloads && npm run test:net   # logic tests
 ```
 
 ---
 
 ## 5. Production Build Commands
 
-### Building for Linux (.AppImage & .deb)
-
-On modern Linux distributions (Arch, CachyOS, Fedora, Ubuntu):
-
 ```bash
-# 1. Install system prerequisites (Ubuntu/Debian example)
-sudo apt-get update
-sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-# 2. Compile frontend and native binary
-npm run build
-cd src-tauri
-cargo build --release
-
-# 3. Create the standalone AppImage
-cd ..
-./scripts/build-linux.sh
+npm run build:appimage   # release/Freedom-Browser-<version>-x86_64.AppImage (+ release/linux-unpacked)
+npm run build:win        # release/Freedom-Browser-<version>-x64-Setup.exe and -x64.zip
 ```
 
-The resulting package is located at:
-`src-tauri/target/release/bundle/appimage/Freedom_1.0.0_amd64.AppImage`
-
-Make it executable and launch directly:
-```bash
-chmod +x Freedom.AppImage
-./Freedom.AppImage
-```
-
-### 5. Building Freedom Browser (.AppImage for Linux & .exe for Windows)
-
-Freedom supports full native cross-platform desktop compilation using Electron and Chromium webviews:
-
-#### A. Linux `.AppImage` (x86_64)
-Run from the root directory:
-```bash
-npm run build:appimage
-```
-- **Generated File**: `release/Freedom-1.0.0.AppImage` (and `./Freedom.AppImage`)
-- **Execution**: `chmod +x ./Freedom.AppImage && ./Freedom.AppImage`
-- **Features**: Standalone, portable, works out of the box on all modern Linux distributions (Arch, CachyOS, Ubuntu, Fedora, Debian) without installing extra dependencies.
-
-#### B. Windows `.exe` & Distribution Package
-Run on Linux or Windows:
-```bash
-npm run build:win
-```
-- **Generated Files**:
-  - `release/Freedom 1.0.0.exe` (and `./Freedom.exe`) — Standalone portable Windows executable.
-  - `release/Freedom-1.0.0-win.zip` (and `./Freedom-windows-x64.zip`) — Portable Windows archive containing `Freedom.exe` and complete Chromium runtime.
-- **Execution on Windows**: Double-click `Freedom.exe`. No installation, Node.js, or external runtimes required.
-
-#### C. Build All Platforms at Once
-```bash
-npm run build:dist
-```
-
----
-
-### Alternative: Rust/Tauri 2 Pipeline
-
-If you have the native Rust and WebKitGTK/WebView2 toolchains installed:
-
-#### Linux (Tauri)
-```bash
-bash scripts/build-linux.sh
-```
-
-#### Windows (Tauri via PowerShell)
-```powershell
-.\scripts\build-windows.ps1
-```
+The AppImage is standalone: `chmod +x Freedom-Browser-*.AppImage && ./Freedom-Browser-*.AppImage`.
+Releases are built and tested by CI on every `v*` tag.
 
 ---
 
@@ -231,6 +119,9 @@ Freedom has **ZERO remote telemetry by default**:
 - No usage statistics, browsing history, URLs, or device IDs are sent to developers or third parties.
 - No Google Analytics, no Sentry, no tracking pixels.
 - **Update checks**: once per start the browser asks GitHub for the latest release (switch: `Settings -> Privacy`), and Chrome Web Store extensions are checked for updates at Google's update server, as in Chrome. No browsing data is included.
+- **Spell check** (`Settings -> Main`, on by default) uses Chromium's Hunspell dictionaries for Russian and English, which Chromium downloads once from Google's servers. Turn it off and nothing is downloaded.
+- **HTTPS-only mode** (`Settings -> Privacy`, off by default): top-level `http://` pages are opened over `https://`; when a site has no HTTPS the browser shows a warning and lets you open the HTTP page for the rest of the session. Local network and IP addresses are never upgraded.
+- **Secure DNS** (`Settings -> Privacy`, off by default): Cloudflare, Quad9, AdGuard, Mullvad or your own DoH server, in strict mode — if the server cannot be reached, names do not resolve instead of silently going to your provider.
 - **Telemetry Setting**: Under `Settings -> Telemetry`, a single switch controls `[ OFF ] Local diagnostic logs`.
 - When enabled, logs are written strictly to the local device (`~/.config/freedom-browser/diagnostic.log` on Linux or `%APPDATA%\freedom-browser\diagnostic.log` on Windows) and can be cleared or exported by the user at any time.
 
@@ -241,8 +132,8 @@ Freedom has **ZERO remote telemetry by default**:
 Low RAM usage is a first-class architectural requirement:
 1. **Inactive Tab Hibernation**: When tabs remain inactive beyond the configured threshold (e.g. 15 minutes), Freedom suspends the renderer process to free RAM. The tab remains in the tab bar and restores instantly when clicked.
 2. **GPU-Accelerated Starscape**: The Black Space animated star background is rendered on a single HTML5 2D canvas with `requestAnimationFrame`. When the window is hidden, minimized, or viewing media, animation work pauses automatically to prevent CPU/battery drain.
-3. **Real-time Task Manager (`Shift+Esc`)**: Exposes real operating system process tree statistics (RAM, CPU, PID, status) via the `sysinfo` crate. Problematic pages can be terminated or suspended individually without crashing other tabs.
-4. **Process Isolation**: Every tab runs in an isolated process space provided by the platform engine.
+3. **Real-time Task Manager (`Shift+Esc`)**: Exposes real operating system process tree statistics (RAM, CPU, PID, status) from Chromium's process metrics. Problematic pages can be terminated or suspended individually without crashing other tabs.
+4. **Process Isolation**: Every tab runs in its own sandboxed Chromium renderer process (Settings → Browser Mode & RAM can cap the number of page processes).
 
 ---
 

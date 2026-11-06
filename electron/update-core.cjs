@@ -107,13 +107,32 @@ function windowsInstallerCommand(setupPath) {
 // AppRun points these at the mount of the AppImage that is about to exit
 const APPIMAGE_ENV = ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD', 'LD_LIBRARY_PATH', 'CHROME_DESKTOP'];
 
+// Electron leaves most of its descriptors inheritable (the .pak files, app.asar and icudtl.dat of the
+// mounted AppImage, profile files, sockets). A child keeps them open, so the old AppImage stayed mounted
+// for as long as the new version ran. The helper closes everything but stdin/out/err before waiting.
+// dash (the usual /bin/sh) cannot name descriptors above 9, bash can.
+const CLOSE_ALL_FDS = 'for f in /proc/$$/fd/*; do n=${f##*/}; case $n in 0|1|2) ;; *) eval "exec $n>&-" 2>/dev/null ;; esac; done';
+const CLOSE_LOW_FDS = 'for n in 3 4 5 6 7 8 9; do eval "exec $n>&-"; done';
+const WAIT_AND_EXEC = 'i=0; while kill -0 "$1" 2>/dev/null && [ "$i" -lt 150 ]; do sleep 0.2; i=$((i+1)); done; exec "$2"';
+
+function findBash(exists = fs.existsSync) {
+  return ['/bin/bash', '/usr/bin/bash'].find((p) => exists(p)) || null;
+}
+
+/** The shell command that waits for `pid` to exit, then replaces itself with `target`. */
+function relaunchCommand(target, pid, { bash = findBash() } = {}) {
+  const shell = bash || '/bin/sh';
+  const script = `${bash ? CLOSE_ALL_FDS : CLOSE_LOW_FDS}; ${WAIT_AND_EXEC}`;
+  return { file: shell, args: ['-c', script, 'relaunch', String(pid), target] };
+}
+
 /** Starts `target` once process `pid` is gone: the new version would otherwise lose the single-instance lock to it. */
 function startAfterExit(target, pid, cwd) {
   const env = { ...process.env };
   for (const name of APPIMAGE_ENV) delete env[name];
-  const script = 'i=0; while kill -0 "$1" 2>/dev/null && [ "$i" -lt 150 ]; do sleep 0.2; i=$((i+1)); done; exec "$2"';
-  const child = spawn('/bin/sh', ['-c', script, 'sh', String(pid), target], { detached: true, stdio: 'ignore', env, cwd });
+  const { file, args } = relaunchCommand(target, pid);
+  const child = spawn(file, args, { detached: true, stdio: 'ignore', env, cwd });
   child.unref();
 }
 
-module.exports = { isNewerVersion, verifyUpdateFile, isInstalledCopy, nextAppImagePath, windowsInstallerCommand, startAfterExit };
+module.exports = { isNewerVersion, verifyUpdateFile, isInstalledCopy, nextAppImagePath, windowsInstallerCommand, startAfterExit, relaunchCommand };

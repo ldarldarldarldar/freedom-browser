@@ -90,16 +90,8 @@ export class TauriBridge {
   /**
    * Invoke a Tauri Rust backend command safely
    */
-  public async invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T | null> {
-    if (isTauriEnvironment()) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        return await invoke<T>(command, args);
-      } catch (err) {
-        console.warn(`[TauriBridge] Native command '${command}' error:`, err);
-        return null;
-      }
-    }
+  // The Tauri backend is gone (the app runs on Electron): every native command goes through window.electronAPI
+  public async invoke<T>(_command: string, _args: Record<string, unknown> = {}): Promise<T | null> {
     return null;
   }
 

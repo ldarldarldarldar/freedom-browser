@@ -204,7 +204,21 @@ export const Navigation: React.FC<NavigationProps> = ({
     inputRef.current?.blur();
   };
 
-  const isSecure = currentTab?.url.startsWith('https://') || currentTab?.url.startsWith('freedom://');
+  // https alone is not enough: a page with a refused or bypassed certificate is marked insecure by the tab
+  const tabUrl = currentTab?.url ?? '';
+  const securityState: 'internal' | 'secure' | 'certError' | 'local' | 'insecure' =
+    tabUrl.startsWith('freedom://') ? 'internal'
+    : tabUrl.startsWith('https://') ? (currentTab?.security === 'insecure' ? 'certError' : 'secure')
+    : tabUrl.startsWith('file://') ? 'local'
+    : 'insecure';
+  const isSecure = securityState === 'internal' || securityState === 'secure';
+  const securityTitle = {
+    internal: t('nav.securityInternal'),
+    secure: t('nav.securitySecure'),
+    certError: t('nav.securityCertError'),
+    local: t('nav.securityLocal'),
+    insecure: t('nav.securityInsecure'),
+  }[securityState];
   const activeEngine = SEARCH_ENGINES.find((e) => e.id === defaultSearchEngine) || SEARCH_ENGINES[0];
 
   return (
@@ -299,15 +313,10 @@ export const Navigation: React.FC<NavigationProps> = ({
               type="button"
               onClick={() => setShowSecurityDetails(!showSecurityDetails)}
               className="mr-2 flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-white/10 text-xs text-neutral-400 hover:text-white transition-colors"
-              title={
-                currentTab?.url.startsWith('freedom://')
-                  ? t('nav.securityInternal')
-                  : isSecure
-                  ? t('nav.securitySecure')
-                  : t('nav.securityInsecure')
-              }
+              title={securityTitle}
+              aria-label={securityTitle}
             >
-              {currentTab?.url.startsWith('freedom://') ? (
+              {securityState === 'internal' ? (
                 <Search className="w-3.5 h-3.5 text-neutral-500" />
               ) : isSecure ? (
                 <Lock className="w-3.5 h-3.5 text-emerald-400" />
@@ -387,8 +396,14 @@ export const Navigation: React.FC<NavigationProps> = ({
             <div className="space-y-1.5 text-[11px] text-neutral-300">
               <p className="flex justify-between">
                 <span>{t('nav.encryption')}</span>
-                <span className="text-emerald-400 font-mono">
-                  {isSecure ? t('nav.tlsVerified') : t('nav.unencrypted')}
+                <span className={`font-mono ${isSecure ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {securityState === 'certError'
+                    ? t('nav.certNotVerified')
+                    : securityState === 'local'
+                    ? t('nav.localFile')
+                    : isSecure
+                    ? t('nav.tlsVerified')
+                    : t('nav.unencrypted')}
                 </span>
               </p>
               <p className="flex justify-between">
