@@ -129,6 +129,10 @@ app.commandLine.appendSwitch('disk-cache-size', '67108864'); // 64MB disk cache 
 if (initialStorageConfig.blockThirdPartyCookies !== false) {
   app.commandLine.appendSwitch('test-third-party-cookie-phaseout');
 }
+// Settings → Performance → Smooth scrolling. Read at startup only, applies after a restart.
+if (initialStorageConfig.smoothScrolling === false) {
+  app.commandLine.appendSwitch('disable-smooth-scrolling');
+}
 
 // GPU optimizations & Linux Wayland/Vulkan conflict fix (saves 60-90 MB GPU process memory)
 if (process.platform === 'linux') {
@@ -559,6 +563,29 @@ function reserveDownloadPath(dir, originalFilename) {
 }
 const releaseDownloadPath = (target) => reservedDownloadPaths.delete(target);
 
+// Settings → Main → "Ask where to save each file": the system save dialog, starting at the usual name.
+// Resolves the path to save to, or null when the user cancels.
+async function chooseSavePath(contents, suggestedPath) {
+  if (!privacyState.askWhereToSaveDownloads) return suggestedPath;
+  const ru = currentAppLanguage === 'ru';
+  const win = hostWindowOf(contents);
+  const options = {
+    title: ru ? 'Сохранить файл' : 'Save File',
+    defaultPath: suggestedPath,
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  };
+  const { canceled, filePath } = await (win && !win.isDestroyed() ? dialog.showSaveDialog(win, options) : dialog.showSaveDialog(options));
+  return canceled || !filePath ? null : filePath;
+}
+
+// The chosen folder can be on another disk, where rename fails with EXDEV
+function moveFile(from, to, callback) {
+  fs.rename(from, to, (err) => {
+    if (!err || err.code !== 'EXDEV') return callback(err);
+    fs.copyFile(from, to, (copyErr) => (copyErr ? callback(copyErr) : fs.rm(from, { force: true }, () => callback(null))));
+  });
+}
+
 function createWindow() {
   const iconPath = process.platform === 'win32'
     ? path.join(__dirname, '../build/icons/icon.ico')
@@ -711,27 +738,32 @@ function createWindow() {
     }
 
     const originalFilename = item.getFilename() || 'download';
-    const finalDownloadPath = reserveDownloadPath(downloadDir, originalFilename);
+    // The save dialog (askWhereToSaveDownloads) may still move it
+    let finalDownloadPath = reserveDownloadPath(downloadDir, originalFilename);
 
     const downloadId = 'dl-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
     const isPrivate = Boolean(webContents && !webContents.isDestroyed() && webContents.session !== session.defaultSession);
-    const shownName = path.basename(finalDownloadPath);
+    let shownName = path.basename(finalDownloadPath);
     // Speed limit active: hand plain http(s) downloads to the throttled downloader
     const itemUrl = item.getURL();
     if (downloadSpeedLimitBps > 0 && /^https?:/i.test(itemUrl)) {
       event.preventDefault();
       const ses = webContents?.session || session.defaultSession;
       const referrer = webContents && !webContents.isDestroyed() ? webContents.getURL() : '';
-      approveDownload(webContents, shownName, itemUrl).then((approved) => {
-        if (approved) startThrottledDownload({ url: itemUrl, ses, savePath: finalDownloadPath, downloadId, referrer, isPrivate, onEnd: () => releaseDownloadPath(finalDownloadPath) });
-        else releaseDownloadPath(finalDownloadPath);
-      }, () => releaseDownloadPath(finalDownloadPath));
+      approveDownload(webContents, shownName, itemUrl)
+        .then((approved) => (approved ? chooseSavePath(webContents, finalDownloadPath) : null))
+        .then((savePath) => {
+          if (savePath) startThrottledDownload({ url: itemUrl, ses, savePath, downloadId, referrer, isPrivate, onEnd: () => releaseDownloadPath(finalDownloadPath) });
+          else releaseDownloadPath(finalDownloadPath);
+        }, () => releaseDownloadPath(finalDownloadPath));
       return;
     }
 
-    // Until the user answers, data goes to a name that cannot be run; small files may finish before the answer
+    // Until the user answers, data goes to a name that cannot be run; small files may finish before the answer.
+    // The save dialog does not pause the download, as in Chrome; the approval question does.
     const needsApproval = downloadNeedsApproval(webContents, shownName);
-    const pendingPath = needsApproval ? `${finalDownloadPath}.pending` : finalDownloadPath;
+    const needsDecision = needsApproval || privacyState.askWhereToSaveDownloads;
+    const pendingPath = needsDecision ? `${finalDownloadPath}.pending` : finalDownloadPath;
     item.setSavePath(pendingPath);
     if (needsApproval) item.pause();
     activeDownloads.set(downloadId, item);
@@ -740,7 +772,7 @@ function createWindow() {
     const downloadUrl = item.getURL();
     const totalBytes = item.getTotalBytes() || 0;
 
-    let approved = !needsApproval;
+    let approved = !needsDecision;
     let finished = null; // state from the 'done' event
 
     const announceStart = () => {
@@ -785,8 +817,8 @@ function createWindow() {
     // Runs once the download has ended and, if it needed approval, the user has allowed it
     const settle = () => {
       if (!approved || finished === null) return;
-      if (needsApproval && finished === 'completed') {
-        fs.rename(pendingPath, finalDownloadPath, (err) => {
+      if (needsDecision && finished === 'completed') {
+        moveFile(pendingPath, finalDownloadPath, (err) => {
           if (err) {
             console.warn('Failed to finish download:', err);
             finished = 'interrupted';
@@ -798,19 +830,26 @@ function createWindow() {
       }
     };
 
-    if (needsApproval) {
+    if (needsDecision) {
       const refuse = () => {
         activeDownloads.delete(downloadId);
         try { item.cancel(); } catch {}
         fs.rm(pendingPath, { force: true }, () => releaseDownloadPath(finalDownloadPath));
       };
-      approveDownload(webContents, shownName, downloadUrl).then((allowed) => {
-        if (!allowed) return refuse();
-        approved = true;
-        announceStart();
-        if (item.getState() === 'progressing') item.resume();
-        settle();
-      }, refuse);
+      (needsApproval ? approveDownload(webContents, shownName, downloadUrl) : Promise.resolve(true))
+        .then((allowed) => (allowed ? chooseSavePath(webContents, finalDownloadPath) : null))
+        .then((chosen) => {
+          if (!chosen) return refuse();
+          if (chosen !== finalDownloadPath) {
+            releaseDownloadPath(finalDownloadPath);
+            finalDownloadPath = chosen;
+            shownName = path.basename(chosen);
+          }
+          approved = true;
+          announceStart();
+          if (item.getState() === 'progressing') item.resume();
+          settle();
+        }, refuse);
     } else {
       announceStart();
     }
@@ -1003,7 +1042,7 @@ app.on('web-contents-created', (event, contents) => {
 
   if (contents.getType() === 'webview') {
     configureBrowsingSession(contents.session);
-    contents.setBackgroundThrottling(true);
+    contents.setBackgroundThrottling(privacyState.backgroundTabThrottling);
 
     // Speaker icon on the tab (src/components/TabBar.tsx): the renderer matches the id to its <webview>
     contents.on('audio-state-changed', ({ audible }) => {
@@ -1672,8 +1711,64 @@ const privacyState = {
   spellcheck: initialStorageConfig.spellcheck !== false,
   secureDns: netPrivacy.SECURE_DNS_CHOICES.includes(initialStorageConfig.secureDns) ? initialStorageConfig.secureDns : 'off',
   secureDnsCustomUrl: typeof initialStorageConfig.secureDnsCustomUrl === 'string' ? initialStorageConfig.secureDnsCustomUrl : '',
+  // Not privacy, but mirrored the same way (Settings → Main / Performance)
+  clearBrowsingDataOnExit: initialStorageConfig.clearBrowsingDataOnExit === true,
+  askWhereToSaveDownloads: initialStorageConfig.askWhereToSaveDownloads === true,
+  backgroundTabThrottling: initialStorageConfig.backgroundTabThrottling !== false,
+  smoothScrolling: initialStorageConfig.smoothScrolling !== false,
 };
-const PERSISTED_PRIVACY_KEYS = ['blockThirdPartyCookies', 'httpsOnly', 'spellcheck', 'secureDns', 'secureDnsCustomUrl'];
+const PERSISTED_PRIVACY_KEYS = [
+  'blockThirdPartyCookies', 'httpsOnly', 'spellcheck', 'secureDns', 'secureDnsCustomUrl',
+  'clearBrowsingDataOnExit', 'askWhereToSaveDownloads', 'backgroundTabThrottling', 'smoothScrolling',
+];
+const MIRRORED_FLAGS = [
+  'doNotTrack', 'blockThirdPartyCookies', 'popupsBlocked', 'adBlockEnabled', 'checkForUpdates', 'httpsOnly', 'spellcheck',
+  'clearBrowsingDataOnExit', 'askWhereToSaveDownloads', 'backgroundTabThrottling', 'smoothScrolling',
+];
+
+// Background tabs: Chromium slows their timers and animations unless Settings → Performance turns it off
+function applyBackgroundThrottling() {
+  for (const wc of webContents.getAllWebContents()) {
+    if (wc.getType() === 'webview' && !wc.isDestroyed()) wc.setBackgroundThrottling(privacyState.backgroundTabThrottling);
+  }
+}
+
+// Settings → Privacy: "Clear all data" and "Clear browsing data on exit". Only the tabs' profile:
+// the UI session keeps settings and bookmarks, and extensions keep their own storage.
+async function clearBrowsingSessionData() {
+  const ses = session.defaultSession;
+  const extApi = ses.extensions || ses;
+  const extensionOrigins = (extApi.getAllExtensions?.() || []).map((ext) => `chrome-extension://${ext.id}`);
+  const results = await Promise.allSettled([
+    ses.clearData(extensionOrigins.length ? { excludeOrigins: extensionOrigins } : {}),
+    ses.clearCache(),
+    ses.clearAuthCache(),
+    ses.clearHostResolverCache(),
+  ]);
+  allowedHttpHosts.clear();
+  await ses.cookies.flushStore().catch(() => {});
+  const failed = results.filter((r) => r.status === 'rejected');
+  for (const r of failed) console.warn('[clear-data]', r.reason?.message || r.reason);
+  return failed.length === 0;
+}
+const withTimeout = (promise, ms) => Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(false), ms))]);
+
+handleUi('clear_browsing_data', () => clearBrowsingSessionData());
+
+// Chromium writes the UI's localStorage to disk minutes late, so a crash lost changed settings and the
+// tabs kept for "open the tabs of the last session". The UI asks for a flush after saving them; at most every 3 s.
+const UI_FLUSH_INTERVAL_MS = 3000;
+let lastUiFlush = 0;
+let uiFlushTimer = null;
+handleUi('flush_ui_storage', () => {
+  if (uiFlushTimer) return true;
+  uiFlushTimer = setTimeout(() => {
+    uiFlushTimer = null;
+    lastUiFlush = Date.now();
+    uiSession?.flushStorageData();
+  }, Math.max(0, lastUiFlush + UI_FLUSH_INTERVAL_MS - Date.now()));
+  return true;
+});
 
 let appliedDnsKey = '';
 function applySecureDns() {
@@ -1711,7 +1806,7 @@ function applySpellcheckEverywhere() {
 
 handleUi('set_privacy_settings', (event, next) => {
   if (next && typeof next === 'object') {
-    for (const key of ['doNotTrack', 'blockThirdPartyCookies', 'popupsBlocked', 'adBlockEnabled', 'checkForUpdates', 'httpsOnly', 'spellcheck']) {
+    for (const key of MIRRORED_FLAGS) {
       if (typeof next[key] === 'boolean') privacyState[key] = next[key];
     }
     if (netPrivacy.SECURE_DNS_CHOICES.includes(next.secureDns)) privacyState.secureDns = next.secureDns;
@@ -1720,6 +1815,7 @@ handleUi('set_privacy_settings', (event, next) => {
   adBlocker?.setEnabled(privacyState.adBlockEnabled);
   applySecureDns();
   applySpellcheckEverywhere();
+  applyBackgroundThrottling();
   // Third-party cookies take effect through a command line switch at the next start; the rest is read at startup
   const stored = readStorageConfig();
   const changed = {};
@@ -2138,7 +2234,10 @@ handleUi('set_renderer_process_limit', (event, limit) => {
   return true;
 });
 
-handleUi('relaunch_app', () => {
+handleUi('relaunch_app', async () => {
+  // app.exit skips before-quit: save the UI's storage (the tabs kept for the restart) and clear data here
+  uiSession?.flushStorageData();
+  if (privacyState.clearBrowsingDataOnExit) await withTimeout(clearBrowsingSessionData(), 8000);
   app.relaunch();
   app.exit(0);
 });
@@ -2417,6 +2516,8 @@ app.whenReady().then(async () => {
   // Chrome extensions must be loaded on every start, before any page/webview is created
   extensionManager = createExtensionManager({ app, session, net, confirmInstall: confirmExtensionInstall });
   await extensionManager.loadAllOnStartup().catch((err) => console.warn('[extensions]', err));
+  // "Clear browsing data on exit" also runs at startup: it covers a crash or a killed process
+  if (privacyState.clearBrowsingDataOnExit) await withTimeout(clearBrowsingSessionData(), 10000);
   setTimeout(() => extensionManager.updateFromStore().catch((err) => console.warn('[extensions] update check:', err.message)), EXTENSION_UPDATE_DELAY_MS);
 
   registerLinuxDesktopIntegration();
@@ -2432,8 +2533,14 @@ app.whenReady().then(async () => {
 });
 
 // Chromium delays localStorage writes for minutes after a burst of changes: save settings before leaving
-app.on('before-quit', () => {
+let exitDataCleared = false;
+app.on('before-quit', (event) => {
   uiSession?.flushStorageData();
+  if (!startupComplete || !privacyState.clearBrowsingDataOnExit || exitDataCleared) return;
+  // Cookies, site data and cache of the tabs go before the browser does
+  event.preventDefault();
+  exitDataCleared = true;
+  withTimeout(clearBrowsingSessionData(), 8000).finally(() => app.quit());
 });
 
 app.on('window-all-closed', () => {

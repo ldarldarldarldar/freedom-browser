@@ -36,18 +36,18 @@ import { TabSortService, TabSortMode } from './services/tabSortService';
 import { FaviconService } from './services/faviconService';
 import { SplitViewService, SplitViewState, SplitLayoutType } from './services/splitViewService';
 import { SessionRestoreService } from './services/sessionRestoreService';
+import { DOWNLOADS_KEY, clearLocalBrowsingData, clearAllBrowsingData } from './services/browsingDataService';
+import { NEW_TAB_URL, newTabUrl, homepageUrl, startupUrl, alwaysKeepsTabs, closeAction } from './settings/startup';
 import { CloseConfirmationModal } from './components/CloseConfirmationModal';
 import { I18nProvider } from './i18n';
 import { FileCode, AppWindow, ShieldCheck, ShieldBan, EyeOff } from 'lucide-react';
 import { translate, normalizeLanguage } from './i18n';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
-const TABS_KEY = 'freedom_browser_tabs';
 
 // Layout-independent letter shortcuts (physical key), so Ctrl+T/W/... work on Cyrillic layouts too
 const keyIs = (e: KeyboardEvent, letter: string) =>
   e.code === `Key${letter.toUpperCase()}` || e.key.toLowerCase() === letter;
-const DOWNLOADS_KEY = 'freedom_browser_downloads_v2';
 
 export default function App() {
   // Settings State
@@ -188,23 +188,24 @@ export default function App() {
       }
     } catch {}
 
-    // 4. Default fresh New Tab
+    // 4. One tab: the New Tab page, or the home page (Settings → Main → On startup)
+    const firstUrl = startupUrl(settings);
     return [
       {
         id: 'tab-1',
-        title: 'New Tab',
-        url: 'freedom://newtab',
-        displayUrl: 'freedom://newtab',
+        title: firstUrl === NEW_TAB_URL ? 'New Tab' : SearchEngineService.extractDomain(firstUrl),
+        url: firstUrl,
+        displayUrl: firstUrl === NEW_TAB_URL ? firstUrl : SearchEngineService.formatDisplayUrl(firstUrl),
         isLoading: false,
         canGoBack: false,
         canGoForward: false,
         isSuspended: false,
         lastActive: Date.now(),
         isCrashed: false,
-        history: ['freedom://newtab'],
+        history: [firstUrl],
         historyIndex: 0,
-        zoomLevel: ZoomService.getZoomForUrl('freedom://newtab'),
-        security: 'internal',
+        zoomLevel: ZoomService.getZoomForUrl(firstUrl),
+        security: firstUrl.startsWith('https://') || firstUrl.startsWith('file://') ? 'secure' : firstUrl.startsWith('freedom://') ? 'internal' : 'insecure',
       },
     ];
   });
@@ -295,6 +296,8 @@ export default function App() {
 
   // Downloads state: initialized from local history without fake preloaded entries
   const [downloads, setDownloads] = useState<DownloadItem[]>(() => {
+    // "Clear browsing data on exit" also runs at startup, in case the last exit did not get to it
+    if (settings.clearBrowsingDataOnExit) clearLocalBrowsingData();
     try {
       const saved = localStorage.getItem(DOWNLOADS_KEY);
       if (saved) {
@@ -370,6 +373,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      window.electronAPI?.flushUiStorage?.();
     } catch (err) {
       console.warn('Failed to save settings:', err);
     }
@@ -544,7 +548,12 @@ export default function App() {
     if (!tabs.some((t) => t.isPrivate)) incognitoPartitionRef.current = null;
   }, [tabs]);
 
-  const handleNewTab = useCallback((targetUrl: string = 'freedom://newtab', options?: { isPrivate?: boolean; background?: boolean }) => {
+  // What a new tab opens (Settings → Main → New tab page); a ref, so the callbacks below stay stable
+  const newTabUrlRef = useRef(newTabUrl(settings));
+  newTabUrlRef.current = newTabUrl(settings);
+
+  const handleNewTab = useCallback((requestedUrl?: string, options?: { isPrivate?: boolean; background?: boolean }) => {
+    const targetUrl = requestedUrl ?? newTabUrlRef.current;
     const newId = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const isPrivate = Boolean(options?.isPrivate);
     const newTab: BrowserTab = {
@@ -671,29 +680,41 @@ export default function App() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {}
   }, [settings]);
 
+  // History and the downloads list go with the window; cookies and site data are cleared by the main process
+  const clearDataOnExit = settings.clearBrowsingDataOnExit;
   const closeKeepingTabs = useCallback(() => {
     setShowCloseConfirmModal(false);
     SessionRestoreService.saveSession(tabs, activeTabId);
+    if (clearDataOnExit) clearLocalBrowsingData();
     tauriBridge.forceClose();
-  }, [tabs, activeTabId]);
+  }, [tabs, activeTabId, clearDataOnExit]);
 
   const closeDiscardingTabs = useCallback(() => {
     setShowCloseConfirmModal(false);
     SessionRestoreService.clearSavedSession();
+    if (clearDataOnExit) clearLocalBrowsingData();
     tauriBridge.forceClose();
-  }, []);
+  }, [clearDataOnExit]);
 
   const handleAttemptClose = useCallback(() => {
-    if (!SessionRestoreService.hasRestorableTabs(tabs)) {
-      closeDiscardingTabs();
-    } else if (settings.onCloseWithTabs === 'save') {
+    // "Open the tabs of the last session" keeps them even when only the New Tab page is open
+    const action = closeAction(settings);
+    if (action === 'save') {
       closeKeepingTabs();
-    } else if (settings.onCloseWithTabs === 'discard') {
+    } else if (action === 'discard' || !SessionRestoreService.hasRestorableTabs(tabs)) {
       closeDiscardingTabs();
     } else {
       setShowCloseConfirmModal(true);
     }
-  }, [tabs, settings.onCloseWithTabs, closeKeepingTabs, closeDiscardingTabs]);
+  }, [tabs, settings.onCloseWithTabs, settings.startupBehavior, closeKeepingTabs, closeDiscardingTabs]);
+
+  // Settings → "Restart now": the open tabs come back when restoreTabsAfterRestart is on
+  const handleRelaunch = useCallback(() => {
+    if (settings.restoreTabsAfterRestart || alwaysKeepsTabs(settings)) SessionRestoreService.saveSession(tabs, activeTabId);
+    else SessionRestoreService.clearSavedSession();
+    if (settings.clearBrowsingDataOnExit) clearLocalBrowsingData();
+    window.electronAPI?.relaunchApp?.();
+  }, [tabs, activeTabId, settings.restoreTabsAfterRestart, settings.startupBehavior, settings.clearBrowsingDataOnExit]);
 
   const handleConfirmCloseWithoutSaving = useCallback((remember: boolean) => {
     if (remember) rememberCloseChoice('discard');
@@ -747,10 +768,21 @@ export default function App() {
     }
   }, []);
 
-  // Clear saved session flag after startup so it's not reused unless deliberately saved upon next close
+  // A saved session opens once: cleared after startup unless the browser is set to always open the last tabs
+  const keepsTabs = alwaysKeepsTabs(settings);
   useEffect(() => {
-    SessionRestoreService.clearSavedSession();
-  }, []);
+    if (!keepsTabs) SessionRestoreService.clearSavedSession();
+  }, [keepsTabs]);
+
+  // With "open the tabs of the last session" they are saved as they change, so a crash does not lose them
+  useEffect(() => {
+    if (!keepsTabs) return;
+    const timer = window.setTimeout(() => {
+      SessionRestoreService.saveSession(tabs, activeTabId);
+      window.electronAPI?.flushUiStorage?.();
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [keepsTabs, tabs, activeTabId]);
 
   const handleRestoreClosedTab = useCallback(() => {
     const restored = SessionService.popRecentlyClosed();
@@ -1780,7 +1812,7 @@ export default function App() {
       const unsubShortcut = (window as any).electronAPI.on('webview-shortcut', (action: string) => {
         switch (action) {
           case 'new-tab':
-            handleNewTab('freedom://newtab');
+            handleNewTab();
             break;
           case 'new-private-tab':
             handleNewTab('freedom://newtab', { isPrivate: true });
@@ -1888,7 +1920,7 @@ export default function App() {
       // Ctrl+T: New tab
       if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 't')) {
         e.preventDefault();
-        handleNewTab('freedom://newtab');
+        handleNewTab();
         return;
       }
 
@@ -2229,11 +2261,21 @@ export default function App() {
       spellcheck: settings.spellcheck,
       secureDns: settings.secureDns,
       secureDnsCustomUrl: settings.secureDnsCustomUrl,
+      clearBrowsingDataOnExit: settings.clearBrowsingDataOnExit,
+      askWhereToSaveDownloads: settings.askWhereToSaveDownloads,
+      backgroundTabThrottling: settings.backgroundTabThrottling,
+      smoothScrolling: settings.smoothScrolling,
     });
   }, [
     settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled, settings.checkForUpdates,
     settings.httpsOnly, settings.spellcheck, settings.secureDns, settings.secureDnsCustomUrl,
+    settings.clearBrowsingDataOnExit, settings.askWhereToSaveDownloads, settings.backgroundTabThrottling, settings.smoothScrolling,
   ]);
+
+  // Local diagnostic log (Settings → Diagnostics): on from the start when it was left on
+  useEffect(() => {
+    logger.setLoggingEnabled(settings.localDiagnosticLogs);
+  }, [settings.localDiagnosticLogs]);
 
   // Download speed cap is enforced by the main-process download governor
   useEffect(() => {
@@ -2333,7 +2375,7 @@ export default function App() {
           );
         }
       }}
-      onHome={() => handleNavigate('freedom://newtab')}
+      onHome={() => handleNavigate(homepageUrl(settings))}
       onNewPrivateTab={() => handleNewTab('freedom://newtab', { isPrivate: true })}
       onManageExtensions={() => {
         setSettingsInitialTab('extensions');
@@ -2399,7 +2441,7 @@ export default function App() {
       activeDownloads={downloads.filter((d) => d.state === 'progressing').length}
       onHome={() => {
         setIsTabsOverviewOpen(false);
-        handleNavigate('freedom://newtab');
+        handleNavigate(homepageUrl(settings));
       }}
       onTabs={() => setIsTabsOverviewOpen((v) => !v)}
       onBookmarks={() => setIsBookmarksOpen((v) => !v)}
@@ -2483,7 +2525,7 @@ export default function App() {
             activeTabId={activeTabId}
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
-            onNewTab={() => handleNewTab('freedom://newtab')}
+            onNewTab={() => handleNewTab()}
             onDropData={(data) => {
               const url = SearchEngineService.resolveDroppedData(data, settings.defaultSearchEngine);
               if (url) handleNewTab(url, { isPrivate: activeTab?.isPrivate });
@@ -2592,7 +2634,7 @@ export default function App() {
             activeTabId={activeTabId}
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
-            onNewTab={() => handleNewTab('freedom://newtab')}
+            onNewTab={() => handleNewTab()}
             onSort={() => handleSortTabs('site')}
             onClose={() => setIsTabsOverviewOpen(false)}
           />
@@ -2614,7 +2656,7 @@ export default function App() {
           }}
           onDone={() => setIsEditingLayout(false)}
           isNewTabActive={activeTab?.url === 'freedom://newtab'}
-          onOpenNewTab={() => handleNewTab('freedom://newtab')}
+          onOpenNewTab={() => handleNewTab()}
         />
       )}
 
@@ -2722,10 +2764,12 @@ export default function App() {
           onUpdateSettings={(newSettings) =>
             setSettings((prev) => ({ ...prev, ...newSettings }))
           }
-          onClearBrowsingData={() => {
-            logger.clearLogs();
-            localStorage.removeItem(TABS_KEY);
+          onClearBrowsingData={async () => {
+            await clearAllBrowsingData();
+            setDownloads((prev) => prev.filter((d) => d.state === 'progressing'));
+            setClosedTabsCount(0);
           }}
+          onRelaunch={handleRelaunch}
         />
       )}
 
@@ -2746,7 +2790,9 @@ export default function App() {
           key={availableUpdate.version}
           update={availableUpdate}
           activeDownloads={downloads.filter((d) => d.state === 'progressing').length}
-          onBeforeInstall={() => SessionRestoreService.saveSession(tabs, activeTabId)}
+          onBeforeInstall={() => {
+            if (settings.restoreTabsAfterRestart || alwaysKeepsTabs(settings)) SessionRestoreService.saveSession(tabs, activeTabId);
+          }}
           onOpenUrl={(url) => handleNewTab(url)}
           onClose={() => {
             dismissedUpdateVersion.current = availableUpdate.version;

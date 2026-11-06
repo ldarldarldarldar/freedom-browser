@@ -131,7 +131,15 @@ declare global {
         spellcheck?: boolean;
         secureDns?: string;
         secureDnsCustomUrl?: string;
+        clearBrowsingDataOnExit?: boolean;
+        askWhereToSaveDownloads?: boolean;
+        backgroundTabThrottling?: boolean;
+        smoothScrolling?: boolean;
       }) => Promise<unknown>;
+      /** Cookies, site storage, cache and auth data of the tabs' profile; extension data is kept */
+      clearBrowsingData?: () => Promise<boolean>;
+      /** Writes the UI's localStorage to disk soon (throttled), so a crash keeps settings and saved tabs */
+      flushUiStorage?: () => Promise<boolean>;
       getHardwareAcceleration?: () => Promise<boolean>;
       setHardwareAcceleration?: (enabled: boolean) => Promise<boolean>;
       /** null = automatic (Chromium decides). Takes effect after a restart. */

@@ -31,8 +31,8 @@ jobs:
       - name: Type check
         run: npm run lint
 
-      - name: Logic tests (updater, address bar, download names, HTTPS-only and DNS)
-        run: npm run test:update && npm run test:address && npm run test:downloads && npm run test:net
+      - name: Logic tests (updater, address bar, download names, HTTPS-only and DNS, settings in use)
+        run: npm run test:update && npm run test:address && npm run test:downloads && npm run test:net && npm run test:settings
 
       - name: Build Linux AppImage
         run: npm run build:appimage

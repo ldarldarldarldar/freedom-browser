@@ -71,16 +71,20 @@ export interface BrowserSettings {
   startpageDefaultApplied?: boolean;
   // Main Settings
   defaultSearchEngine: SearchEngineId;
-  customSearchUrl: string;
+  /** Home button, and startup / new tabs when they are set to the home page (src/settings/startup.ts) */
   homepage: string;
+  /** What opens at startup; 'restore-session' also keeps the tabs on every close */
   startupBehavior: 'new-tab' | 'homepage' | 'restore-session';
-  openPreviousTabs: boolean;
+  /** What a new tab (Ctrl+T, +) opens */
   newTabBehavior: 'blank' | 'freedom-new-tab' | 'homepage';
   downloadsLocation: string;
+  /** A save dialog for every download instead of saving to downloadsLocation (electron/main.cjs will-download) */
   askWhereToSaveDownloads: boolean;
   language: string;
   hardwareAcceleration: boolean;
+  /** Animated scrolling in pages; a Chromium switch, applied after a restart */
   smoothScrolling: boolean;
+  /** "Restart now" in Settings and installing an update bring the open tabs back */
   restoreTabsAfterRestart: boolean;
   /** Closing the browser with open tabs: ask every time, or keep / close them without asking */
   onCloseWithTabs: CloseTabsAction;
@@ -91,11 +95,10 @@ export interface BrowserSettings {
   browserMode: BrowserMode;
 
   // Privacy: Default Zero Telemetry & High Privacy
-  cookiesEnabled: boolean;
   blockThirdPartyCookies: boolean;
   doNotTrack: boolean;
+  /** History, downloads list, cookies, site data and cache are deleted when the browser closes (and at the next start) */
   clearBrowsingDataOnExit: boolean;
-  javascriptEnabled: boolean;
   popupsBlocked: boolean;
   /** Built-in ad & tracker blocker (electron/adblock.cjs) */
   adBlockEnabled: boolean;
@@ -119,15 +122,12 @@ export interface BrowserSettings {
   customBackgroundColor: string;
   applyThemeToBackground: boolean;
   headerColor: HeaderColorOption;
-  customHeaderColor: string;
 
   // Individual Visual Feature Toggles
   starAnimationEnabled: boolean;
   backgroundParticlesEnabled: boolean;
   uiAnimationsEnabled: boolean;
   blurEffectsEnabled: boolean;
-  glowEffectsEnabled: boolean;
-  decorativeEffectsEnabled: boolean;
   starDensity: StarDensity;
   animationIntensity: AnimationIntensity;
 
@@ -141,8 +141,7 @@ export interface BrowserSettings {
   backgroundImageBlur: number; // 0 - 20 (px)
   backgroundImageScale: BackgroundImageScale;
 
-  // Memory & Resource Management
-  autoSuspendInactiveTabs: boolean;
-  tabSuspensionTimeoutMinutes: number; // e.g. 5 (performance) or 15 (quality)
+  // Memory & Resource Management (tab unloading lives in the FRC settings, src/services/frcService.ts)
+  /** Chromium slows timers and animations in tabs that are not shown */
   backgroundTabThrottling: boolean;
 }

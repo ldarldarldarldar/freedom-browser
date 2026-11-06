@@ -61,6 +61,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   pickCustomBackground: () => ipcRenderer.invoke('pick_custom_background'),
   setBrowserMode: (mode) => ipcRenderer.invoke('set_browser_mode', mode),
   setPrivacySettings: (settings) => ipcRenderer.invoke('set_privacy_settings', settings),
+  clearBrowsingData: () => ipcRenderer.invoke('clear_browsing_data'),
+  flushUiStorage: () => ipcRenderer.invoke('flush_ui_storage'),
   setDownloadSpeedLimit: (kbps) => ipcRenderer.invoke('set_download_speed_limit', kbps),
   updates: {
     check: () => ipcRenderer.invoke('update_check'),

@@ -35,10 +35,8 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   defaultSearchEngine: 'startpage',
   startpageDefaultApplied: true,
   uiDesignVersion: 2,
-  customSearchUrl: '',
   homepage: 'freedom://newtab',
   startupBehavior: 'new-tab',
-  openPreviousTabs: true,
   newTabBehavior: 'freedom-new-tab',
   downloadsLocation: '~/Downloads',
   askWhereToSaveDownloads: false,
@@ -53,11 +51,9 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   browserMode: 'quality',
 
   // Privacy: Default Zero Telemetry & High Privacy
-  cookiesEnabled: true,
   blockThirdPartyCookies: true,
   doNotTrack: true,
   clearBrowsingDataOnExit: false,
-  javascriptEnabled: true,
   popupsBlocked: true,
   adBlockEnabled: true,
   checkForUpdates: true,
@@ -79,15 +75,12 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   customBackgroundColor: '#0b0e17',
   applyThemeToBackground: true,
   headerColor: 'black',
-  customHeaderColor: '#0d111b',
 
   // Individual Visual Feature Toggles
   starAnimationEnabled: true,
   backgroundParticlesEnabled: true,
   uiAnimationsEnabled: true,
   blurEffectsEnabled: true,
-  glowEffectsEnabled: true,
-  decorativeEffectsEnabled: true,
   starDensity: 'medium',
   animationIntensity: 'subtle',
 
@@ -102,7 +95,5 @@ export const DEFAULT_SETTINGS: BrowserSettings = {
   backgroundImageScale: 'cover',
 
   // Memory & Performance
-  autoSuspendInactiveTabs: true,
-  tabSuspensionTimeoutMinutes: 15,
   backgroundTabThrottling: true,
 };

@@ -33,6 +33,36 @@ import { ExtensionsSettings } from '../components/ExtensionsSettings';
 import { SitePermissionsSettings } from '../components/SitePermissionsSettings';
 import { DataLocationSettings } from '../components/DataLocationSettings';
 import { DeveloperLink } from '../components/DeveloperLink';
+import { frcService } from '../services/frcService';
+import { parseHomepage } from '../settings/startup';
+
+// Home page address: applied when the field is left or Enter is pressed. Empty = the New Tab page.
+const HomepageField: React.FC<{ value: string; placeholder: string; invalidText: string; onCommit: (v: string) => void }> = ({ value, placeholder, invalidText, onCommit }) => {
+  const shown = value === 'freedom://newtab' ? '' : value;
+  const [draft, setDraft] = useState(shown);
+  useEffect(() => setDraft(shown), [shown]);
+  const parsed = parseHomepage(draft);
+  const commit = () => {
+    const next = parseHomepage(draft) ?? draft.trim();
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <div>
+      <input
+        type="text"
+        id="settings-homepage"
+        value={draft}
+        placeholder={placeholder}
+        spellCheck={false}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+        className="w-full max-w-md bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500/50"
+      />
+      {parsed === null && <p className="text-[11px] text-amber-400 mt-1">{invalidText}</p>}
+    </div>
+  );
+};
 
 // Custom DoH address: applied when the field is left or Enter is pressed, never on every keystroke
 const SecureDnsCustomField: React.FC<{ value: string; placeholder: string; invalidText: string; onCommit: (v: string) => void }> = ({ value, placeholder, invalidText, onCommit }) => {
@@ -63,7 +93,9 @@ interface SettingsModalProps {
   onClose: () => void;
   settings: BrowserSettings;
   onUpdateSettings: (newSettings: Partial<BrowserSettings>) => void;
-  onClearBrowsingData: () => void;
+  onClearBrowsingData: () => void | Promise<void>;
+  /** "Restart now": keeps the tabs when restoreTabsAfterRestart is on */
+  onRelaunch?: () => void;
   /** Section to open first (e.g. 'extensions' from the toolbar puzzle menu) */
   initialTab?: string;
   /** Closes Settings and turns on the layout edit mode */
@@ -78,6 +110,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onUpdateSettings,
   onClearBrowsingData,
+  onRelaunch,
   initialTab,
   onEditLayout,
 }) => {
@@ -91,6 +124,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showRestartBanner, setShowRestartBanner] = useState<boolean>(false);
   // Renderer process limit: '' = automatic. Kept in storage-config.json by the main process, read at startup.
   const [processLimit, setProcessLimit] = useState<string>('');
+  // Unloading inactive tabs is done by Freedom RAM Control: this shows and changes its settings
+  const [frc, setFrc] = useState(() => frcService.getSettings());
+  const frcUnloads = frc.enableAutoHibernation && frc.mode !== 'unrestricted';
+  const setFrcUnloading = (enabled: boolean) => {
+    if (enabled && frc.mode === 'unrestricted') frcService.setOperationalMode('balanced');
+    setFrc(frcService.saveSettings({ enableAutoHibernation: enabled }));
+  };
+  const setFrcTimeoutMinutes = (minutes: number) => {
+    frcService.setIdleFreezeTimeout(minutes * 60);
+    setFrc(frcService.saveSettings({ mode: 'custom' }));
+  };
+  const frcTimeoutMinutes = Math.max(1, Math.round(frc.tFreezeSec / 60));
 
   useEffect(() => {
     (window as any).electronAPI?.getRendererProcessLimit?.().then((limit: number | null) => {
@@ -150,10 +195,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         backgroundParticlesEnabled: false,
         uiAnimationsEnabled: false,
         blurEffectsEnabled: false,
-        glowEffectsEnabled: false,
-        autoSuspendInactiveTabs: true,
-        tabSuspensionTimeoutMinutes: 5,
-        backgroundTabThrottling: true,
       });
       tauriBridge.setBrowserMode('performance');
     } else {
@@ -163,10 +204,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         backgroundParticlesEnabled: true,
         uiAnimationsEnabled: true,
         blurEffectsEnabled: true,
-        glowEffectsEnabled: true,
-        autoSuspendInactiveTabs: true,
-        tabSuspensionTimeoutMinutes: 15,
-        backgroundTabThrottling: true,
       });
       tauriBridge.setBrowserMode('quality');
     }
@@ -180,7 +217,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       themePreset: presetId,
       palette: { ...presetPalette },
       customBackgroundColor: presetPalette.mainBg,
-      customHeaderColor: presetPalette.headerBg,
     });
   };
 
@@ -426,28 +462,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <input
                       type="checkbox"
-                      checked={settings.autoSuspendInactiveTabs}
-                      onChange={(e) =>
-                        onUpdateSettings({ autoSuspendInactiveTabs: e.target.checked })
-                      }
+                      id="settings-unload-tabs"
+                      checked={frcUnloads}
+                      onChange={(e) => setFrcUnloading(e.target.checked)}
                       className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                     />
                   </div>
 
-                  {settings.autoSuspendInactiveTabs && (
+                  {frcUnloads && (
                     <div className="pl-3 border-l-2 border-emerald-500/40">
                       <label className="text-xs text-neutral-300 block mb-1.5">
                         {t('settings.autoSuspendTimeout')}
                       </label>
                       <select
-                        value={settings.tabSuspensionTimeoutMinutes}
-                        onChange={(e) =>
-                          onUpdateSettings({
-                            tabSuspensionTimeoutMinutes: Number(e.target.value),
-                          })
-                        }
+                        id="settings-unload-timeout"
+                        value={frcTimeoutMinutes}
+                        onChange={(e) => setFrcTimeoutMinutes(Number(e.target.value))}
                         className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50"
                       >
+                        {![1, 3, 5, 15, 30].includes(frcTimeoutMinutes) && (
+                          <option value={frcTimeoutMinutes}>{frcTimeoutMinutes} min</option>
+                        )}
+                        <option value={1}>{t('settings.timeout1m')}</option>
                         <option value={3}>{t('settings.timeout3m')}</option>
                         <option value={5}>{t('settings.timeout5m')}</option>
                         <option value={15}>{t('settings.timeout15m')}</option>
@@ -467,6 +503,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <input
                       type="checkbox"
+                      id="settings-background-throttling"
                       checked={settings.backgroundTabThrottling}
                       onChange={(e) =>
                         onUpdateSettings({ backgroundTabThrottling: e.target.checked })
@@ -491,6 +528,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="checkbox"
                         checked={hardwareAcc}
                         onChange={(e) => handleToggleHardwareAcc(e.target.checked)}
+                        className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                      />
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-white">{t('settings.smoothScrolling')}</div>
+                        <div className="text-[11px] text-neutral-400 leading-relaxed mt-0.5">{t('settings.smoothScrollingDesc')}</div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        id="settings-smooth-scrolling"
+                        checked={settings.smoothScrolling}
+                        onChange={(e) => {
+                          onUpdateSettings({ smoothScrolling: e.target.checked });
+                          setShowRestartBanner(true);
+                        }}
                         className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                       />
                     </div>
@@ -530,9 +584,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            if ((window as any).electronAPI?.relaunchApp) {
-                              (window as any).electronAPI.relaunchApp();
-                            }
+                            if (onRelaunch) onRelaunch();
+                            else (window as any).electronAPI?.relaunchApp?.();
                           }}
                           className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 text-[11px] font-medium transition-colors shrink-0 cursor-pointer"
                         >
@@ -839,11 +892,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       label: t('settings.toggleBlur'),
                       desc: t('settings.toggleBlurDesc'),
                     },
-                    {
-                      key: 'glowEffectsEnabled',
-                      label: t('settings.toggleGlow'),
-                      desc: t('settings.toggleGlowDesc'),
-                    },
                   ].map(({ key, label, desc }) => (
                     <div key={key} className="flex items-center justify-between py-1">
                       <div>
@@ -904,6 +952,71 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </select>
                 </div>
 
+                {/* Startup, home page and new tabs (src/settings/startup.ts) */}
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-3">
+                  <div className="space-y-2">
+                    <div>
+                      <label htmlFor="settings-startup" className="text-xs font-semibold text-white block">
+                        {t('settings.startupTitle')}
+                      </label>
+                      <div className="text-[11px] text-neutral-400 mt-0.5">{t('settings.startupDesc')}</div>
+                    </div>
+                    <select
+                      id="settings-startup"
+                      value={settings.startupBehavior}
+                      onChange={(e) => onUpdateSettings({ startupBehavior: e.target.value as BrowserSettings['startupBehavior'] })}
+                      className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+                    >
+                      <option value="new-tab">{t('settings.startupNewTab')}</option>
+                      <option value="restore-session">{t('settings.startupRestore')}</option>
+                      <option value="homepage">{t('settings.startupHomepage')}</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="settings-homepage" className="text-xs font-medium text-neutral-200 block">
+                      {t('settings.homepageTitle')}
+                    </label>
+                    <HomepageField
+                      value={settings.homepage}
+                      placeholder="https://example.com"
+                      invalidText={t('settings.homepageInvalid')}
+                      onCommit={(v) => onUpdateSettings({ homepage: v })}
+                    />
+                    <div className="text-[11px] text-neutral-500">{t('settings.homepageDesc')}</div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="settings-new-tab" className="text-xs font-medium text-neutral-200 block">
+                      {t('settings.newTabTitle')}
+                    </label>
+                    <select
+                      id="settings-new-tab"
+                      value={settings.newTabBehavior}
+                      onChange={(e) => onUpdateSettings({ newTabBehavior: e.target.value as BrowserSettings['newTabBehavior'] })}
+                      className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+                    >
+                      <option value="freedom-new-tab">{t('settings.newTabFreedom')}</option>
+                      <option value="homepage">{t('settings.newTabHomepage')}</option>
+                      <option value="blank">{t('settings.newTabBlank')}</option>
+                    </select>
+                  </div>
+
+                  <label className="flex items-center justify-between gap-3 cursor-pointer">
+                    <span>
+                      <span className="text-xs text-neutral-200 font-medium block">{t('settings.restoreAfterRestart')}</span>
+                      <span className="text-[11px] text-neutral-500 block">{t('settings.restoreAfterRestartDesc')}</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      id="settings-restore-after-restart"
+                      checked={settings.restoreTabsAfterRestart}
+                      onChange={(e) => onUpdateSettings({ restoreTabsAfterRestart: e.target.checked })}
+                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                    />
+                  </label>
+                </div>
+
                 {/* Closing the browser with open tabs */}
                 <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-2">
                   <div>
@@ -914,14 +1027,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <select
                     id="settings-close-tabs"
-                    value={settings.onCloseWithTabs}
+                    value={settings.startupBehavior === 'restore-session' ? 'save' : settings.onCloseWithTabs}
+                    disabled={settings.startupBehavior === 'restore-session'}
                     onChange={(e) => onUpdateSettings({ onCloseWithTabs: e.target.value as CloseTabsAction })}
-                    className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer"
+                    className="w-full max-w-xs bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500/50 cursor-pointer disabled:opacity-60 disabled:cursor-default"
                   >
                     <option value="ask">{t('settings.closeTabsAsk')}</option>
                     <option value="save">{t('settings.closeTabsSave')}</option>
                     <option value="discard">{t('settings.closeTabsDiscard')}</option>
                   </select>
+                  {settings.startupBehavior === 'restore-session' && (
+                    <p className="text-[11px] text-neutral-500">{t('settings.closeTabsLockedByStartup')}</p>
+                  )}
                 </div>
 
                 <label className="flex items-center justify-between gap-3 py-1 cursor-pointer">
@@ -993,6 +1110,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <p className="text-[11px] text-neutral-500 mt-1">
                     {t('settings.downloadsDirectoryDesc')}
                   </p>
+                  <label className="mt-2 flex items-center justify-between gap-3 max-w-md cursor-pointer">
+                    <span>
+                      <span className="text-xs text-neutral-200 font-medium block">{t('settings.askWhereToSave')}</span>
+                      <span className="text-[11px] text-neutral-500 block">{t('settings.askWhereToSaveDesc')}</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      id="settings-ask-where-to-save"
+                      checked={settings.askWhereToSaveDownloads}
+                      onChange={(e) => onUpdateSettings({ askWhereToSaveDownloads: e.target.checked })}
+                      className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
+                    />
+                  </label>
                 </div>
 
                 <div>
@@ -1039,18 +1169,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     { key: 'doNotTrack', label: t('settings.doNotTrack') },
                     { key: 'blockThirdPartyCookies', label: t('settings.blockThirdParty') },
                     { key: 'popupsBlocked', label: t('settings.blockPopups') },
-                    { key: 'clearBrowsingDataOnExit', label: t('settings.clearOnExit') },
+                    { key: 'clearBrowsingDataOnExit', label: t('settings.clearOnExit'), desc: t('settings.clearOnExitDesc') },
                     { key: 'checkForUpdates', label: t('settings.checkForUpdates') },
-                  ].map(({ key, label }) => (
-                    <div key={key} className="flex items-center justify-between py-1">
-                      <span className="text-xs text-neutral-200 font-medium">{label}</span>
+                  ].map(({ key, label, desc }: { key: string; label: string; desc?: string }) => (
+                    <div key={key} className="flex items-center justify-between gap-3 py-1">
+                      <span>
+                        <span className="text-xs text-neutral-200 font-medium block">{label}</span>
+                        {desc && <span className="text-[11px] text-neutral-500 block">{desc}</span>}
+                      </span>
                       <input
                         type="checkbox"
+                        id={`settings-${key}`}
                         checked={Boolean(settings[key as keyof BrowserSettings])}
                         onChange={(e) =>
                           onUpdateSettings({ [key]: e.target.checked })
                         }
-                        className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                        className="accent-emerald-500 w-4 h-4 rounded cursor-pointer shrink-0"
                       />
                     </div>
                   ))}
@@ -1108,8 +1242,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="pt-3.5 border-t border-white/[0.06]">
                   <button
                     type="button"
-                    onClick={() => {
-                      onClearBrowsingData();
+                    id="settings-clear-data"
+                    onClick={async () => {
+                      await onClearBrowsingData();
                       setDataCleared(true);
                       setTimeout(() => setDataCleared(false), 2500);
                     }}
@@ -1164,9 +1299,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const nextVal = !settings.localDiagnosticLogs;
-                        onUpdateSettings({ localDiagnosticLogs: nextVal });
-                        logger.setLoggingEnabled(nextVal);
+                        // App turns the logger on or off from this setting, also at startup
+                        onUpdateSettings({ localDiagnosticLogs: !settings.localDiagnosticLogs });
                       }}
                       className={`shrink-0 whitespace-nowrap min-w-[64px] text-center px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer ${
                         settings.localDiagnosticLogs
