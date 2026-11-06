@@ -6,6 +6,8 @@ export type LoadErrorType =
   | 'timeout'
   | 'reset'
   | 'certificate'
+  /** HTTPS-only mode upgraded an http address and the https page failed */
+  | 'httpsOnly'
   | 'blocked'
   | 'invalid_url'
   | 'crashed'

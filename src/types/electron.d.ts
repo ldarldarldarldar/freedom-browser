@@ -93,6 +93,14 @@ declare global {
         info: (webContentsId: number, url: string) => Promise<CertificateErrorInfo | null>;
         allow: (webContentsId: number, url: string) => Promise<boolean>;
       };
+      /** HTTPS-only mode: the http address a failed https page was upgraded from */
+      httpsOnly?: {
+        info: (webContentsId: number, url: string) => Promise<{ httpUrl: string; host: string } | null>;
+        /** Stops upgrading this host until the browser closes; resolves to the http address to load */
+        allowHttp: (webContentsId: number, url: string) => Promise<string | null>;
+      };
+      /** Toggles picture in picture for the playing (or largest) video of a tab */
+      pictureInPicture?: (webContentsId: number) => Promise<'entered' | 'exited' | 'none'>;
       sitePermissions?: {
         list: () => Promise<Array<{ origin: string; permission: string; decision: 'allow' | 'block' }>>;
         remove: (origin: string, permission: string) => Promise<boolean>;
@@ -113,7 +121,17 @@ declare global {
         remove: (folder: string) => Promise<void>;
         open: (folder: string, kind: 'popup' | 'options', anchor?: { x: number; y: number }) => Promise<boolean>;
       };
-      setPrivacySettings?: (settings: { doNotTrack: boolean; blockThirdPartyCookies: boolean; popupsBlocked: boolean; adBlockEnabled: boolean; checkForUpdates?: boolean }) => Promise<unknown>;
+      setPrivacySettings?: (settings: {
+        doNotTrack: boolean;
+        blockThirdPartyCookies: boolean;
+        popupsBlocked: boolean;
+        adBlockEnabled: boolean;
+        checkForUpdates?: boolean;
+        httpsOnly?: boolean;
+        spellcheck?: boolean;
+        secureDns?: string;
+        secureDnsCustomUrl?: string;
+      }) => Promise<unknown>;
       getHardwareAcceleration?: () => Promise<boolean>;
       setHardwareAcceleration?: (enabled: boolean) => Promise<boolean>;
       /** null = automatic (Chromium decides). Takes effect after a restart. */

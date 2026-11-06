@@ -17,6 +17,7 @@ import {
   Hand,
   Gauge,
   Coffee,
+  LockOpen,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { TranslationKey } from '../i18n/translations';
@@ -39,6 +40,8 @@ interface ErrorPageProps {
   certInfo?: CertificateErrorInfo | null;
   /** Certificate errors: trust this certificate for this host in this tab and load the page */
   onProceedUnsafe?: () => void;
+  /** HTTPS-only mode: open the site over unencrypted http after all */
+  onOpenHttp?: () => void;
 }
 
 type IconType = React.ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -56,6 +59,7 @@ const COPY: Record<Exclude<LoadErrorType, 'http'>, ErrorCopy> = {
   timeout: { icon: Hourglass, title: 'error.timeoutTitle', desc: 'error.timeoutDesc' },
   reset: { icon: Unplug, title: 'error.resetTitle', desc: 'error.resetDesc' },
   certificate: { icon: ShieldAlert, title: 'error.certTitle', desc: 'error.certDesc' },
+  httpsOnly: { icon: LockOpen, title: 'error.httpsOnlyTitle', desc: 'error.httpsOnlyDesc' },
   blocked: { icon: Ban, title: 'error.blockedTitle', desc: 'error.blockedDesc' },
   invalid_url: { icon: AlertTriangle, title: 'error.invalidUrlTitle', desc: 'error.invalidUrlDesc' },
   crashed: { icon: ServerCrash, title: 'error.crashedTitle', desc: 'error.crashedDesc' },
@@ -83,6 +87,7 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
   onBack,
   certInfo,
   onProceedUnsafe,
+  onOpenHttp,
 }) => {
   const { t, language } = useTranslation();
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -180,6 +185,21 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({
         {url}
         {code && <span className="block mt-1">{code}</span>}
       </div>
+
+      {errorType === 'httpsOnly' && onOpenHttp && (
+        <div className="mt-5 max-w-[480px] flex flex-col items-center gap-2.5">
+          <p className="text-[12px] text-[var(--fb-text-2)] leading-relaxed">{t('error.httpsOnlyHint')}</p>
+          <button
+            type="button"
+            id="error-open-http"
+            onClick={onOpenHttp}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-[var(--fb-radius-md)] border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 text-xs transition-colors"
+          >
+            <LockOpen className="w-3.5 h-3.5" />
+            <span>{t('error.httpsOnlyOpenHttp')}</span>
+          </button>
+        </div>
+      )}
 
       {isCert && onProceedUnsafe && (
         <div className="mt-5 max-w-[480px] flex flex-col items-center">

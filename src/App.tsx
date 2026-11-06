@@ -663,26 +663,47 @@ export default function App() {
   );
 
   // Session Restore & Application Close Handlers
-  const handleAttemptClose = useCallback(() => {
-    if (SessionRestoreService.hasRestorableTabs(tabs)) {
-      setShowCloseConfirmModal(true);
-    } else {
-      SessionRestoreService.clearSavedSession();
-      tauriBridge.forceClose();
-    }
-  }, [tabs]);
+  // "Remember my choice" in the close dialog, or Settings → Main → When closing with open tabs
+  const rememberCloseChoice = useCallback((action: 'save' | 'discard') => {
+    const next = { ...settings, onCloseWithTabs: action };
+    setSettings(next);
+    // Written right away: the window closes before the effect that persists settings would run
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {}
+  }, [settings]);
 
-  const handleConfirmCloseWithoutSaving = useCallback(() => {
+  const closeKeepingTabs = useCallback(() => {
+    setShowCloseConfirmModal(false);
+    SessionRestoreService.saveSession(tabs, activeTabId);
+    tauriBridge.forceClose();
+  }, [tabs, activeTabId]);
+
+  const closeDiscardingTabs = useCallback(() => {
     setShowCloseConfirmModal(false);
     SessionRestoreService.clearSavedSession();
     tauriBridge.forceClose();
   }, []);
 
-  const handleConfirmSaveAndClose = useCallback(() => {
-    setShowCloseConfirmModal(false);
-    SessionRestoreService.saveSession(tabs, activeTabId);
-    tauriBridge.forceClose();
-  }, [tabs, activeTabId]);
+  const handleAttemptClose = useCallback(() => {
+    if (!SessionRestoreService.hasRestorableTabs(tabs)) {
+      closeDiscardingTabs();
+    } else if (settings.onCloseWithTabs === 'save') {
+      closeKeepingTabs();
+    } else if (settings.onCloseWithTabs === 'discard') {
+      closeDiscardingTabs();
+    } else {
+      setShowCloseConfirmModal(true);
+    }
+  }, [tabs, settings.onCloseWithTabs, closeKeepingTabs, closeDiscardingTabs]);
+
+  const handleConfirmCloseWithoutSaving = useCallback((remember: boolean) => {
+    if (remember) rememberCloseChoice('discard');
+    closeDiscardingTabs();
+  }, [rememberCloseChoice, closeDiscardingTabs]);
+
+  const handleConfirmSaveAndClose = useCallback((remember: boolean) => {
+    if (remember) rememberCloseChoice('save');
+    closeKeepingTabs();
+  }, [rememberCloseChoice, closeKeepingTabs]);
 
   const handleCancelClose = useCallback(() => {
     setShowCloseConfirmModal(false);
@@ -1165,6 +1186,30 @@ export default function App() {
     },
     [activeTabId, handleReload]
   );
+
+  // Speaker icon: the main process reports audio per webContents, matched here to the tab's <webview>
+  const tabsForAudioRef = useRef(tabs);
+  tabsForAudioRef.current = tabs;
+  useEffect(() => {
+    return window.electronAPI?.on?.('webview-audio-state', ({ webContentsId, audible }: { webContentsId: number; audible: boolean }) => {
+      const tab = tabsForAudioRef.current.find((t) => {
+        try { return tauriBridge.getWebview(t.id)?.getWebContentsId?.() === webContentsId; } catch { return false; }
+      });
+      if (!tab || Boolean(tab.isAudioPlaying) === audible) return;
+      setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, isAudioPlaying: audible } : t)));
+    });
+  }, []);
+
+  const handleToggleMuteTab = useCallback((tabId: string) => {
+    setTabs((prev) => prev.map((t) => (t.id === tabId ? { ...t, isMuted: !t.isMuted } : t)));
+  }, []);
+
+  const handlePictureInPicture = useCallback((tabId: string) => {
+    try {
+      const id = tauriBridge.getWebview(tabId)?.getWebContentsId?.();
+      if (id) window.electronAPI?.pictureInPicture?.(id);
+    } catch {}
+  }, []);
 
   const handleSortTabs = useCallback(
     async (mode: TabSortMode) => {
@@ -2180,8 +2225,15 @@ export default function App() {
       popupsBlocked: settings.popupsBlocked,
       adBlockEnabled: settings.adBlockEnabled,
       checkForUpdates: settings.checkForUpdates,
+      httpsOnly: settings.httpsOnly,
+      spellcheck: settings.spellcheck,
+      secureDns: settings.secureDns,
+      secureDnsCustomUrl: settings.secureDnsCustomUrl,
     });
-  }, [settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled, settings.checkForUpdates]);
+  }, [
+    settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled, settings.checkForUpdates,
+    settings.httpsOnly, settings.spellcheck, settings.secureDns, settings.secureDnsCustomUrl,
+  ]);
 
   // Download speed cap is enforced by the main-process download governor
   useEffect(() => {
@@ -2452,6 +2504,8 @@ export default function App() {
             splitViewState={splitViewState}
             onOpenInSplitView={handleOpenInSplitView}
             onCloseWindow={handleAttemptClose}
+            onToggleMuteTab={handleToggleMuteTab}
+            onPictureInPicture={handlePictureInPicture}
           />
 
           {toolbarDock === 'top' && navigationBar}
@@ -2725,7 +2779,7 @@ export default function App() {
       {/* Close & Session Restore Confirmation Modal */}
       <CloseConfirmationModal
         isOpen={showCloseConfirmModal}
-        tabsCount={tabs.length}
+        tabs={tabs}
         onConfirmCloseWithoutSaving={handleConfirmCloseWithoutSaving}
         onConfirmSaveAndClose={handleConfirmSaveAndClose}
         onCancel={handleCancelClose}

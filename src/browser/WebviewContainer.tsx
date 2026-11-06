@@ -112,10 +112,14 @@ const ElectronWebviewTab: React.FC<{
   // Failed load shown over the webview, which stays mounted so "Try again" and the toolbar keep working
   const [loadError, setLoadError] = useState<LoadError | null>(null);
   const [certInfo, setCertInfo] = useState<CertificateErrorInfo | null>(null);
+  // HTTPS-only mode: the http address of a page whose https version failed
+  const [httpFallbackUrl, setHttpFallbackUrl] = useState<string | null>(null);
   // Hosts this tab was told to trust despite their certificate, and the URL whose certificate was just refused:
   // the address bar must never show a lock for them
   const certBypassHostsRef = useRef<Set<string>>(new Set());
   const certFailedUrlRef = useRef('');
+  // https address HTTPS-only mode upgraded to that then failed: not a secure page either
+  const httpsFailedUrlRef = useRef('');
   const currentTabRef = useRef(tab);
   currentTabRef.current = tab;
 
@@ -201,7 +205,7 @@ const ElectronWebviewTab: React.FC<{
           favicon,
           canGoBack: canBack,
           canGoForward: canFwd,
-          insecure: certFailedUrlRef.current === rawUrl || (Boolean(host) && certBypassHostsRef.current.has(host)),
+          insecure: certFailedUrlRef.current === rawUrl || httpsFailedUrlRef.current === rawUrl || (Boolean(host) && certBypassHostsRef.current.has(host)),
         });
 
         applySiteZoom(rawUrl);
@@ -212,6 +216,7 @@ const ElectronWebviewTab: React.FC<{
 
     const handleDomReady = () => {
       syncState();
+      try { el.setAudioMuted(Boolean(currentTabRef.current.isMuted)); } catch {}
     };
 
     // HTTP error of the current page, decided once it has loaded (see PAGE_IS_BARE_SCRIPT)
@@ -221,6 +226,7 @@ const ElectronWebviewTab: React.FC<{
       if (e.isMainFrame && !e.isInPlace) {
         pendingHttpError = null;
         certFailedUrlRef.current = '';
+        httpsFailedUrlRef.current = '';
         setLoadError(null);
       }
     };
@@ -273,6 +279,21 @@ const ElectronWebviewTab: React.FC<{
         const failure = loadErrorFromNetError(e.errorCode, e.errorDescription, e.validatedURL || currentTabRef.current.url);
         if (failure) setLoadError(failure);
         setCertInfo(null);
+        setHttpFallbackUrl(null);
+        // Did HTTPS-only mode upgrade this page from http? Then the site most likely has no https at all
+        const failedUrl = e.validatedURL || '';
+        const httpsOnlyApi = (window as any).electronAPI?.httpsOnly;
+        if (failure && httpsOnlyApi && failedUrl.startsWith('https://')) {
+          try {
+            httpsOnlyApi.info(el.getWebContentsId(), failedUrl).then((info: { httpUrl: string } | null) => {
+              if (!info) return;
+              httpsFailedUrlRef.current = failedUrl;
+              setHttpFallbackUrl(info.httpUrl);
+              setLoadError({ ...failure, type: 'httpsOnly' });
+              syncState(failedUrl);
+            }).catch(() => {});
+          } catch {}
+        }
         if (failure?.type === 'certificate') {
           certFailedUrlRef.current = failure.url;
           try {
@@ -359,6 +380,11 @@ const ElectronWebviewTab: React.FC<{
     };
   }, [tab.id]);
 
+  // Mute from the tab's speaker icon or its context menu
+  useEffect(() => {
+    try { wvRef.current?.setAudioMuted?.(Boolean(tab.isMuted)); } catch {}
+  }, [tab.isMuted]);
+
   // Sync zoom changes dynamically when tab.zoomLevel updates
   useEffect(() => {
     const el = wvRef.current;
@@ -400,12 +426,18 @@ const ElectronWebviewTab: React.FC<{
             onReload={() => wvRef.current?.loadURL(loadError.url)}
             onHome={() => onGoHome?.()}
             onShowResponse={loadError.type === 'http' ? () => setLoadError(null) : undefined}
-            onBack={loadError.type === 'certificate' ? () => {
+            onBack={loadError.type === 'certificate' || loadError.type === 'httpsOnly' ? () => {
               const el = wvRef.current;
               if (el && typeof el.canGoBack === 'function' && el.canGoBack()) el.goBack();
               else onGoHome?.();
             } : undefined}
             certInfo={certInfo}
+            onOpenHttp={loadError.type === 'httpsOnly' && httpFallbackUrl ? async () => {
+              const el = wvRef.current;
+              if (!el) return;
+              const httpUrl = await (window as any).electronAPI?.httpsOnly?.allowHttp(el.getWebContentsId(), loadError.url).catch(() => null);
+              if (httpUrl) el.loadURL(httpUrl);
+            } : undefined}
             onProceedUnsafe={loadError.type === 'certificate' && (window as any).electronAPI?.certificateError ? async () => {
               const el = wvRef.current;
               if (!el) return;

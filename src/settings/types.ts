@@ -57,6 +57,9 @@ export interface ThemePalette {
 
 export type DockEdge = 'top' | 'bottom' | 'left' | 'right';
 
+export type CloseTabsAction = 'ask' | 'save' | 'discard';
+export type SecureDnsChoice = 'off' | 'cloudflare' | 'quad9' | 'adguard' | 'mullvad' | 'custom';
+
 export interface BrowserSettings {
   /** Where the left navigation rail and the address toolbar are docked (drag & drop) */
   sidebarDock?: DockEdge;
@@ -79,6 +82,10 @@ export interface BrowserSettings {
   hardwareAcceleration: boolean;
   smoothScrolling: boolean;
   restoreTabsAfterRestart: boolean;
+  /** Closing the browser with open tabs: ask every time, or keep / close them without asking */
+  onCloseWithTabs: CloseTabsAction;
+  /** Spelling underlines and suggestions in text fields (Russian and English) */
+  spellcheck: boolean;
 
   // Performance Mode (Performance vs Quality)
   browserMode: BrowserMode;
@@ -93,6 +100,12 @@ export interface BrowserSettings {
   /** Built-in ad & tracker blocker (electron/adblock.cjs) */
   adBlockEnabled: boolean;
   checkForUpdates: boolean;
+  /** Top-level http:// pages are opened over https://, with a warning when the site has no https */
+  httpsOnly: boolean;
+  /** DNS over HTTPS provider, or 'off' for the system resolver */
+  secureDns: SecureDnsChoice;
+  /** DoH template used when secureDns is 'custom' */
+  secureDnsCustomUrl: string;
 
   // Telemetry & Diagnostics (strictly local, off by default)
   localDiagnosticLogs: boolean;

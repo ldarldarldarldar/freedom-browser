@@ -15,7 +15,7 @@ No system web engine, Rust or native toolchain is needed.
 ```bash
 npm ci                    # downloads Electron and the build tools
 npm run lint              # type check
-npm run test:update && npm run test:address && npm run test:downloads
+npm run test:update && npm run test:address && npm run test:downloads && npm run test:net
 npm run build:appimage    # release/Freedom-Browser-<version>-x86_64.AppImage
 ```
 

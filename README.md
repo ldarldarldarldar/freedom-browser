@@ -14,12 +14,12 @@
 2. **Programming** — Integrated developer console, network inspector, WebAssembly & DOM inspection.
 3. **Speed** — Low RAM usage, idle tab hibernation, hardware acceleration, and rapid startup.
 
-> **Freedom Browser 0.6.5-3** — redesigned graphite UI with a new logo, built on **Electron + Chromium**.
+> **Freedom Browser 0.6.6** — redesigned graphite UI with a new logo, built on **Electron + Chromium**.
 >
 > ```bash
 > npm ci
-> npm run build:appimage   # release/Freedom-Browser-0.6.5-3-x86_64.AppImage
-> npm run build:win        # release/Freedom-Browser-0.6.5-3-x64-Setup.exe — installer (CI builds it on windows-latest)
+> npm run build:appimage   # release/Freedom-Browser-0.6.6-x86_64.AppImage
+> npm run build:win        # release/Freedom-Browser-0.6.6-x64-Setup.exe — installer (CI builds it on windows-latest)
 > ```
 > Design tokens and the redesign notes: [REDESIGN_REPORT.md](REDESIGN_REPORT.md).
 
@@ -53,6 +53,7 @@ Freedom delivers compatibility with modern web standards:
 │   ├── extensions.cjs                 # Chrome extensions (folder, .crx, Chrome Web Store)
 │   ├── permissions.cjs                # Per-site permission prompts and decisions
 │   ├── download-names.cjs             # Safe, non-colliding download file names
+│   ├── net-privacy.cjs                # HTTPS-only upgrades and DNS-over-HTTPS options
 │   ├── updater.cjs, update-core.cjs   # Signed self-update (update.json)
 │   └── leveldb-reader.cjs             # One-time migration of old file:// localStorage
 ├── src/                               # Browser UI (React + TypeScript, built by Vite into dist/)
@@ -93,7 +94,7 @@ npm ci                 # install dependencies
 npm run dev            # UI dev server on http://127.0.0.1:3000
 npm run electron:dev   # Electron window that loads the dev server
 npm run lint           # type check
-npm run test:update && npm run test:address && npm run test:downloads   # logic tests
+npm run test:update && npm run test:address && npm run test:downloads && npm run test:net   # logic tests
 ```
 
 ---
@@ -116,6 +117,9 @@ Freedom has **ZERO remote telemetry by default**:
 - No usage statistics, browsing history, URLs, or device IDs are sent to developers or third parties.
 - No Google Analytics, no Sentry, no tracking pixels.
 - **Update checks**: once per start the browser asks GitHub for the latest release (switch: `Settings -> Privacy`), and Chrome Web Store extensions are checked for updates at Google's update server, as in Chrome. No browsing data is included.
+- **Spell check** (`Settings -> Main`, on by default) uses Chromium's Hunspell dictionaries for Russian and English, which Chromium downloads once from Google's servers. Turn it off and nothing is downloaded.
+- **HTTPS-only mode** (`Settings -> Privacy`, off by default): top-level `http://` pages are opened over `https://`; when a site has no HTTPS the browser shows a warning and lets you open the HTTP page for the rest of the session. Local network and IP addresses are never upgraded.
+- **Secure DNS** (`Settings -> Privacy`, off by default): Cloudflare, Quad9, AdGuard, Mullvad or your own DoH server, in strict mode — if the server cannot be reached, names do not resolve instead of silently going to your provider.
 - **Telemetry Setting**: Under `Settings -> Telemetry`, a single switch controls `[ OFF ] Local diagnostic logs`.
 - When enabled, logs are written strictly to the local device (`~/.config/freedom-browser/diagnostic.log` on Linux or `%APPDATA%\freedom-browser\diagnostic.log` on Windows) and can be cleared or exported by the user at any time.
 

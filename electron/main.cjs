@@ -9,6 +9,7 @@ const { createAdBlocker, STUB_SCHEME_PRIVILEGES } = require('./adblock.cjs');
 const { createPermissionManager, originOf } = require('./permissions.cjs');
 const { createUpdater } = require('./updater.cjs');
 const downloadNames = require('./download-names.cjs');
+const netPrivacy = require('./net-privacy.cjs');
 
 // Must happen before app ready
 registerUiScheme(protocol, [STUB_SCHEME_PRIVILEGES]);
@@ -519,6 +520,9 @@ const MENU_STRINGS = {
     forward: 'Forward',
     reload: 'Reload',
     inspectElement: 'Inspect Element',
+    noSpellingSuggestions: 'No spelling suggestions',
+    addToDictionary: 'Add to Dictionary',
+    pictureInPicture: 'Picture in Picture',
   },
   ru: {
     openLink: 'Открыть ссылку',
@@ -537,6 +541,9 @@ const MENU_STRINGS = {
     forward: 'Вперед',
     reload: 'Перезагрузить',
     inspectElement: 'Исследовать элемент',
+    noSpellingSuggestions: 'Нет вариантов исправления',
+    addToDictionary: 'Добавить в словарь',
+    pictureInPicture: 'Картинка в картинке',
   },
 };
 
@@ -980,6 +987,9 @@ app.on('web-contents-created', (event, contents) => {
       webPreferences.sandbox = true;
       webPreferences.webviewTag = false;
       webPreferences.allowRunningInsecureContent = false;
+      // Chromium's built-in PDF viewer: without plugins a PDF link was only downloaded
+      webPreferences.plugins = true;
+      webPreferences.spellcheck = true;
       // A guest is transparent by default: an unstyled page would put black text on the dark browser window.
       // Opaque, it gets the canvas of its own color scheme: white, or dark for pages that ask for dark.
       webPreferences.transparent = false;
@@ -994,6 +1004,13 @@ app.on('web-contents-created', (event, contents) => {
   if (contents.getType() === 'webview') {
     configureBrowsingSession(contents.session);
     contents.setBackgroundThrottling(true);
+
+    // Speaker icon on the tab (src/components/TabBar.tsx): the renderer matches the id to its <webview>
+    contents.on('audio-state-changed', ({ audible }) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('webview-audio-state', { webContentsId: contents.id, audible: Boolean(audible) });
+      }
+    });
 
     routeNewWindows(contents);
 
@@ -1147,6 +1164,21 @@ app.on('web-contents-created', (event, contents) => {
       const isPrivate = contents.session !== session.defaultSession;
       const canOpen = (target) => isWebTabUrl(target, contents);
 
+      // 0. Spelling: suggestions for the word under the cursor (Settings → Main → Spell check)
+      if (params.isEditable && params.misspelledWord) {
+        const suggestions = (params.dictionarySuggestions || []).slice(0, 6);
+        for (const word of suggestions) {
+          menu.append(new MenuItem({ label: word, click: () => contents.replaceMisspelling(word) }));
+        }
+        if (suggestions.length === 0) menu.append(new MenuItem({ label: i18n.noSpellingSuggestions, enabled: false }));
+        menu.append(new MenuItem({ type: 'separator' }));
+        menu.append(new MenuItem({
+          label: i18n.addToDictionary,
+          click: () => contents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
       // 1. Link Actions
       if (params.linkURL) {
         if (canOpen(params.linkURL)) {
@@ -1204,13 +1236,25 @@ app.on('web-contents-created', (event, contents) => {
         menu.append(new MenuItem({ type: 'separator' }));
       }
 
+      // 2b. Video: picture in picture (also in the tab's own menu, for players that hide this menu)
+      if (params.mediaType === 'video') {
+        menu.append(new MenuItem({
+          label: i18n.pictureInPicture,
+          click: () => { togglePictureInPicture(contents, params.frame).catch(() => {}); },
+        }));
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+
       // 3. Text Selection Actions
       if (params.selectionText && params.selectionText.trim().length > 0) {
         const text = params.selectionText.trim();
-        menu.append(new MenuItem({
-          label: i18n.copy,
-          role: 'copy',
-        }));
+        // In a text field the editing block below has its own Copy
+        if (!params.isEditable) {
+          menu.append(new MenuItem({
+            label: i18n.copy,
+            role: 'copy',
+          }));
+        }
         const truncated = text.length > 25 ? text.substring(0, 25) + '...' : text;
         menu.append(new MenuItem({
           label: i18n.searchWebFor.replace('%s', truncated),
@@ -1615,20 +1659,160 @@ handleUi('pick_custom_background', async () => {
   }
 });
 
-// Privacy settings mirrored from the renderer (Settings → Privacy). Defaults match src/settings/defaults.ts
-const privacyState = { doNotTrack: true, blockThirdPartyCookies: true, popupsBlocked: true, adBlockEnabled: true, checkForUpdates: true };
+// Privacy settings mirrored from the renderer (Settings → Privacy). Defaults match src/settings/defaults.ts.
+// HTTPS-only, secure DNS and spell check are also kept in storage-config.json, so they are in force
+// for the tabs restored at startup, before the UI has sent its settings.
+const privacyState = {
+  doNotTrack: true,
+  blockThirdPartyCookies: true,
+  popupsBlocked: true,
+  adBlockEnabled: true,
+  checkForUpdates: true,
+  httpsOnly: initialStorageConfig.httpsOnly === true,
+  spellcheck: initialStorageConfig.spellcheck !== false,
+  secureDns: netPrivacy.SECURE_DNS_CHOICES.includes(initialStorageConfig.secureDns) ? initialStorageConfig.secureDns : 'off',
+  secureDnsCustomUrl: typeof initialStorageConfig.secureDnsCustomUrl === 'string' ? initialStorageConfig.secureDnsCustomUrl : '',
+};
+const PERSISTED_PRIVACY_KEYS = ['blockThirdPartyCookies', 'httpsOnly', 'spellcheck', 'secureDns', 'secureDnsCustomUrl'];
+
+let appliedDnsKey = '';
+function applySecureDns() {
+  if (!app.isReady()) return;
+  const options = netPrivacy.secureDnsOptions(privacyState.secureDns, privacyState.secureDnsCustomUrl);
+  const key = JSON.stringify(options);
+  if (key === appliedDnsKey) return;
+  try {
+    app.configureHostResolver(options);
+    appliedDnsKey = key;
+  } catch (err) {
+    console.warn('[dns] configureHostResolver failed:', err.message);
+  }
+}
+
+// Russian and English dictionaries in every tab session (Chromium downloads them on first use)
+const SPELLCHECK_LANGUAGES = ['ru', 'en-US'];
+function applySpellcheck(ses) {
+  try {
+    ses.setSpellCheckerEnabled(privacyState.spellcheck);
+    if (privacyState.spellcheck && process.platform !== 'darwin') {
+      const available = new Set(ses.availableSpellCheckerLanguages || []);
+      const langs = SPELLCHECK_LANGUAGES.filter((l) => available.size === 0 || available.has(l));
+      if (langs.length) ses.setSpellCheckerLanguages(langs);
+    }
+  } catch (err) {
+    console.warn('[spellcheck]', err.message);
+  }
+}
+function applySpellcheckEverywhere() {
+  const sessions = new Set([session.defaultSession]);
+  for (const wc of webContents.getAllWebContents()) if (wc.getType() === 'webview') sessions.add(wc.session);
+  for (const ses of sessions) applySpellcheck(ses);
+}
+
 handleUi('set_privacy_settings', (event, next) => {
   if (next && typeof next === 'object') {
-    for (const key of Object.keys(privacyState)) {
+    for (const key of ['doNotTrack', 'blockThirdPartyCookies', 'popupsBlocked', 'adBlockEnabled', 'checkForUpdates', 'httpsOnly', 'spellcheck']) {
       if (typeof next[key] === 'boolean') privacyState[key] = next[key];
     }
+    if (netPrivacy.SECURE_DNS_CHOICES.includes(next.secureDns)) privacyState.secureDns = next.secureDns;
+    if (typeof next.secureDnsCustomUrl === 'string') privacyState.secureDnsCustomUrl = next.secureDnsCustomUrl.slice(0, 512);
   }
   adBlocker?.setEnabled(privacyState.adBlockEnabled);
-  // Applied by the command line switch at the next start
-  if (readStorageConfig().blockThirdPartyCookies !== privacyState.blockThirdPartyCookies) {
-    writeStorageConfig({ blockThirdPartyCookies: privacyState.blockThirdPartyCookies });
-  }
+  applySecureDns();
+  applySpellcheckEverywhere();
+  // Third-party cookies take effect through a command line switch at the next start; the rest is read at startup
+  const stored = readStorageConfig();
+  const changed = {};
+  for (const key of PERSISTED_PRIVACY_KEYS) if (stored[key] !== privacyState[key]) changed[key] = privacyState[key];
+  if (Object.keys(changed).length) writeStorageConfig(changed);
   return { ...privacyState };
+});
+
+// ---- HTTPS-only mode ----
+// Top-level http:// navigations are redirected to https:// (electron/net-privacy.cjs decides which).
+// When the https page then fails, the tab asks https_only_info and offers the http page instead.
+const allowedHttpHosts = new Set(); // hosts the user opened over http anyway, until the browser closes
+const httpsUpgrades = new Map(); // webContentsId -> { host, httpUrl, at }
+const HTTPS_UPGRADE_TTL_MS = 5 * 60 * 1000;
+
+function httpsOnlyRedirect(details) {
+  if (!privacyState.httpsOnly || details.resourceType !== 'mainFrame' || details.method !== 'GET') return null;
+  const wc = details.webContents;
+  if (!wc || wc.isDestroyed() || wc.getType() !== 'webview') return null;
+  const target = netPrivacy.httpsUpgradeTarget(details.url, allowedHttpHosts);
+  if (!target) return null;
+  if (!httpsUpgrades.has(wc.id)) wc.once('destroyed', () => httpsUpgrades.delete(wc.id));
+  httpsUpgrades.set(wc.id, { host: new URL(target).hostname, httpUrl: details.url, at: Date.now() });
+  return { redirectURL: target };
+}
+
+function upgradeFor(webContentsId, pageUrl) {
+  const entry = httpsUpgrades.get(webContentsId);
+  if (!entry || Date.now() - entry.at > HTTPS_UPGRADE_TTL_MS) return null;
+  try {
+    const u = new URL(pageUrl);
+    if (u.protocol !== 'https:' || u.hostname !== entry.host) return null;
+  } catch {
+    return null;
+  }
+  return entry;
+}
+
+const isWebviewId = (id) => {
+  const wc = webContents.fromId(Number(id));
+  return Boolean(wc && !wc.isDestroyed() && wc.getType() === 'webview');
+};
+
+// The http address this failed https page was upgraded from, or null when the browser did not upgrade it
+handleUi('https_only_info', (event, webContentsId, pageUrl) => {
+  if (!isWebviewId(webContentsId)) return null;
+  const entry = upgradeFor(Number(webContentsId), pageUrl);
+  return entry ? { httpUrl: entry.httpUrl, host: entry.host } : null;
+});
+
+// "Open the http site": no more upgrades for this host until the browser closes
+handleUi('https_only_allow', (event, webContentsId, pageUrl) => {
+  if (!isWebviewId(webContentsId)) return null;
+  const entry = upgradeFor(Number(webContentsId), pageUrl);
+  if (!entry) return null;
+  allowedHttpHosts.add(entry.host);
+  httpsUpgrades.delete(Number(webContentsId));
+  return entry.httpUrl;
+});
+
+// ---- Picture in picture ----
+// Runs in each frame with a user gesture (requestPictureInPicture needs one). Leaves picture in picture
+// when a video is already in it, otherwise takes the playing video, or the largest one.
+const PIP_SCRIPT = `(async () => {
+  if (document.pictureInPictureElement) { await document.exitPictureInPicture(); return 'exited'; }
+  if (!document.pictureInPictureEnabled) return 'none';
+  const videos = [...document.querySelectorAll('video')].filter((v) => v.readyState > 0);
+  if (!videos.length) return 'none';
+  const area = (v) => { const r = v.getBoundingClientRect(); return r.width * r.height; };
+  videos.sort((a, b) => (Number(!b.paused) - Number(!a.paused)) || (area(b) - area(a)));
+  const video = videos[0];
+  video.disablePictureInPicture = false;
+  await video.requestPictureInPicture();
+  return 'entered';
+})().catch((err) => 'error: ' + err.message)`;
+
+async function togglePictureInPicture(contents, preferredFrame) {
+  if (!contents || contents.isDestroyed()) return 'none';
+  const frames = [];
+  if (preferredFrame && !preferredFrame.isDestroyed?.()) frames.push(preferredFrame);
+  for (const frame of contents.mainFrame.framesInSubtree) if (!frames.includes(frame)) frames.push(frame);
+  for (const frame of frames) {
+    try {
+      const result = await frame.executeJavaScript(PIP_SCRIPT, true);
+      if (result === 'entered' || result === 'exited') return result;
+    } catch {}
+  }
+  return 'none';
+}
+
+handleUi('tab_picture_in_picture', async (event, webContentsId) => {
+  if (!isWebviewId(webContentsId)) return 'none';
+  return togglePictureInPicture(webContents.fromId(Number(webContentsId)));
 });
 
 // ---- Built-in ad blocker (electron/adblock.cjs), created on app ready ----
@@ -2012,6 +2196,7 @@ function configureBrowsingSession(ses) {
   if (!ses || configuredSessions.has(ses)) return;
   configuredSessions.add(ses);
   permissionManager?.attach(ses);
+  applySpellcheck(ses);
   ses.setUserAgent(desktopChromeUA);
   // Guarantee all outgoing HTTP/HTTPS requests advertise desktop Chrome without mobile hints
   ses.webRequest.onBeforeSendHeaders((details, callback) => {
@@ -2031,9 +2216,13 @@ function configureBrowsingSession(ses) {
 
   // Ad & tracker blocking for pages in browser tabs
   adBlocker?.serveStubs(ses);
+  // One listener per session: HTTPS-only upgrades first, then the ad blocker
   ses.webRequest.onBeforeRequest((details, callback) => {
     let verdict = null;
-    try { verdict = adBlocker?.matchRequest(details); } catch {}
+    try { verdict = httpsOnlyRedirect(details); } catch (err) { console.warn('[https-only]', err.message); }
+    if (!verdict) {
+      try { verdict = adBlocker?.matchRequest(details); } catch {}
+    }
     callback(verdict || {});
   });
 
@@ -2202,6 +2391,8 @@ async function encryptOldCookies() {
 app.whenReady().then(async () => {
   app.userAgentFallback = desktopChromeUA;
   session.defaultSession.setUserAgent(desktopChromeUA);
+  // Before any tab exists, so restored tabs never resolve names through the system first
+  applySecureDns();
 
   permissionManager = createPermissionManager({
     app,

@@ -15,6 +15,7 @@ import {
   ArrowDownAZ,
   Check,
   Columns2,
+  PictureInPicture2,
 } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { tauriBridge } from '../services/tauriBridge';
@@ -34,6 +35,8 @@ interface TabBarProps {
   onNewTab: () => void;
   onDuplicateTab?: (id: string) => void;
   onToggleMuteTab?: (id: string) => void;
+  /** Picture in picture for the tab's playing (or largest) video */
+  onPictureInPicture?: (id: string) => void;
   headerColorClass?: string;
   onRestoreClosedTab?: () => void;
   closedTabsCount?: number;
@@ -66,6 +69,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   onNewTab,
   onDuplicateTab,
   onToggleMuteTab,
+  onPictureInPicture,
   headerColorClass = 'bg-[var(--fb-bg)]',
   onRestoreClosedTab,
   closedTabsCount = 0,
@@ -289,15 +293,16 @@ export const TabBar: React.FC<TabBarProps> = ({
                 </span>
 
                 {/* Audio Indicator if active */}
-                {tab.isAudioPlaying && (
+                {(tab.isAudioPlaying || tab.isMuted) && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       onToggleMuteTab?.(tab.id);
                     }}
-                    className="mr-1 p-0.5 text-emerald-400 hover:text-white rounded app-no-drag transition-colors"
+                    className={`mr-1 p-0.5 rounded app-no-drag transition-colors hover:text-white ${tab.isMuted ? 'text-neutral-500' : 'text-emerald-400'}`}
                     title={tab.isMuted ? t('tab.unmute') : t('tab.mute')}
+                    aria-label={tab.isMuted ? t('tab.unmute') : t('tab.mute')}
                   >
                     {tab.isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
                   </button>
@@ -551,6 +556,42 @@ export const TabBar: React.FC<TabBarProps> = ({
                 >
                   <Columns2 className="w-3.5 h-3.5" />
                   <span>{t('tabMenu.openInSplit')}</span>
+                </button>
+              )}
+
+              {!contextMenu.tab.url.startsWith('freedom://') && onToggleMuteTab && (
+                <button
+                  type="button"
+                  id="tab-menu-mute"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const targetTab = contextMenu.tab;
+                    setContextMenu(null);
+                    onToggleMuteTab(targetTab.id);
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                >
+                  {contextMenu.tab.isMuted ? <Volume2 className="w-3.5 h-3.5 text-neutral-400" /> : <VolumeX className="w-3.5 h-3.5 text-neutral-400" />}
+                  <span>{contextMenu.tab.isMuted ? t('tabMenu.unmute') : t('tabMenu.mute')}</span>
+                </button>
+              )}
+
+              {!contextMenu.tab.url.startsWith('freedom://') && !contextMenu.tab.isSuspended && onPictureInPicture && (
+                <button
+                  type="button"
+                  id="tab-menu-pip"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const targetTab = contextMenu.tab;
+                    setContextMenu(null);
+                    onPictureInPicture(targetTab.id);
+                  }}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                >
+                  <PictureInPicture2 className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>{t('tabMenu.pictureInPicture')}</span>
                 </button>
               )}
 
