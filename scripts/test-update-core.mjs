@@ -87,18 +87,22 @@ test('the relaunch helper does not pass inherited descriptors to the new version
     // The parent of the helper keeps descriptors 3, 12 and 20 open, as Electron does with its own files
     const stdio = Array.from({ length: 21 }, () => 'ignore');
     stdio[3] = held; stdio[12] = held; stdio[20] = held;
+    const readReport = () => fs.readFileSync(report, 'utf8').split(/\s+/).filter(Boolean).map(Number);
     const run = (bash) => {
       const { file, args } = relaunchCommand(target, 999999999, { bash });
       const r = spawnSync(file, args, { stdio, timeout: 10000 });
       assert.equal(r.status, 0, String(r.stderr));
-      return fs.readFileSync(report, 'utf8').split(/\s+/).filter(Boolean).map(Number);
+      return readReport();
     };
+    // What the target opens by itself (dash keeps its script on 10 and up, ls reads /proc on one more)
+    assert.equal(spawnSync(target, [], { stdio: 'ignore', timeout: 10000 }).status, 0);
+    const baseline = readReport();
     const bash = ['/bin/bash', '/usr/bin/bash'].find((p) => fs.existsSync(p));
     if (bash) {
       const fds = run(bash);
-      // 0-2 plus the one ls uses to read /proc
       assert.ok(!fds.includes(3) && !fds.includes(12) && !fds.includes(20), fds.join(' '));
-      assert.ok(fds.length <= 4, fds.join(' '));
+      // Nothing beyond what the target opens when started on its own
+      assert.deepEqual(fds.filter((fd) => !baseline.includes(fd)), [], `${fds.join(' ')} vs ${baseline.join(' ')}`);
     }
     // Plain sh can only close 3-9
     assert.ok(!run(null).includes(3));
