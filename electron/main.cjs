@@ -6,13 +6,15 @@ const url = require('url');
 const { execFile } = require('child_process');
 const { UI_ORIGIN, UI_PARTITION, registerUiScheme, serveUi, migrateUiStorage } = require('./ui-host.cjs');
 const { createAdBlocker, STUB_SCHEME_PRIVILEGES } = require('./adblock.cjs');
+const { DOCX_SCHEME_PRIVILEGES, createDocxViewer, isDocxName } = require('./docx-viewer.cjs');
+const bookmarksIo = require('./bookmarks-io.cjs');
 const { createPermissionManager, originOf } = require('./permissions.cjs');
 const { createUpdater } = require('./updater.cjs');
 const downloadNames = require('./download-names.cjs');
 const netPrivacy = require('./net-privacy.cjs');
 
 // Must happen before app ready
-registerUiScheme(protocol, [STUB_SCHEME_PRIVILEGES]);
+registerUiScheme(protocol, [STUB_SCHEME_PRIVILEGES, DOCX_SCHEME_PRIVILEGES]);
 
 // User Data Storage Path & System Configuration
 // Separates application binaries (e.g. Program Files\Freedom Browser) from user data (profiles, history, bookmarks, cookies).
@@ -722,6 +724,8 @@ function createWindow() {
 
   // Downloads handling: Real downloads to disk with true progress & metrics
   session.defaultSession.on('will-download', (event, item, webContents) => {
+    // A .docx opened in a tab is shown there (electron/docx-viewer.cjs), like PDF
+    if (docxViewer.interceptDownload(item, webContents)) return;
     let downloadDir = activeDownloadsLocation;
     if (downloadDir && downloadDir.startsWith('~/')) {
       downloadDir = path.join(os.homedir(), downloadDir.slice(2));
@@ -1036,7 +1040,7 @@ app.on('web-contents-created', (event, contents) => {
       delete webPreferences.disableBlinkFeatures;
       // Tabs use the default profile or an in-memory incognito partition, never the UI's own session
       const partitionOk = !params.partition || /^freedom-incognito-[a-z0-9]+$/.test(params.partition);
-      if (!partitionOk || !/^((https?|file):|about:blank$)/.test(params.src || '')) attachEvent.preventDefault();
+      if (!partitionOk || !/^((https?|file|freedom-docx):|about:blank$)/.test(params.src || '')) attachEvent.preventDefault();
     });
   }
 
@@ -1052,6 +1056,15 @@ app.on('web-contents-created', (event, contents) => {
     });
 
     routeNewWindows(contents);
+
+    // Document views (freedom-docx://) open only from the browser itself or from another local document,
+    // as Chromium does with file:// — a web page cannot point a tab or a frame at them
+    contents.on('will-frame-navigate', (navEvent) => {
+      if (!/^freedom-docx:/i.test(navEvent.url)) return;
+      const from = navEvent.isMainFrame ? contents.getURL() : '';
+      if (!/^(freedom-docx|file):/i.test(from)) navEvent.preventDefault();
+    });
+    contents.once('destroyed', () => docxViewer.forgetOwner(contents.id));
 
 
     // Handle HTML5 Fullscreen API requests from games or video players inside webviews
@@ -1184,6 +1197,11 @@ app.on('web-contents-created', (event, contents) => {
       if (keyIs(input, 'o')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'open-file');
+        return;
+      }
+      if (keyIs(input, 's') && input.shift) {
+        event.preventDefault();
+        mainWindow?.webContents.send('webview-shortcut', 'screenshot');
         return;
       }
       if (keyIs(input, 'r')) {
@@ -1859,6 +1877,232 @@ const isWebviewId = (id) => {
   return Boolean(wc && !wc.isDestroyed() && wc.getType() === 'webview');
 };
 
+// ---- Word documents in tabs (electron/docx-viewer.cjs) ----
+const docxViewer = createDocxViewer({ app, getLanguage: () => currentAppLanguage });
+
+// Downloads panel → "Open in browser" for a downloaded .docx: the viewer address for a new tab
+handleUi('docx_view_url', (event, filePath) => {
+  if (typeof filePath !== 'string' || !path.isAbsolute(filePath) || !isDocxName(filePath)) return null;
+  try {
+    if (!fs.statSync(filePath).isFile()) return null;
+  } catch {
+    return null;
+  }
+  return docxViewer.urlForLocalFile(filePath);
+});
+
+// ---- Page screenshots (toolbar camera button, Ctrl+Shift+S) ----
+const SCREENSHOT_MAX_CSS_HEIGHT = 16384;
+
+// The whole page through the DevTools protocol. The viewport is made as tall as the page (as DevTools' "Capture full
+// size screenshot" does), but a <webview> can only render as many pixels as its real height in one capture — beyond that
+// the picture repeats — so the page is captured in screen-high strips and stitched.
+const SCREENSHOT_MAX_PIXELS = 64 * 1024 * 1024;
+async function captureFullPage(wc) {
+  const { nativeImage } = require('electron');
+  const dbg = wc.debugger;
+  let attachedHere = false;
+  if (!dbg.isAttached()) {
+    dbg.attach('1.3');
+    attachedHere = true;
+  }
+  let overridden = false;
+  try {
+    const metrics = await dbg.sendCommand('Page.getLayoutMetrics');
+    const size = metrics.cssContentSize || metrics.contentSize;
+    const visual = metrics.cssVisualViewport || metrics.visualViewport || {};
+    const layout = metrics.cssLayoutViewport || metrics.layoutViewport || {};
+    const dpr = await dbg.sendCommand('Runtime.evaluate', { expression: 'devicePixelRatio', returnByValue: true })
+      .then((r) => Number(r.result.value) || 1, () => 1);
+    const width = Math.max(1, Math.floor(visual.clientWidth || layout.clientWidth || size.width));
+    const strip = Math.max(64, Math.floor(visual.clientHeight || layout.clientHeight || 600));
+    const fullHeight = Math.ceil(size.height);
+    const maxHeight = Math.min(SCREENSHOT_MAX_CSS_HEIGHT, Math.floor(SCREENSHOT_MAX_PIXELS / (width * dpr * dpr)));
+    const height = Math.max(1, Math.min(maxHeight, fullHeight));
+    await dbg.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 0, mobile: false });
+    overridden = true;
+    // Let the page lay out and paint at the new size
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await dbg.sendCommand('Runtime.evaluate', {
+      expression: 'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))',
+      awaitPromise: true,
+    }).catch(() => {});
+    const bitmaps = [];
+    let pixelWidth = 0;
+    let pixelHeight = 0;
+    for (let y = 0; y < height; y += strip) {
+      const h = Math.min(strip, height - y);
+      const { data } = await dbg.sendCommand('Page.captureScreenshot', {
+        format: 'png',
+        fromSurface: true,
+        captureBeyondViewport: true,
+        clip: { x: 0, y, width, height: h, scale: 1 },
+      });
+      const part = nativeImage.createFromBuffer(Buffer.from(data, 'base64'));
+      const partSize = part.getSize();
+      if (!pixelWidth) pixelWidth = partSize.width;
+      let bitmap = part.toBitmap();
+      if (partSize.width !== pixelWidth) {
+        bitmap = part.resize({ width: pixelWidth, height: partSize.height }).toBitmap();
+      }
+      bitmaps.push(bitmap);
+      pixelHeight += partSize.height;
+    }
+    const image = nativeImage.createFromBitmap(Buffer.concat(bitmaps), { width: pixelWidth, height: pixelHeight });
+    return { image, truncated: fullHeight > height };
+  } finally {
+    if (overridden) await dbg.sendCommand('Emulation.clearDeviceMetricsOverride').catch(() => {});
+    if (attachedHere) {
+      try { dbg.detach(); } catch {}
+    }
+  }
+}
+
+function screenshotFileName(pageUrl) {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+  let host = '';
+  try { host = new URL(pageUrl).hostname.replace(/^www\./, ''); } catch {}
+  const base = `${currentAppLanguage === 'ru' ? 'Скриншот' : 'Screenshot'} ${stamp}${host ? ` ${host}` : ''}`;
+  return `${base.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_')}.png`;
+}
+
+// area: 'visible' | 'full', target: 'clipboard' | 'file'.
+// Result: { ok: true, target, path?, width, height, truncated } | { ok: false, canceled?, error? }
+handleUi('tab_screenshot', async (event, webContentsId, options = {}) => {
+  if (!isWebviewId(webContentsId)) return { ok: false, error: 'no-tab' };
+  const wc = webContents.fromId(Number(webContentsId));
+  const area = options.area === 'full' ? 'full' : 'visible';
+  const target = options.target === 'file' ? 'file' : 'clipboard';
+  const { nativeImage } = require('electron');
+  let image;
+  let truncated = false;
+  try {
+    if (area === 'full') {
+      const shot = await captureFullPage(wc);
+      image = shot.image;
+      truncated = shot.truncated;
+    } else {
+      image = await wc.capturePage();
+    }
+  } catch (err) {
+    console.warn('[screenshot]', err);
+    return { ok: false, error: String(err?.message || err) };
+  }
+  if (!image || image.isEmpty()) return { ok: false, error: 'empty' };
+  const { width, height } = image.getSize();
+  if (target === 'clipboard') {
+    // Electron 44 has only the async, W3C-style clipboard API
+    try {
+      const { ClipboardItem } = require('electron');
+      await clipboard.write([new ClipboardItem({ 'image/png': new Blob([image.toPNG()], { type: 'image/png' }) })]);
+    } catch (err) {
+      return { ok: false, error: String(err?.message || err) };
+    }
+    return { ok: true, target, width, height, truncated };
+  }
+  let dir = activeDownloadsLocation && activeDownloadsLocation.startsWith('~/')
+    ? path.join(os.homedir(), activeDownloadsLocation.slice(2))
+    : activeDownloadsLocation;
+  if (!dir || !fs.existsSync(dir)) dir = app.getPath('downloads');
+  const ru = currentAppLanguage === 'ru';
+  const dialogOptions = {
+    title: ru ? 'Сохранить скриншот' : 'Save Screenshot',
+    defaultPath: path.join(dir, screenshotFileName(wc.getURL())),
+    filters: [{ name: 'PNG', extensions: ['png'] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  };
+  const { canceled, filePath } = mainWindow && !mainWindow.isDestroyed()
+    ? await dialog.showSaveDialog(mainWindow, dialogOptions)
+    : await dialog.showSaveDialog(dialogOptions);
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  const finalPath = /\.png$/i.test(filePath) ? filePath : `${filePath}.png`;
+  try {
+    await fs.promises.writeFile(finalPath, image.toPNG());
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+  return { ok: true, target, path: finalPath, width, height, truncated };
+});
+
+// ---- Bookmark import / export (electron/bookmarks-io.cjs) ----
+// The UI only ever names a source by the id from the last listing, never by path
+let bookmarkSources = new Map();
+
+handleUi('bookmarks_list_sources', () => {
+  let sources = [];
+  try { sources = bookmarksIo.listBrowserSources(); } catch (err) { console.warn('[bookmarks] sources:', err); }
+  bookmarkSources = new Map(sources.map((src) => [src.id, src]));
+  return sources.map(({ id, browser, profile, kind }) => ({ id, browser, profile, kind }));
+});
+
+const importResult = (tree) => ({ ok: true, tree, counts: bookmarksIo.countTree(tree) });
+
+handleUi('bookmarks_import_source', (event, id) => {
+  const source = bookmarkSources.get(String(id));
+  if (!source) return { ok: false, error: 'unknown-source' };
+  try {
+    return importResult(bookmarksIo.readSource(source));
+  } catch (err) {
+    console.warn('[bookmarks] import:', err);
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
+handleUi('bookmarks_import_file', async () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, canceled: true };
+  const ru = currentAppLanguage === 'ru';
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: ru ? 'Импорт закладок' : 'Import Bookmarks',
+    properties: ['openFile'],
+    filters: [
+      { name: ru ? 'Файл закладок' : 'Bookmarks file', extensions: ['html', 'htm', 'json', 'sqlite'] },
+      { name: ru ? 'Все файлы' : 'All Files', extensions: ['*'] },
+    ],
+  });
+  if (result.canceled || !result.filePaths?.length) return { ok: false, canceled: true };
+  try {
+    return importResult(bookmarksIo.readBookmarkFile(result.filePaths[0]));
+  } catch (err) {
+    console.warn('[bookmarks] import file:', err);
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
+handleUi('bookmarks_export', async (event, data = {}) => {
+  const bookmarks = Array.isArray(data.bookmarks) ? data.bookmarks.slice(0, 200000) : [];
+  const folders = Array.isArray(data.folders) ? data.folders.slice(0, 50000) : [];
+  const clean = {
+    bookmarks: bookmarks.filter((b) => b && typeof b.url === 'string').map((b) => ({
+      title: String(b.title ?? ''), url: b.url, folderId: String(b.folderId ?? ''), addedAt: Number(b.addedAt) || 0,
+      favicon: typeof b.favicon === 'string' && b.favicon.length < 64 * 1024 ? b.favicon : undefined,
+    })),
+    folders: folders.filter((f) => f && typeof f.id === 'string').map((f) => ({
+      id: f.id, name: String(f.name ?? ''), parentId: typeof f.parentId === 'string' ? f.parentId : undefined, createdAt: Number(f.createdAt) || 0,
+    })),
+    barTitle: typeof data.barTitle === 'string' ? data.barTitle : undefined,
+    otherTitle: typeof data.otherTitle === 'string' ? data.otherTitle : undefined,
+  };
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, canceled: true };
+  const ru = currentAppLanguage === 'ru';
+  const d = new Date();
+  const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: ru ? 'Экспорт закладок' : 'Export Bookmarks',
+    defaultPath: path.join(app.getPath('documents'), `bookmarks_${stamp}.html`),
+    filters: [{ name: 'HTML', extensions: ['html'] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  });
+  if (canceled || !filePath) return { ok: false, canceled: true };
+  try {
+    await fs.promises.writeFile(filePath, bookmarksIo.buildNetscapeHtml(clean), 'utf8');
+    return { ok: true, path: filePath, count: clean.bookmarks.length };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
 // The http address this failed https page was upgraded from, or null when the browser did not upgrade it
 handleUi('https_only_info', (event, webContentsId, pageUrl) => {
   if (!isWebviewId(webContentsId)) return null;
@@ -2315,6 +2559,7 @@ function configureBrowsingSession(ses) {
 
   // Ad & tracker blocking for pages in browser tabs
   adBlocker?.serveStubs(ses);
+  docxViewer.serve(ses);
   // One listener per session: HTTPS-only upgrades first, then the ad blocker
   ses.webRequest.onBeforeRequest((details, callback) => {
     let verdict = null;
@@ -2542,6 +2787,8 @@ app.on('before-quit', (event) => {
   exitDataCleared = true;
   withTimeout(clearBrowsingSessionData(), 8000).finally(() => app.quit());
 });
+
+app.on('will-quit', () => docxViewer.cleanup());
 
 app.on('window-all-closed', () => {
   // The hidden windows of the startup migration closing is not the user closing the browser

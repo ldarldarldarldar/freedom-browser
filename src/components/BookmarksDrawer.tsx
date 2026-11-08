@@ -14,20 +14,38 @@ import {
   ExternalLink,
   ChevronRight,
   Plus,
+  Upload,
+  Download,
+  FileText,
+  Loader2,
 } from 'lucide-react';
 
 interface BookmarksDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (url: string) => void;
+  /** Folder to show first (a folder chip on the bookmarks bar) */
+  initialFolderId?: string;
+  /** Bookmarks or folders changed here: the bookmarks bar re-reads them */
+  onChange?: () => void;
+  onNotice?: (text: string, tone?: 'ok' | 'error') => void;
 }
+
+type BrowserSource = { id: string; browser: string; profile: string; kind: 'chromium' | 'firefox' };
 
 export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
   isOpen,
   onClose,
   onNavigate,
+  initialFolderId,
+  onChange,
+  onNotice,
 }) => {
   const { t } = useTranslation();
+  const bookmarksApi = window.electronAPI?.bookmarks;
+  const [showImport, setShowImport] = useState(false);
+  const [sources, setSources] = useState<BrowserSource[] | null>(null);
+  const [busy, setBusy] = useState(false);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
@@ -54,10 +72,86 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
       setSearchQuery('');
       setEditingBookmark(null);
       setIsCreatingFolder(false);
+      setShowImport(false);
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen && initialFolderId) setSelectedFolderId(initialFolderId);
+  }, [isOpen, initialFolderId]);
+
+  // Installed browsers are looked up when the import menu opens
+  useEffect(() => {
+    if (!showImport || !bookmarksApi) return;
+    let cancelled = false;
+    setSources(null);
+    bookmarksApi.listSources().then(
+      (list) => !cancelled && setSources(list),
+      () => !cancelled && setSources([])
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [showImport, bookmarksApi]);
+
   if (!isOpen) return null;
+
+  const changed = () => {
+    loadData();
+    onChange?.();
+  };
+
+  const finishImport = (result: BookmarkImportResult) => {
+    if (result.canceled) return;
+    if (!result.ok || !result.tree) {
+      onNotice?.(t('bookmarks.importFailed', { error: result.error || '?' }), 'error');
+      return;
+    }
+    if (!result.counts?.urls) {
+      onNotice?.(t('bookmarks.importEmpty'), 'error');
+      return;
+    }
+    const summary = BookmarkService.importTree(result.tree);
+    // Chromium writes localStorage lazily: keep a large import even if the browser crashes soon after
+    window.electronAPI?.flushUiStorage?.();
+    setShowImport(false);
+    setSelectedFolderId('all');
+    changed();
+    onNotice?.(t('bookmarks.importDone', summary));
+  };
+
+  const runImport = async (load: () => Promise<BookmarkImportResult>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      finishImport(await load());
+    } catch (err) {
+      onNotice?.(t('bookmarks.importFailed', { error: String((err as Error)?.message || err) }), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!bookmarksApi || busy) return;
+    setShowImport(false);
+    setBusy(true);
+    try {
+      const result = await bookmarksApi.exportHtml({
+        bookmarks: BookmarkService.getBookmarks(),
+        folders: BookmarkService.getFolders(),
+        barTitle: t('bookmarks.barFolder'),
+        otherTitle: t('bookmarks.otherBookmarks'),
+      });
+      if (result.ok) onNotice?.(t('bookmarks.exportDone', { count: result.count || 0, path: result.path || '' }));
+      else if (!result.canceled) onNotice?.(t('bookmarks.exportFailed', { error: result.error || '?' }), 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const folderLabel = (f: BookmarkFolder) =>
+    f.id === 'bar' ? t('bookmarks.barFolder') : f.id === 'other' ? t('bookmarks.otherBookmarks') : BookmarkService.folderPath(f.id, folders);
 
   const filteredBookmarks = bookmarks.filter((b) => {
     if (selectedFolderId !== 'all' && b.folderId !== selectedFolderId) {
@@ -74,6 +168,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
     e.stopPropagation();
     const updated = BookmarkService.removeBookmark(id);
     setBookmarks(updated);
+    onChange?.();
   };
 
   const handleStartEdit = (b: Bookmark, e: React.MouseEvent) => {
@@ -94,6 +189,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
     });
     setBookmarks(updated);
     setEditingBookmark(null);
+    onChange?.();
   };
 
   const handleCreateFolder = (e: React.FormEvent) => {
@@ -101,6 +197,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
     if (!newFolderName.trim()) return;
     BookmarkService.createFolder(newFolderName.trim());
     setFolders(BookmarkService.getFolders());
+    onChange?.();
     setNewFolderName('');
     setIsCreatingFolder(false);
   };
@@ -108,8 +205,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
   const handleDeleteFolder = (folderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     BookmarkService.deleteFolder(folderId);
-    setFolders(BookmarkService.getFolders());
-    setBookmarks(BookmarkService.getBookmarks());
+    changed();
     if (selectedFolderId === folderId) {
       setSelectedFolderId('all');
     }
@@ -131,13 +227,88 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
             Ctrl+D
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {bookmarksApi && (
+            <div className="relative">
+              <button
+                id="btn-bookmarks-import"
+                type="button"
+                onClick={() => setShowImport((v) => !v)}
+                disabled={busy}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                  showImport ? 'bg-white/[0.08] text-white' : 'text-neutral-400 hover:text-white hover:bg-white/[0.08]'
+                }`}
+              >
+                {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                <span>{t('bookmarks.import')}</span>
+              </button>
+              {showImport && (
+                <div
+                  id="bookmarks-import-menu"
+                  className="absolute right-0 top-8 w-72 p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in"
+                >
+                  <button
+                    type="button"
+                    data-import="file"
+                    disabled={busy}
+                    onClick={() => runImport(() => bookmarksApi.importFile())}
+                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-start gap-2 text-neutral-200 hover:text-white"
+                  >
+                    <FileText className="w-3.5 h-3.5 mt-0.5 text-neutral-400 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block">{t('bookmarks.importFromFile')}</span>
+                      <span className="block text-[10px] text-neutral-500">{t('bookmarks.importFileHint')}</span>
+                    </span>
+                  </button>
+                  <div className="my-1 border-t border-white/[0.06]" />
+                  <div className="px-2.5 pt-1 pb-1 text-[10px] uppercase tracking-wider text-neutral-500 font-mono">
+                    {t('bookmarks.importFromBrowser')}
+                  </div>
+                  {sources === null && (
+                    <div className="px-2.5 py-1.5 text-neutral-500 flex items-center gap-2">
+                      <Loader2 className="w-3 h-3 animate-spin" /> {t('bookmarks.searchingBrowsers')}
+                    </div>
+                  )}
+                  {sources !== null && sources.length === 0 && (
+                    <div className="px-2.5 py-1.5 text-neutral-500">{t('bookmarks.noBrowsers')}</div>
+                  )}
+                  {sources?.map((src) => (
+                    <button
+                      key={src.id}
+                      type="button"
+                      data-import={src.id}
+                      disabled={busy}
+                      onClick={() => runImport(() => bookmarksApi.importSource(src.id))}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-200 hover:text-white"
+                    >
+                      <Globe className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      <span className="truncate flex-1">{src.browser}</span>
+                      {src.profile && <span className="truncate max-w-[45%] text-[10px] text-neutral-500">{src.profile}</span>}
+                    </button>
+                  ))}
+                  <div className="my-1 border-t border-white/[0.06]" />
+                  <button
+                    type="button"
+                    data-export="html"
+                    disabled={busy}
+                    onClick={handleExport}
+                    className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-200 hover:text-white"
+                  >
+                    <Download className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                    <span>{t('bookmarks.export')}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -163,8 +334,8 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
         </div>
 
         {/* Folders Navigation Bar */}
-        <div className="flex items-center justify-between gap-1 overflow-x-auto pb-0.5 text-xs no-scrollbar">
-          <div className="flex items-center gap-1">
+        <div className="flex items-start justify-between gap-1 pb-0.5 text-xs">
+          <div className="flex flex-wrap items-center gap-1 max-h-28 overflow-y-auto min-w-0">
             <button
               type="button"
               onClick={() => setSelectedFolderId('all')}
@@ -188,7 +359,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
                   }`}
                 >
                   <Folder className="w-3 h-3" />
-                  <span>{f.name}</span>
+                  <span className="whitespace-nowrap">{folderLabel(f)}</span>
                 </button>
                 {f.id !== 'bar' && f.id !== 'other' && (
                   <button
@@ -278,7 +449,7 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
               >
                 {folders.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.name}
+                    {folderLabel(f)}
                   </option>
                 ))}
               </select>

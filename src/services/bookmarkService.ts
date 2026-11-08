@@ -56,12 +56,24 @@ export class BookmarkService {
 
   public static deleteFolder(folderId: string): void {
     if (folderId === 'bar' || folderId === 'other') return; // Cannot delete system folders
-    const folders = this.getFolders().filter((f) => f.id !== folderId);
-    this.saveFolders(folders);
+    // Subfolders go too (imported trees nest)
+    const all = this.getFolders();
+    const removed = new Set([folderId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of all) {
+        if (f.parentId && removed.has(f.parentId) && !removed.has(f.id)) {
+          removed.add(f.id);
+          grew = true;
+        }
+      }
+    }
+    this.saveFolders(all.filter((f) => !removed.has(f.id)));
 
-    // Reassign orphan bookmarks in this folder to 'other'
+    // Reassign orphan bookmarks in these folders to 'other'
     const bookmarks = this.getBookmarks().map((b) =>
-      b.folderId === folderId ? { ...b, folderId: 'other' } : b
+      removed.has(b.folderId) ? { ...b, folderId: 'other' } : b
     );
     this.saveBookmarks(bookmarks);
   }
@@ -184,6 +196,80 @@ export class BookmarkService {
     });
     this.saveBookmarks(bookmarks);
     return bookmarks;
+  }
+
+  /** "Parent / Child" for nested folders (the system folders are not part of the path) */
+  public static folderPath(folderId: string, folders: BookmarkFolder[] = this.getFolders()): string {
+    const byId = new Map(folders.map((f) => [f.id, f]));
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let current = byId.get(folderId);
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      names.unshift(current.name);
+      if (!current.parentId || current.parentId === 'bar' || current.parentId === 'other') break;
+      current = byId.get(current.parentId);
+    }
+    return names.join(' / ');
+  }
+
+  /**
+   * Merges a tree from electron/bookmarks-io.cjs. Bar items go to the bookmarks bar, the rest to Other;
+   * folders keep their nesting, folders with the same name and place are reused, known addresses are skipped.
+   */
+  public static importTree(tree: { bar: ImportedBookmarkNode[]; other: ImportedBookmarkNode[] }): {
+    added: number;
+    skipped: number;
+    folders: number;
+  } {
+    const folders = [...this.getFolders()];
+    const existing = this.getBookmarks();
+    const known = new Set(existing.map((b) => b.url));
+    const added: Bookmark[] = [];
+    let skipped = 0;
+    let newFolders = 0;
+    let seq = 0;
+    const now = Date.now();
+    const uid = (prefix: string) => `${prefix}-${now}-${(seq++).toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+
+    const folderFor = (title: string, parentId: string | undefined): string => {
+      const name = title.trim() || 'Folder';
+      const found = folders.find((f) => f.name === name && (f.parentId || undefined) === parentId && f.id !== 'bar' && f.id !== 'other');
+      if (found) return found.id;
+      const folder: BookmarkFolder = { id: uid('fld'), name, parentId, createdAt: now };
+      folders.push(folder);
+      newFolders++;
+      return folder.id;
+    };
+
+    const walk = (nodes: ImportedBookmarkNode[], folderId: string, parentForFolders: string | undefined) => {
+      for (const node of nodes) {
+        if (node.type === 'folder') {
+          const id = folderFor(node.title, parentForFolders);
+          walk(node.children, id, id);
+        } else {
+          if (!node.url || known.has(node.url)) {
+            skipped++;
+            continue;
+          }
+          known.add(node.url);
+          added.push({
+            id: uid('bm'),
+            title: (node.title || node.url).trim(),
+            url: node.url,
+            favicon: node.favicon,
+            folderId,
+            addedAt: node.addedAt || now,
+          });
+        }
+      }
+    };
+    walk(tree.bar || [], 'bar', 'bar');
+    walk(tree.other || [], 'other', undefined);
+
+    if (newFolders) this.saveFolders(folders);
+    if (added.length) this.saveBookmarks([...existing, ...added]);
+    return { added: added.length, skipped, folders: newFolders };
   }
 
   public static search(query: string): Bookmark[] {

@@ -1,24 +1,28 @@
 import React from 'react';
-import { Bookmark } from '../browser/types';
+import { Bookmark, BookmarkFolder } from '../browser/types';
 import { Globe, Folder } from 'lucide-react';
 import { useTranslation } from '../i18n';
 
 interface BookmarksBarProps {
   bookmarks: Bookmark[];
+  /** Folders placed on the bar (imported toolbar folders) show as chips that open the manager */
+  folders?: BookmarkFolder[];
   onNavigate: (url: string) => void;
-  onOpenBookmarksManager: () => void;
+  onOpenBookmarksManager: (folderId?: string) => void;
 }
 
 export const BookmarksBar: React.FC<BookmarksBarProps> = ({
   bookmarks,
+  folders = [],
   onNavigate,
   onOpenBookmarksManager,
 }) => {
   const { t } = useTranslation();
   const barBookmarks = bookmarks.filter((b) => b.folderId === 'bar' || !b.folderId);
   const otherBookmarks = bookmarks.filter((b) => b.folderId === 'other');
+  const barFolders = folders.filter((f) => f.parentId === 'bar');
 
-  if (barBookmarks.length === 0 && otherBookmarks.length === 0) {
+  if (barBookmarks.length === 0 && otherBookmarks.length === 0 && barFolders.length === 0) {
     return null;
   }
 
@@ -51,10 +55,23 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
         </button>
       ))}
 
+      {barFolders.slice(0, 10).map((folder) => (
+        <button
+          key={folder.id}
+          type="button"
+          onClick={() => onOpenBookmarksManager(folder.id)}
+          title={folder.name}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-white/[0.07] text-neutral-300 hover:text-white max-w-[170px] truncate transition-colors shrink-0 text-[11px] font-medium"
+        >
+          <Folder className="w-3 h-3 text-amber-300/80 shrink-0" />
+          <span className="truncate">{folder.name}</span>
+        </button>
+      ))}
+
       {otherBookmarks.length > 0 && (
         <button
           type="button"
-          onClick={onOpenBookmarksManager}
+          onClick={() => onOpenBookmarksManager('other')}
           title={t('bookmarks.otherBookmarks')}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-white/[0.07] text-neutral-400 hover:text-white ml-auto shrink-0 transition-colors text-[11px] font-medium"
         >

@@ -2,6 +2,7 @@ import { SEARCH_ENGINES } from '../settings/defaults';
 import { SearchEngineId } from '../settings/types';
 
 const INVALID_PAGE = 'freedom://invalid?url=';
+export const DOCX_VIEW = 'freedom-docx://view/';
 const CYRILLIC_TLDS = 'рф|рус|москва|онлайн|сайт|орг|ком|укр|бел|дети|қаз|срб|мкд|мон|бг|ею';
 const HOST_TAIL = '(?::\\d{1,5})?(?:[/?#].*)?';
 
@@ -70,6 +71,14 @@ export class SearchEngineService {
 
   /** The address the user meant: what the address bar and the error screen show for a tab's URL */
   public static addressOf(url: string): string {
+    // Word document view (electron/docx-viewer.cjs): the document's own address
+    if (url.startsWith(DOCX_VIEW)) {
+      try {
+        return new URL(url).searchParams.get('src') || url;
+      } catch {
+        return url;
+      }
+    }
     if (!url.startsWith(INVALID_PAGE)) return url;
     try {
       return decodeURIComponent(url.slice(INVALID_PAGE.length));
@@ -89,6 +98,9 @@ export class SearchEngineService {
   public static resolveInputToUrl(input: string, engineId: SearchEngineId, customUrl?: string): string {
     const trimmed = input.trim();
     if (!trimmed) return 'freedom://newtab';
+
+    // Word document views (history, session restore, Downloads → Open in browser)
+    if (trimmed.startsWith(DOCX_VIEW)) return trimmed;
 
     // Internal freedom URLs
     if (trimmed.startsWith('freedom://')) {
@@ -190,6 +202,7 @@ export class SearchEngineService {
    * Format display URL (clean view without https:// for cleaner address bar)
    */
   public static formatDisplayUrl(url: string): string {
+    if (url.startsWith(DOCX_VIEW) && this.addressOf(url) !== url) return this.formatDisplayUrl(this.addressOf(url));
     if (url.startsWith('freedom://')) return this.addressOf(url);
     if (url.startsWith('file://')) {
       try {

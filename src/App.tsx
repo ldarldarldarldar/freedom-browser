@@ -40,8 +40,8 @@ import { DOWNLOADS_KEY, clearLocalBrowsingData, clearAllBrowsingData } from './s
 import { NEW_TAB_URL, newTabUrl, homepageUrl, startupUrl, alwaysKeepsTabs, closeAction } from './settings/startup';
 import { CloseConfirmationModal } from './components/CloseConfirmationModal';
 import { I18nProvider } from './i18n';
-import { FileCode, AppWindow, ShieldCheck, ShieldBan, EyeOff } from 'lucide-react';
-import { translate, normalizeLanguage } from './i18n';
+import { FileCode, AppWindow, ShieldCheck, ShieldBan, EyeOff, X } from 'lucide-react';
+import { translate, normalizeLanguage, TranslationKey } from './i18n';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 
@@ -809,13 +809,58 @@ export default function App() {
     setActiveTabId(newTab.id);
   }, []);
 
-  const isCurrentBookmarked = activeTab ? BookmarkService.isBookmarked(activeTab.url) : false;
+  // A Word document view is bookmarked by the document's own address
+  const isCurrentBookmarked = activeTab ? BookmarkService.isBookmarked(SearchEngineService.addressOf(activeTab.url)) : false;
 
   const handleToggleBookmark = useCallback(() => {
     if (!activeTab || activeTab.url.startsWith('freedom://newtab')) return;
-    BookmarkService.toggleBookmark(activeTab.title, activeTab.url, activeTab.favicon);
+    BookmarkService.toggleBookmark(activeTab.title, SearchEngineService.addressOf(activeTab.url), activeTab.favicon);
     setBookmarks(BookmarkService.getBookmarks());
   }, [activeTab]);
+
+  // Short messages at the bottom of the window (screenshots, bookmark import/export)
+  const [notice, setNotice] = useState<{ id: number; text: string; tone: 'ok' | 'error' } | null>(null);
+  const showNotice = useCallback((text: string, tone: 'ok' | 'error' = 'ok') => {
+    setNotice({ id: Date.now(), text, tone });
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(null), notice.tone === 'error' ? 7000 : 4500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const tr = useCallback(
+    (key: TranslationKey, params?: Record<string, string | number>) => translate(normalizeLanguage(settings.language), key, params),
+    [settings.language]
+  );
+
+  // Toolbar camera button / Ctrl+Shift+S (the shortcut opens the toolbar menu)
+  const [screenshotMenuSignal, setScreenshotMenuSignal] = useState(0);
+  const handleScreenshot = useCallback(
+    async (area: 'visible' | 'full', target: 'clipboard' | 'file') => {
+      let id: number | undefined;
+      try {
+        if (activeTab && !activeTab.url.startsWith('freedom://')) id = tauriBridge.getWebview(activeTab.id)?.getWebContentsId?.();
+      } catch {}
+      if (!id || !window.electronAPI?.screenshot) {
+        showNotice(tr('screenshot.unavailable'), 'error');
+        return;
+      }
+      const result = await window.electronAPI.screenshot(id, { area, target });
+      if (result.ok) {
+        const text = result.target === 'file'
+          ? tr('screenshot.saved', { path: result.path || '' })
+          : tr('screenshot.copied', { width: result.width || 0, height: result.height || 0 });
+        showNotice(result.truncated ? `${text}. ${tr('screenshot.truncated')}` : text);
+      } else if (!result.canceled) {
+        showNotice(tr('screenshot.failed', { error: result.error || '?' }), 'error');
+      }
+    },
+    [activeTab, showNotice, tr]
+  );
+
+  // Bookmarks bar folder chip → the manager opened on that folder
+  const [bookmarksInitialFolder, setBookmarksInitialFolder] = useState<string | undefined>(undefined);
+  const [bookmarkFolders, setBookmarkFolders] = useState(() => BookmarkService.getFolders());
 
   const handleZoomIn = useCallback(() => {
     if (!activeTab) return;
@@ -1841,6 +1886,9 @@ export default function App() {
           case 'toggle-bookmark':
             handleToggleBookmark();
             break;
+          case 'screenshot':
+            setScreenshotMenuSignal((n) => n + 1);
+            break;
           case 'open-downloads':
             setIsDownloadsOpen((prev) => !prev);
             break;
@@ -1995,6 +2043,13 @@ export default function App() {
       if (isCtrlOrCmd && !e.shiftKey && keyIs(e, 'r')) {
         e.preventDefault();
         handleReload();
+        return;
+      }
+
+      // Ctrl+Shift+S: screenshot menu
+      if (isCtrlOrCmd && e.shiftKey && keyIs(e, 's')) {
+        e.preventDefault();
+        setScreenshotMenuSignal((n) => n + 1);
         return;
       }
 
@@ -2395,6 +2450,8 @@ export default function App() {
       onOpenBookmarks={() => setIsBookmarksOpen(true)}
       onOpenHistory={() => setIsHistoryOpen(true)}
       onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
+      onScreenshot={handleScreenshot}
+      screenshotMenuSignal={screenshotMenuSignal}
       zoomLevel={activeTab?.zoomLevel || 100}
       onZoomIn={handleZoomIn}
       onZoomOut={handleZoomOut}
@@ -2565,8 +2622,12 @@ export default function App() {
           {/* Bookmarks Bar */}
           <BookmarksBar
             bookmarks={bookmarks}
+            folders={bookmarkFolders}
             onNavigate={handleNavigate}
-            onOpenBookmarksManager={() => setIsBookmarksOpen(true)}
+            onOpenBookmarksManager={(folderId) => {
+              setBookmarksInitialFolder(folderId);
+              setIsBookmarksOpen(true);
+            }}
           />
         </>
       )}
@@ -2667,6 +2728,24 @@ export default function App() {
         />
       )}
 
+      {notice && (
+        <div
+          key={notice.id}
+          id="freedom-notice"
+          role="status"
+          className={`fixed bottom-5 left-1/2 -translate-x-1/2 z-[9998] max-w-[min(640px,90vw)] px-4 py-2.5 rounded-lg border text-xs shadow-[var(--fb-shadow-pop)] animate-fade-in flex items-center gap-3 ${
+            notice.tone === 'error'
+              ? 'bg-[var(--fb-surface)] border-rose-500/40 text-rose-200'
+              : 'bg-[var(--fb-surface)] border-[var(--fb-border)] text-neutral-100'
+          }`}
+        >
+          <span className="break-all">{notice.text}</span>
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-neutral-400 hover:text-white">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* A full-screen page can imitate browser UI: always name the site and the way out */}
       {fullscreenSite !== null && (
         <div
@@ -2709,6 +2788,15 @@ export default function App() {
           onShowInFolder={async (item) => {
             await tauriBridge.showItemInFolder(item.filepath);
           }}
+          onOpenInBrowser={async (item) => {
+            const viewUrl = await window.electronAPI?.docxViewUrl?.(item.filepath);
+            if (viewUrl) {
+              handleNewTab(viewUrl, { isPrivate: item.isPrivate });
+              setIsDownloadsOpen(false);
+            } else {
+              setDownloads((prev) => prev.filter((d) => d.id !== item.id));
+            }
+          }}
           onOpenFolder={async () => {
             await tauriBridge.openDownloadFolder(settings.downloadsLocation);
           }}
@@ -2729,8 +2817,17 @@ export default function App() {
       {isBookmarksOpen && (
         <BookmarksDrawer
           isOpen={isBookmarksOpen}
-          onClose={() => setIsBookmarksOpen(false)}
+          onClose={() => {
+            setIsBookmarksOpen(false);
+            setBookmarksInitialFolder(undefined);
+          }}
           onNavigate={handleNavigate}
+          initialFolderId={bookmarksInitialFolder}
+          onChange={() => {
+            setBookmarks(BookmarkService.getBookmarks());
+            setBookmarkFolders(BookmarkService.getFolders());
+          }}
+          onNotice={showNotice}
         />
       )}
 

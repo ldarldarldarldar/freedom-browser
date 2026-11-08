@@ -2,7 +2,7 @@
   "name": "freedom-browser",
   "desktopName": "freedom-browser",
   "private": true,
-  "version": "0.6.6-1",
+  "version": "0.6.6-2",
   "description": "Lightweight, fast, and privacy-focused cross-platform desktop web browser",
   "author": "Freedom Browser Team",
   "main": "electron/main.cjs",
@@ -22,6 +22,8 @@
     "test:downloads": "node --test scripts/test-download-names.mjs",
     "test:net": "node --test scripts/test-net-privacy.mjs",
     "test:settings": "tsx --test scripts/test-settings-usage.mts",
+    "test:bookmarks": "node --test scripts/test-bookmarks-io.mjs",
+    "test:docx": "node --test scripts/test-docx-viewer.mjs",
     "electron:dev": "electron . --dev",
     "electron:start": "electron .",
     "build:appimage": "npm run build && electron-builder --linux AppImage --publish never",
@@ -30,7 +32,8 @@
     "build:dist": "npm run build && electron-builder --linux AppImage && electron-builder --win portable zip"
   },
   "dependencies": {
-    "@ghostery/adblocker": "2.20.3"
+    "@ghostery/adblocker": "2.20.3",
+    "mammoth": "1.13.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.4",

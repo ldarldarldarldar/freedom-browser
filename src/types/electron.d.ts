@@ -12,6 +12,18 @@ declare global {
     size: number;
   }
 
+  /** Bookmark tree read by electron/bookmarks-io.cjs */
+  type ImportedBookmarkNode =
+    | { type: 'url'; title: string; url: string; addedAt?: number; favicon?: string }
+    | { type: 'folder'; title: string; children: ImportedBookmarkNode[] };
+  interface BookmarkImportResult {
+    ok: boolean;
+    tree?: { bar: ImportedBookmarkNode[]; other: ImportedBookmarkNode[] };
+    counts?: { urls: number; folders: number };
+    canceled?: boolean;
+    error?: string;
+  }
+
   /** The certificate a tab's last load was refused for (electron/main.cjs, certificate-error) */
   interface CertificateErrorInfo {
     url: string;
@@ -101,6 +113,22 @@ declare global {
       };
       /** Toggles picture in picture for the playing (or largest) video of a tab */
       pictureInPicture?: (webContentsId: number) => Promise<'entered' | 'exited' | 'none'>;
+      screenshot?: (
+        webContentsId: number,
+        options: { area: 'visible' | 'full'; target: 'clipboard' | 'file' }
+      ) => Promise<{ ok: boolean; target?: string; path?: string; width?: number; height?: number; truncated?: boolean; canceled?: boolean; error?: string }>;
+      docxViewUrl?: (filePath: string) => Promise<string | null>;
+      bookmarks?: {
+        listSources: () => Promise<Array<{ id: string; browser: string; profile: string; kind: 'chromium' | 'firefox' }>>;
+        importSource: (id: string) => Promise<BookmarkImportResult>;
+        importFile: () => Promise<BookmarkImportResult>;
+        exportHtml: (data: {
+          bookmarks: unknown[];
+          folders: unknown[];
+          barTitle?: string;
+          otherTitle?: string;
+        }) => Promise<{ ok: boolean; path?: string; count?: number; canceled?: boolean; error?: string }>;
+      };
       sitePermissions?: {
         list: () => Promise<Array<{ origin: string; permission: string; decision: 'allow' | 'block' }>>;
         remove: (origin: string, permission: string) => Promise<boolean>;

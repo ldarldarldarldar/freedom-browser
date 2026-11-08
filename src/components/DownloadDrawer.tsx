@@ -27,6 +27,8 @@ interface DownloadDrawerProps {
   onClearHistory: () => void;
   onOpenFile: (item: DownloadItem) => void;
   onShowInFolder?: (item: DownloadItem) => void;
+  /** .docx: open in a browser tab (electron/docx-viewer.cjs) */
+  onOpenInBrowser?: (item: DownloadItem) => void;
   onOpenFolder: () => void;
   onRemoveItem?: (id: string) => void;
 }
@@ -38,6 +40,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
   onCancelDownload,
   onClearHistory,
   onOpenFile,
+  onOpenInBrowser,
   onShowInFolder,
   onOpenFolder,
   onRemoveItem,
@@ -216,6 +219,16 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </button>
+                          {onOpenInBrowser && /\.docx$/i.test(item.filepath || item.filename) && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenInBrowser(item)}
+                              className="p-1.5 rounded-lg text-neutral-400 hover:text-sky-400 hover:bg-sky-500/10 transition-colors"
+                              title={t('downloads.openInBrowser')}
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           {onShowInFolder && (
                             <button
                               type="button"
