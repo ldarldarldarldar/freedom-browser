@@ -44,6 +44,7 @@ export const TabsOverview: React.FC<TabsOverviewProps> = ({
   return (
     <div
       id="tabs-overview"
+      data-panel="tabsOverview"
       role="dialog"
       aria-label={t('tabsOverview.title')}
       className="absolute inset-0 z-40 flex flex-col bg-[var(--fb-bg)] animate-fade-in"

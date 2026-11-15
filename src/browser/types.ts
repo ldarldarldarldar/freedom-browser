@@ -34,6 +34,8 @@ export interface BrowserTab {
   isMuted?: boolean;
   security: 'secure' | 'insecure' | 'internal';
   isPinned?: boolean;
+  /** Tab group (src/services/tabGroupService.ts) */
+  groupId?: string;
   /** Incognito: in-memory session partition, never written to history/session restore */
   isPrivate?: boolean;
   privatePartition?: string;
@@ -79,6 +81,8 @@ export interface ClosedTabEntry {
   favicon?: string;
   zoomLevel: number;
   closedAt: number;
+  /** The group the tab was in: reopening puts it back while the group exists */
+  groupId?: string;
 }
 
 export interface DownloadItem {

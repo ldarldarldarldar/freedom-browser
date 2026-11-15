@@ -49,6 +49,7 @@ export class SessionService {
       favicon: tab.favicon,
       zoomLevel: tab.zoomLevel || 100,
       closedAt: Date.now(),
+      groupId: tab.groupId,
     };
 
     this.save([entry, ...current]);

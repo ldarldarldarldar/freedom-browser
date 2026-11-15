@@ -97,7 +97,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     allowHttp: (webContentsId, url) => ipcRenderer.invoke('https_only_allow', webContentsId, url),
   },
   pictureInPicture: (webContentsId) => ipcRenderer.invoke('tab_picture_in_picture', webContentsId),
-  screenshot: (webContentsId, options) => ipcRenderer.invoke('tab_screenshot', webContentsId, options),
   docxViewUrl: (filePath) => ipcRenderer.invoke('docx_view_url', filePath),
   bookmarks: {
     listSources: () => ipcRenderer.invoke('bookmarks_list_sources'),

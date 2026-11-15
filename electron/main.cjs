@@ -596,7 +596,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 840,
-    minWidth: 720,
+    // Small enough to snap to half of a 1366/1280 px screen: a wider minimum pushes the window's right edge off screen
+    minWidth: 560,
     minHeight: 500,
     backgroundColor: '#0c0e10',
     title: 'Freedom Browser',
@@ -1197,11 +1198,6 @@ app.on('web-contents-created', (event, contents) => {
       if (keyIs(input, 'o')) {
         event.preventDefault();
         mainWindow?.webContents.send('webview-shortcut', 'open-file');
-        return;
-      }
-      if (keyIs(input, 's') && input.shift) {
-        event.preventDefault();
-        mainWindow?.webContents.send('webview-shortcut', 'screenshot');
         return;
       }
       if (keyIs(input, 'r')) {
@@ -1889,141 +1885,6 @@ handleUi('docx_view_url', (event, filePath) => {
     return null;
   }
   return docxViewer.urlForLocalFile(filePath);
-});
-
-// ---- Page screenshots (toolbar camera button, Ctrl+Shift+S) ----
-const SCREENSHOT_MAX_CSS_HEIGHT = 16384;
-
-// The whole page through the DevTools protocol. The viewport is made as tall as the page (as DevTools' "Capture full
-// size screenshot" does), but a <webview> can only render as many pixels as its real height in one capture — beyond that
-// the picture repeats — so the page is captured in screen-high strips and stitched.
-const SCREENSHOT_MAX_PIXELS = 64 * 1024 * 1024;
-async function captureFullPage(wc) {
-  const { nativeImage } = require('electron');
-  const dbg = wc.debugger;
-  let attachedHere = false;
-  if (!dbg.isAttached()) {
-    dbg.attach('1.3');
-    attachedHere = true;
-  }
-  let overridden = false;
-  try {
-    const metrics = await dbg.sendCommand('Page.getLayoutMetrics');
-    const size = metrics.cssContentSize || metrics.contentSize;
-    const visual = metrics.cssVisualViewport || metrics.visualViewport || {};
-    const layout = metrics.cssLayoutViewport || metrics.layoutViewport || {};
-    const dpr = await dbg.sendCommand('Runtime.evaluate', { expression: 'devicePixelRatio', returnByValue: true })
-      .then((r) => Number(r.result.value) || 1, () => 1);
-    const width = Math.max(1, Math.floor(visual.clientWidth || layout.clientWidth || size.width));
-    const strip = Math.max(64, Math.floor(visual.clientHeight || layout.clientHeight || 600));
-    const fullHeight = Math.ceil(size.height);
-    const maxHeight = Math.min(SCREENSHOT_MAX_CSS_HEIGHT, Math.floor(SCREENSHOT_MAX_PIXELS / (width * dpr * dpr)));
-    const height = Math.max(1, Math.min(maxHeight, fullHeight));
-    await dbg.sendCommand('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 0, mobile: false });
-    overridden = true;
-    // Let the page lay out and paint at the new size
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    await dbg.sendCommand('Runtime.evaluate', {
-      expression: 'new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))',
-      awaitPromise: true,
-    }).catch(() => {});
-    const bitmaps = [];
-    let pixelWidth = 0;
-    let pixelHeight = 0;
-    for (let y = 0; y < height; y += strip) {
-      const h = Math.min(strip, height - y);
-      const { data } = await dbg.sendCommand('Page.captureScreenshot', {
-        format: 'png',
-        fromSurface: true,
-        captureBeyondViewport: true,
-        clip: { x: 0, y, width, height: h, scale: 1 },
-      });
-      const part = nativeImage.createFromBuffer(Buffer.from(data, 'base64'));
-      const partSize = part.getSize();
-      if (!pixelWidth) pixelWidth = partSize.width;
-      let bitmap = part.toBitmap();
-      if (partSize.width !== pixelWidth) {
-        bitmap = part.resize({ width: pixelWidth, height: partSize.height }).toBitmap();
-      }
-      bitmaps.push(bitmap);
-      pixelHeight += partSize.height;
-    }
-    const image = nativeImage.createFromBitmap(Buffer.concat(bitmaps), { width: pixelWidth, height: pixelHeight });
-    return { image, truncated: fullHeight > height };
-  } finally {
-    if (overridden) await dbg.sendCommand('Emulation.clearDeviceMetricsOverride').catch(() => {});
-    if (attachedHere) {
-      try { dbg.detach(); } catch {}
-    }
-  }
-}
-
-function screenshotFileName(pageUrl) {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-  let host = '';
-  try { host = new URL(pageUrl).hostname.replace(/^www\./, ''); } catch {}
-  const base = `${currentAppLanguage === 'ru' ? 'Скриншот' : 'Screenshot'} ${stamp}${host ? ` ${host}` : ''}`;
-  return `${base.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_')}.png`;
-}
-
-// area: 'visible' | 'full', target: 'clipboard' | 'file'.
-// Result: { ok: true, target, path?, width, height, truncated } | { ok: false, canceled?, error? }
-handleUi('tab_screenshot', async (event, webContentsId, options = {}) => {
-  if (!isWebviewId(webContentsId)) return { ok: false, error: 'no-tab' };
-  const wc = webContents.fromId(Number(webContentsId));
-  const area = options.area === 'full' ? 'full' : 'visible';
-  const target = options.target === 'file' ? 'file' : 'clipboard';
-  const { nativeImage } = require('electron');
-  let image;
-  let truncated = false;
-  try {
-    if (area === 'full') {
-      const shot = await captureFullPage(wc);
-      image = shot.image;
-      truncated = shot.truncated;
-    } else {
-      image = await wc.capturePage();
-    }
-  } catch (err) {
-    console.warn('[screenshot]', err);
-    return { ok: false, error: String(err?.message || err) };
-  }
-  if (!image || image.isEmpty()) return { ok: false, error: 'empty' };
-  const { width, height } = image.getSize();
-  if (target === 'clipboard') {
-    // Electron 44 has only the async, W3C-style clipboard API
-    try {
-      const { ClipboardItem } = require('electron');
-      await clipboard.write([new ClipboardItem({ 'image/png': new Blob([image.toPNG()], { type: 'image/png' }) })]);
-    } catch (err) {
-      return { ok: false, error: String(err?.message || err) };
-    }
-    return { ok: true, target, width, height, truncated };
-  }
-  let dir = activeDownloadsLocation && activeDownloadsLocation.startsWith('~/')
-    ? path.join(os.homedir(), activeDownloadsLocation.slice(2))
-    : activeDownloadsLocation;
-  if (!dir || !fs.existsSync(dir)) dir = app.getPath('downloads');
-  const ru = currentAppLanguage === 'ru';
-  const dialogOptions = {
-    title: ru ? 'Сохранить скриншот' : 'Save Screenshot',
-    defaultPath: path.join(dir, screenshotFileName(wc.getURL())),
-    filters: [{ name: 'PNG', extensions: ['png'] }],
-    properties: ['createDirectory', 'showOverwriteConfirmation'],
-  };
-  const { canceled, filePath } = mainWindow && !mainWindow.isDestroyed()
-    ? await dialog.showSaveDialog(mainWindow, dialogOptions)
-    : await dialog.showSaveDialog(dialogOptions);
-  if (canceled || !filePath) return { ok: false, canceled: true };
-  const finalPath = /\.png$/i.test(filePath) ? filePath : `${filePath}.png`;
-  try {
-    await fs.promises.writeFile(finalPath, image.toPNG());
-  } catch (err) {
-    return { ok: false, error: String(err?.message || err) };
-  }
-  return { ok: true, target, path: finalPath, width, height, truncated };
 });
 
 // ---- Bookmark import / export (electron/bookmarks-io.cjs) ----

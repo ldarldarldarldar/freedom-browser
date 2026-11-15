@@ -1,4 +1,5 @@
 import { BrowserTab } from '../browser/types';
+import { TabGroup, sanitizeSavedGroups } from './tabGroupService';
 
 export interface SavedTabSession {
   id: string;
@@ -10,12 +11,15 @@ export interface SavedTabSession {
   history: string[];
   historyIndex: number;
   isPinned?: boolean;
+  groupId?: string;
 }
 
 export interface SavedBrowserSession {
   tabs: SavedTabSession[];
   activeTabId: string;
   savedAt: number;
+  /** Tab groups: id, name, colour, collapsed; their order is the order of their tabs */
+  groups?: TabGroup[];
 }
 
 const SAVED_SESSION_KEY = 'freedom_saved_session_v1';
@@ -37,7 +41,7 @@ export class SessionRestoreService {
   /**
    * Save session to persistent storage
    */
-  public static saveSession(tabs: BrowserTab[], activeTabId: string): void {
+  public static saveSession(tabs: BrowserTab[], activeTabId: string, groups: TabGroup[] = []): void {
     try {
       const restorableTabs: SavedTabSession[] = tabs.filter((t) => !t.isPrivate).map((t) => ({
         id: t.id,
@@ -49,12 +53,16 @@ export class SessionRestoreService {
         history: t.history && t.history.length > 0 ? t.history : [t.url],
         historyIndex: typeof t.historyIndex === 'number' ? t.historyIndex : 0,
         isPinned: Boolean(t.isPinned),
+        groupId: t.groupId,
       }));
+      // Only groups that keep a tab: private tabs are not saved
+      const savedGroupIds = new Set(restorableTabs.map((t) => t.groupId).filter(Boolean));
 
       const payload: SavedBrowserSession = {
         tabs: restorableTabs,
         activeTabId: activeTabId || (restorableTabs[0]?.id ?? 'tab-1'),
         savedAt: Date.now(),
+        groups: groups.filter((g) => savedGroupIds.has(g.id)),
       };
 
       localStorage.setItem(SAVED_SESSION_KEY, JSON.stringify(payload));
@@ -72,7 +80,7 @@ export class SessionRestoreService {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
-          return parsed as SavedBrowserSession;
+          return { ...parsed, groups: sanitizeSavedGroups(parsed.groups) } as SavedBrowserSession;
         }
       }
     } catch (err) {

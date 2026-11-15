@@ -88,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <li key={id} className={collapsed || horizontal ? '' : 'w-full'}>
               <button
                 id={`sidebar-${id}`}
+                data-panel-toggle={id === 'tabs' ? 'tabsOverview' : id === 'home' ? undefined : id}
                 type="button"
                 onClick={onClick}
                 title={label}

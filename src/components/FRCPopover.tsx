@@ -114,6 +114,7 @@ export const FRCPopover: React.FC<FRCPopoverProps> = ({
     <div
       ref={popoverRef}
       id="frc-quick-access-popover"
+      data-panel="frc"
       className="absolute right-14 top-[calc(var(--fb-top-chrome)+6px)] z-50 w-[420px] max-w-[calc(100vw-24px)] max-h-[calc(100vh-96px)] overflow-y-auto p-4 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] text-neutral-200 text-xs font-sans animate-fade-in select-none"
     >
       {/* Header */}

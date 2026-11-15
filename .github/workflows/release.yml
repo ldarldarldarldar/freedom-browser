@@ -32,7 +32,7 @@ jobs:
         run: npm run lint
 
       - name: Logic tests (updater, address bar, download names, HTTPS-only and DNS, settings in use)
-        run: npm run test:update && npm run test:address && npm run test:downloads && npm run test:net && npm run test:settings && npm run test:bookmarks && npm run test:docx
+        run: npm run test:update && npm run test:address && npm run test:downloads && npm run test:net && npm run test:settings && npm run test:bookmarks && npm run test:docx && npm run test:groups
 
       - name: Build Linux AppImage
         run: npm run build:appimage

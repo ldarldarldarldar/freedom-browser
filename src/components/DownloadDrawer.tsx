@@ -96,6 +96,7 @@ export const DownloadDrawer: React.FC<DownloadDrawerProps> = ({
   return (
     <div
       id="freedom-downloads-drawer"
+      data-panel="downloads"
       className="absolute top-[calc(var(--fb-top-chrome)+6px)] right-3 w-[400px] max-w-[calc(100vw-24px)] max-h-[75vh] bg-[var(--fb-surface)] border border-[var(--fb-border)] rounded-[var(--fb-radius-lg)] shadow-[var(--fb-shadow-pop)] z-50 flex flex-col overflow-hidden text-neutral-200 animate-fade-in"
     >
       {/* Header */}

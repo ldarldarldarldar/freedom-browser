@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   VenetianMask,
@@ -16,6 +16,11 @@ import {
   Check,
   Columns2,
   PictureInPicture2,
+  FolderPlus,
+  FolderInput,
+  FolderMinus,
+  Ungroup,
+  ChevronRight,
 } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { tauriBridge } from '../services/tauriBridge';
@@ -26,6 +31,12 @@ import { useTranslation } from '../i18n';
 import { FreedomMark } from './FreedomLogo';
 import { FaviconService } from '../services/faviconService';
 import { SearchEngineService } from '../services/searchEngineService';
+import { usePanel } from '../hooks/usePanel';
+import { TabGroup, GROUP_COLORS, GROUP_COLOR_HEX } from '../services/tabGroupService';
+
+const TAB_DRAG_TYPE = 'application/x-freedom-tab';
+const GROUP_DRAG_TYPE = 'application/x-freedom-group';
+type DropSide = 'before' | 'after';
 
 interface TabBarProps {
   tabs: BrowserTab[];
@@ -53,12 +64,48 @@ interface TabBarProps {
   onCloseWindow?: () => void;
   /** Link or text dragged from a page onto the tab strip: open it in a new tab (returns false if unusable) */
   onDropData?: (data: DataTransfer) => boolean;
+  /** Tab groups (src/services/tabGroupService.ts) */
+  groups?: TabGroup[];
+  onCreateGroup?: (tabIds: string[]) => void;
+  onAddToGroup?: (tabIds: string[], groupId: string) => void;
+  onRemoveFromGroup?: (tabIds: string[]) => void;
+  onUngroup?: (groupId: string) => void;
+  onUpdateGroup?: (groupId: string, patch: Partial<Pick<TabGroup, 'title' | 'color'>>) => void;
+  onToggleGroupCollapsed?: (groupId: string) => void;
+  onCloseGroup?: (groupId: string) => void;
+  onNewTabInGroup?: (groupId: string) => void;
+  onMoveTab?: (tabId: string, targetId: string, side: DropSide) => void;
+  onMoveTabToGroup?: (tabId: string, groupId: string) => void;
+  onMoveTabToEnd?: (tabId: string) => void;
+  onMoveGroup?: (groupId: string, targetId: string, side: DropSide) => void;
 }
 
 interface ContextMenuState {
   tab: BrowserTab;
+  /** The tabs the menu acts on: the selection when the clicked tab is part of it */
+  targets: string[];
   x: number;
   y: number;
+}
+
+interface GroupMenuState {
+  groupId: string;
+  x: number;
+  y: number;
+  confirmClose?: boolean;
+}
+
+/** Keeps a fixed menu inside the window once its real size is known */
+function useKeepInWindow(ref: React.RefObject<HTMLElement | null>, deps: unknown[]) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.transform = '';
+    const r = el.getBoundingClientRect();
+    const dx = Math.min(0, window.innerWidth - 8 - r.right);
+    const dy = Math.min(0, window.innerHeight - 8 - r.bottom);
+    if (dx || dy) el.style.transform = `translate(${Math.max(dx, 8 - r.left)}px, ${Math.max(dy, 8 - r.top)}px)`;
+  }, deps);
 }
 
 export const TabBar: React.FC<TabBarProps> = ({
@@ -85,34 +132,147 @@ export const TabBar: React.FC<TabBarProps> = ({
   onOpenInSplitView,
   onCloseWindow,
   onDropData,
+  groups = [],
+  onCreateGroup,
+  onAddToGroup,
+  onRemoveFromGroup,
+  onUngroup,
+  onUpdateGroup,
+  onToggleGroupCollapsed,
+  onCloseGroup,
+  onNewTabInGroup,
+  onMoveTab,
+  onMoveTabToGroup,
+  onMoveTabToEnd,
+  onMoveGroup,
 }) => {
   const { t } = useTranslation();
-  const [showSortMenu, setShowSortMenu] = useState(false);
+  // Menus go through the panel manager: one menu or panel at a time, Esc and a click outside close it
+  const [showSortMenu, setShowSortMenu] = usePanel('tabSortMenu');
   const [sortMenuPos, setSortMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [contextMenuOpen, setContextMenuOpen] = usePanel('tabContextMenu');
+  const [contextMenuData, setContextMenuData] = useState<ContextMenuState | null>(null);
+  const contextMenu = contextMenuOpen ? contextMenuData : null;
+  const setContextMenu = (menu: ContextMenuState | null) => {
+    if (menu) setContextMenuData(menu);
+    setContextMenuOpen(Boolean(menu));
+  };
+  const [groupMenuOpen, setGroupMenuOpen] = usePanel('groupContextMenu');
+  const [groupMenuData, setGroupMenuData] = useState<GroupMenuState | null>(null);
+  const groupMenu = groupMenuOpen ? groupMenuData : null;
+  const openGroupMenu = (menu: GroupMenuState) => {
+    setGroupMenuData(menu);
+    setGroupMenuOpen(true);
+  };
+  const [showGroupList, setShowGroupList] = useState(false);
   const sortButtonRef = useRef<HTMLButtonElement | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const groupMenuRef = useRef<HTMLDivElement | null>(null);
+  useKeepInWindow(contextMenuRef, [contextMenu, showGroupList]);
+  useKeepInWindow(groupMenuRef, [groupMenu]);
 
-  // Close menus on Escape or window blur
+  // Several tabs chosen with Ctrl/Shift+click go to a group together
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectionAnchor = useRef<string | null>(null);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowSortMenu(false);
-        setContextMenu(null);
+    setSelectedIds((prev) => {
+      const next = prev.filter((id) => tabs.some((tab) => tab.id === id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [tabs]);
+
+  const groupById = useMemo(() => new Map(groups.map((g) => [g.id, g])), [groups]);
+
+  // A new group opens its menu so it can be named right away
+  const knownGroupIds = useRef<Set<string>>(new Set(groups.map((g) => g.id)));
+  const nameNewGroup = useRef(false);
+  useEffect(() => {
+    const fresh = groups.find((g) => !knownGroupIds.current.has(g.id));
+    knownGroupIds.current = new Set(groups.map((g) => g.id));
+    if (!fresh || !nameNewGroup.current) return;
+    nameNewGroup.current = false;
+    const header = document.getElementById(`tab-group-${fresh.id}`);
+    const r = header?.getBoundingClientRect();
+    openGroupMenu({ groupId: fresh.id, x: r ? r.left : 80, y: r ? r.bottom + 4 : 40 });
+  }, [groups]);
+
+  // Drag and drop of tabs and group headers inside the strip
+  const [dropTarget, setDropTarget] = useState<{ id: string; side: DropSide } | { groupId: string } | { end: true } | null>(null);
+  const isInternalDrag = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes(TAB_DRAG_TYPE) || e.dataTransfer.types.includes(GROUP_DRAG_TYPE);
+  const dropSide = (e: React.DragEvent): DropSide => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return e.clientX < r.left + r.width / 2 ? 'before' : 'after';
+  };
+  const handleTabDragOver = (e: React.DragEvent, tab: BrowserTab) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const side = dropSide(e);
+    setDropTarget((prev) => (prev && 'id' in prev && prev.id === tab.id && prev.side === side ? prev : { id: tab.id, side }));
+  };
+  const handleTabDrop = (e: React.DragEvent, tab: BrowserTab) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const side = dropSide(e);
+    const tabId = e.dataTransfer.getData(TAB_DRAG_TYPE);
+    const groupId = e.dataTransfer.getData(GROUP_DRAG_TYPE);
+    if (tabId) onMoveTab?.(tabId, tab.id, side);
+    else if (groupId) onMoveGroup?.(groupId, tab.id, side);
+    setDropTarget(null);
+  };
+  const handleHeaderDrop = (e: React.DragEvent, group: TabGroup) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const tabId = e.dataTransfer.getData(TAB_DRAG_TYPE);
+    const groupId = e.dataTransfer.getData(GROUP_DRAG_TYPE);
+    if (tabId) onMoveTabToGroup?.(tabId, group.id);
+    else if (groupId && groupId !== group.id) {
+      const first = tabs.find((tab) => tab.groupId === group.id);
+      if (first) onMoveGroup?.(groupId, first.id, 'before');
+    }
+    setDropTarget(null);
+  };
+  const handleEndDrop = (e: React.DragEvent) => {
+    if (!isInternalDrag(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const tabId = e.dataTransfer.getData(TAB_DRAG_TYPE);
+    const groupId = e.dataTransfer.getData(GROUP_DRAG_TYPE);
+    const last = tabs[tabs.length - 1];
+    if (tabId) onMoveTabToEnd?.(tabId);
+    else if (groupId && last) onMoveGroup?.(groupId, last.id, 'after');
+    setDropTarget(null);
+  };
+
+  const handleTabClick = (e: React.MouseEvent, tab: BrowserTab) => {
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl+click: add to or take out of the selection; the active tab counts as chosen
+      setSelectedIds((prev) => {
+        const base = prev.length ? prev : [activeTabId];
+        return base.includes(tab.id) ? base.filter((id) => id !== tab.id) : [...base, tab.id];
+      });
+      selectionAnchor.current = tab.id;
+      return;
+    }
+    if (e.shiftKey) {
+      // Shift+click: everything from the last chosen (or active) tab to this one
+      const visible = tabs.filter((x) => !(x.groupId && groupById.get(x.groupId)?.collapsed));
+      const anchorId = selectionAnchor.current && visible.some((x) => x.id === selectionAnchor.current) ? selectionAnchor.current : activeTabId;
+      const a = visible.findIndex((x) => x.id === anchorId);
+      const b = visible.findIndex((x) => x.id === tab.id);
+      if (a !== -1 && b !== -1) {
+        setSelectedIds(visible.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.id));
+        return;
       }
-    };
-
-    const handleWindowBlur = () => {
-      setShowSortMenu(false);
-      setContextMenu(null);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('blur', handleWindowBlur);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('blur', handleWindowBlur);
-    };
-  }, []);
+    }
+    setSelectedIds([]);
+    selectionAnchor.current = tab.id;
+    onSelectTab(tab.id);
+  };
 
   // Tab context menu actions helper
   const contextDomain = contextMenu ? TabSortService.extractHostname(contextMenu.tab.url) : '';
@@ -171,6 +331,54 @@ export const TabBar: React.FC<TabBarProps> = ({
       <FreedomMark size={18} className="mr-3 text-[var(--fb-text)]" />
       <div className="flex items-center flex-1 min-w-0 max-w-full h-full space-x-1">
         {tabs.map((tab, index) => {
+          const group = tab.groupId ? groupById.get(tab.groupId) : undefined;
+          const groupColor = group ? GROUP_COLOR_HEX[group.color] : undefined;
+          const startsGroup = Boolean(group) && (index === 0 || tabs[index - 1].groupId !== tab.groupId);
+          const groupSize = startsGroup ? tabs.filter((x) => x.groupId === tab.groupId).length : 0;
+          const groupHeader = group && startsGroup ? (
+            <div
+              id={`tab-group-${group.id}`}
+              data-group-id={group.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(GROUP_DRAG_TYPE, group.id);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragEnd={() => setDropTarget(null)}
+              onDragOver={(e) => {
+                if (!isInternalDrag(e)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setDropTarget((prev) => (prev && 'groupId' in prev && prev.groupId === group.id ? prev : { groupId: group.id }));
+              }}
+              onDrop={(e) => handleHeaderDrop(e, group)}
+              onClick={() => onToggleGroupCollapsed?.(group.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openGroupMenu({ groupId: group.id, x: e.clientX, y: e.clientY });
+              }}
+              title={`${group.title || t('group.unnamed')} · ${t('group.tabsCount', { count: groupSize })}\n${t('group.collapseHint')}`}
+              className="flex items-center h-full shrink-0 cursor-pointer app-no-drag select-none"
+            >
+              <span
+                className={`flex items-center gap-1 h-5 max-w-[140px] rounded-full text-[11px] font-semibold transition-shadow ${group.title ? 'px-2' : 'px-1.5'} ${
+                  dropTarget && 'groupId' in dropTarget && dropTarget.groupId === group.id ? 'ring-2 ring-white/60' : ''
+                }`}
+                style={{ backgroundColor: groupColor, color: '#0b0d12' }}
+              >
+                {group.title ? <span className="truncate">{group.title}</span> : <span className="w-2 h-2 rounded-full bg-[#0b0d12]/40" />}
+                {group.collapsed && (
+                  <span className="ml-0.5 px-1 rounded-full bg-black/20 text-[10px] font-mono">{groupSize}</span>
+                )}
+              </span>
+            </div>
+          ) : null;
+          if (group?.collapsed) {
+            return <React.Fragment key={tab.id}>{groupHeader}</React.Fragment>;
+          }
+          const isSelected = selectedIds.length > 1 && selectedIds.includes(tab.id);
+          const dropHere = dropTarget && 'id' in dropTarget && dropTarget.id === tab.id ? dropTarget.side : null;
           const splitPaneIndex = splitViewState?.enabled
             ? splitViewState.panes.findIndex((p) => p.tabId === tab.id)
             : -1;
@@ -178,13 +386,14 @@ export const TabBar: React.FC<TabBarProps> = ({
           const isActive = tab.id === activeTabId;
           const domain = TabSortService.extractHostname(tab.url);
           const prevDomain = index > 0 ? TabSortService.extractHostname(tabs[index - 1].url) : null;
-          const isDomainBoundary = index > 0 && prevDomain !== domain;
+          const isDomainBoundary = index > 0 && prevDomain !== domain && !tab.groupId && !tabs[index - 1].groupId;
           const domainColor = TabSortService.getDomainColor(domain);
           const isNewTab = tab.url === 'freedom://newtab';
           const displayTitle = isNewTab ? t('tab.newTab') : (tab.title || (tab.url.startsWith('freedom://') ? 'Freedom Tab' : tab.url));
 
           return (
             <React.Fragment key={tab.id}>
+              {groupHeader}
               {/* Vertical Separator between distinct domain groups */}
               {isDomainBoundary && (
                 <div
@@ -195,7 +404,16 @@ export const TabBar: React.FC<TabBarProps> = ({
 
               <div
                 id={`tab-${tab.id}`}
-                onClick={() => onSelectTab(tab.id)}
+                data-group-id={tab.groupId}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(TAB_DRAG_TYPE, tab.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={() => setDropTarget(null)}
+                onDragOver={(e) => handleTabDragOver(e, tab)}
+                onDrop={(e) => handleTabDrop(e, tab)}
+                onClick={(e) => handleTabClick(e, tab)}
                 onAuxClick={(e) => {
                   // Middle click to close tab
                   if (e.button === 1) {
@@ -211,14 +429,25 @@ export const TabBar: React.FC<TabBarProps> = ({
                   const menuHeight = 320;
                   const x = Math.max(8, Math.min(e.clientX, window.innerWidth - menuWidth - 8));
                   const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuHeight - 8));
-                  setContextMenu({ tab, x, y });
+                  const targets = selectedIds.length > 1 && selectedIds.includes(tab.id)
+                    ? tabs.filter((x) => selectedIds.includes(x.id)).map((x) => x.id)
+                    : [tab.id];
+                  if (targets.length === 1) setSelectedIds([]);
+                  setShowGroupList(false);
+                  setContextMenu({ tab, targets, x, y });
                 }}
                 title={`${tab.isPrivate ? `[${t('incognito.badge')}] ` : ''}${displayTitle} (${tab.url})${tab.isSuspended ? ' - Suspended to save RAM' : ''}${isInSplit ? ` [Split: Pane ${splitPaneIndex + 1}]` : ''}`}
                 // The clickable area fills the strip's height: throw the pointer at the top edge of the screen and click
-                className="group flex items-center h-full min-w-[110px] max-w-[210px] flex-1 cursor-pointer app-no-drag select-none"
+                className="group relative flex items-center h-full min-w-[110px] max-w-[210px] flex-1 cursor-pointer app-no-drag select-none"
               >
+                {dropHere && (
+                  <div
+                    className={`absolute top-1.5 bottom-1.5 w-[2px] rounded-full bg-emerald-400 pointer-events-none ${dropHere === 'before' ? '-left-[3px]' : '-right-[3px]'}`}
+                  />
+                )}
                 <div
-                  className={`relative flex items-center w-full h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 overflow-hidden ${tab.isPrivate ? 'outline outline-1 outline-dashed outline-[var(--fb-border-strong)] -outline-offset-1 ' : ''}${
+                  style={groupColor ? { boxShadow: `inset 0 -2px 0 ${groupColor}` } : undefined}
+                  className={`relative flex items-center w-full h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 overflow-hidden ${isSelected ? 'ring-1 ring-emerald-400/60 bg-white/[0.06] ' : ''}${tab.isPrivate ? 'outline outline-1 outline-dashed outline-[var(--fb-border-strong)] -outline-offset-1 ' : ''}${
                     isActive
                       ? 'bg-[var(--fb-surface-hover)] text-[var(--fb-text)] border border-[var(--fb-border)] font-medium'
                       : 'bg-transparent text-neutral-400 group-hover:text-neutral-200 group-hover:bg-white/[0.05] border border-transparent'
@@ -365,6 +594,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             <button
               ref={sortButtonRef}
               id="btn-tab-sort"
+              data-panel-toggle="tabSortMenu"
               type="button"
               onClick={handleSortButtonClick}
               className="group flex items-center justify-center w-7 h-full ml-1 app-no-drag cursor-pointer"
@@ -383,8 +613,18 @@ export const TabBar: React.FC<TabBarProps> = ({
           </div>
         )}
 
-        {/* Empty space for dragging / double clicking */}
-        <div id="tab-bar-empty-area" className="flex-1 h-full cursor-default app-drag-region" />
+        {/* Empty space for dragging / double clicking; a tab dropped here goes last, without a group */}
+        <div
+          id="tab-bar-empty-area"
+          className={`flex-1 h-full cursor-default app-drag-region ${dropTarget && 'end' in dropTarget ? 'shadow-[inset_2px_0_0_rgb(52,211,153)]' : ''}`}
+          onDragOver={(e) => {
+            if (!isInternalDrag(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            setDropTarget((prev) => (prev && 'end' in prev ? prev : { end: true }));
+          }}
+          onDrop={handleEndDrop}
+        />
       </div>
 
       {/* Top-Right Frameless Window Controls */}
@@ -408,6 +648,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             }}
           >
             <div
+              data-panel="tabSortMenu"
               style={{ top: sortMenuPos.top, left: sortMenuPos.left }}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
@@ -507,6 +748,9 @@ export const TabBar: React.FC<TabBarProps> = ({
             }}
           >
             <div
+              ref={contextMenuRef}
+              id="tab-context-menu"
+              data-panel="tabContextMenu"
               style={{ top: contextMenu.y, left: contextMenu.x }}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
@@ -612,6 +856,89 @@ export const TabBar: React.FC<TabBarProps> = ({
                 </button>
               )}
 
+              {/* Tab groups */}
+              {onCreateGroup && (() => {
+                const targets = contextMenu.targets;
+                const targetTabs = tabs.filter((x) => targets.includes(x.id));
+                const otherGroups = groups.filter((g) => !targetTabs.every((x) => x.groupId === g.id));
+                const anyGrouped = targetTabs.some((x) => x.groupId);
+                return (
+                  <>
+                    <div className="my-1 border-t border-white/[0.06]" />
+                    <button
+                      type="button"
+                      id="tab-menu-new-group"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setContextMenu(null);
+                        setSelectedIds([]);
+                        nameNewGroup.current = true;
+                        onCreateGroup(targets);
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>{targets.length > 1 ? t('group.addToNewMany', { count: targets.length }) : t('group.addToNew')}</span>
+                    </button>
+                    {onAddToGroup && otherGroups.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          id="tab-menu-add-to-group"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setShowGroupList((v) => !v);
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                        >
+                          <FolderInput className="w-3.5 h-3.5 text-neutral-400" />
+                          <span className="flex-1">{t('group.addTo')}</span>
+                          <ChevronRight className={`w-3.5 h-3.5 text-neutral-500 transition-transform ${showGroupList ? 'rotate-90' : ''}`} />
+                        </button>
+                        {showGroupList &&
+                          otherGroups.map((g) => (
+                            <button
+                              key={g.id}
+                              type="button"
+                              data-add-to-group={g.id}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setContextMenu(null);
+                                setSelectedIds([]);
+                                onAddToGroup(targets, g.id);
+                              }}
+                              className="w-full pl-7 pr-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                            >
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: GROUP_COLOR_HEX[g.color] }} />
+                              <span className="truncate">{g.title || t('group.unnamed')}</span>
+                            </button>
+                          ))}
+                      </>
+                    )}
+                    {onRemoveFromGroup && anyGrouped && (
+                      <button
+                        type="button"
+                        id="tab-menu-remove-from-group"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu(null);
+                          setSelectedIds([]);
+                          onRemoveFromGroup(targets);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+                      >
+                        <FolderMinus className="w-3.5 h-3.5 text-neutral-400" />
+                        <span>{t('group.removeFrom')}</span>
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
+
               {/* Group Actions if multiple tabs from this site */}
               {domainTabs.length > 1 && (
                 <>
@@ -709,6 +1036,101 @@ export const TabBar: React.FC<TabBarProps> = ({
           </div>,
           document.body
         )}
+
+      {/* Group header menu: name, colour, new tab in the group, ungroup, close */}
+      {groupMenu && (() => {
+        const group = groupById.get(groupMenu.groupId);
+        if (!group) return null;
+        const count = tabs.filter((x) => x.groupId === group.id).length;
+        return createPortal(
+          <div
+            ref={groupMenuRef}
+            id="tab-group-menu"
+            data-panel="groupContextMenu"
+            style={{ top: groupMenu.y, left: groupMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-[99999] w-60 bg-neutral-900/95 border border-white/10 rounded-xl shadow-2xl p-1.5 text-xs text-neutral-200 backdrop-blur-xl animate-fade-in app-no-drag select-none"
+          >
+            <input
+              id="tab-group-name"
+              autoFocus
+              value={group.title}
+              placeholder={t('group.namePlaceholder')}
+              maxLength={200}
+              onChange={(e) => onUpdateGroup?.(group.id, { title: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') setGroupMenuOpen(false);
+              }}
+              className="w-full px-2.5 py-1.5 mb-1.5 rounded-lg bg-white/[0.04] border border-white/10 focus:border-emerald-500/50 outline-none text-neutral-100 placeholder:text-neutral-500"
+            />
+            <div className="flex flex-wrap gap-1.5 px-1 pb-1.5" role="radiogroup">
+              {GROUP_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={group.color === c}
+                  data-group-color={c}
+                  title={t(`group.color.${c}` as 'group.color.grey')}
+                  onClick={() => onUpdateGroup?.(group.id, { color: c })}
+                  className={`w-5 h-5 rounded-full flex items-center justify-center transition-transform hover:scale-110 ${group.color === c ? 'ring-2 ring-white/80 ring-offset-1 ring-offset-neutral-900' : ''}`}
+                  style={{ backgroundColor: GROUP_COLOR_HEX[c] }}
+                >
+                  {group.color === c && <Check className="w-3 h-3 text-[#0b0d12]" />}
+                </button>
+              ))}
+            </div>
+            <div className="my-1 border-t border-white/[0.06]" />
+            {onNewTabInGroup && (
+              <button
+                type="button"
+                id="group-menu-new-tab"
+                onClick={() => {
+                  setGroupMenuOpen(false);
+                  onNewTabInGroup(group.id);
+                }}
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 text-neutral-400" />
+                <span>{t('group.newTab')}</span>
+              </button>
+            )}
+            {onUngroup && (
+              <button
+                type="button"
+                id="group-menu-ungroup"
+                onClick={() => {
+                  setGroupMenuOpen(false);
+                  onUngroup(group.id);
+                }}
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center gap-2 text-neutral-300 hover:text-white app-no-drag cursor-pointer transition-colors"
+              >
+                <Ungroup className="w-3.5 h-3.5 text-neutral-400" />
+                <span>{t('group.ungroup')}</span>
+              </button>
+            )}
+            {onCloseGroup && (
+              <button
+                type="button"
+                id="group-menu-close"
+                onClick={() => {
+                  if (count > 1 && !groupMenu.confirmClose) {
+                    setGroupMenuData({ ...groupMenu, confirmClose: true });
+                    return;
+                  }
+                  setGroupMenuOpen(false);
+                  onCloseGroup(group.id);
+                }}
+                className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-rose-500/15 text-rose-300 hover:text-rose-200 flex items-center gap-2 app-no-drag cursor-pointer transition-colors"
+              >
+                <X className="w-3.5 h-3.5 text-rose-400" />
+                <span>{groupMenu.confirmClose ? t('group.closeConfirm', { count }) : t('group.close')}</span>
+              </button>
+            )}
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 };

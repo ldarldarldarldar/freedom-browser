@@ -32,9 +32,6 @@ import {
   ArrowDownAZ,
   Globe,
   Columns2,
-  Camera,
-  Clipboard,
-  Save,
 } from 'lucide-react';
 import { BrowserTab } from '../browser/types';
 import { SearchEngineId } from '../settings/types';
@@ -43,6 +40,7 @@ import { SEARCH_ENGINES } from '../settings/defaults';
 import { tauriBridge } from '../services/tauriBridge';
 import { TabSortMode } from '../services/tabSortService';
 import { useTranslation } from '../i18n';
+import { usePanel } from '../hooks/usePanel';
 import { useNewTabElements } from '../hooks/useNewTabElements';
 import { ResizeHandle } from './ResizeHandle';
 
@@ -71,9 +69,6 @@ interface NavigationProps {
   onOpenHistory?: () => void;
   onToggleFind?: () => void;
   /** Toolbar camera button: visible area or whole page, to the clipboard or a file */
-  onScreenshot?: (area: 'visible' | 'full', target: 'clipboard' | 'file') => void;
-  /** Changes when Ctrl+Shift+S asks for the screenshot menu */
-  screenshotMenuSignal?: number;
   zoomLevel?: number;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
@@ -118,8 +113,6 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenBookmarks,
   onOpenHistory,
   onToggleFind,
-  onScreenshot,
-  screenshotMenuSignal,
   zoomLevel = 100,
   onZoomIn,
   onZoomOut,
@@ -147,9 +140,9 @@ export const Navigation: React.FC<NavigationProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isDropTarget, setIsDropTarget] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const [showMenu, setShowMenu] = usePanel('menu');
   // Chrome extensions (puzzle button)
-  const [showExtensions, setShowExtensions] = useState(false);
+  const [showExtensions, setShowExtensions] = usePanel('extensions');
   const [extensions, setExtensions] = useState<FreedomExtensionInfo[]>([]);
   const extensionsApi = window.electronAPI?.extensions;
   useEffect(() => {
@@ -159,16 +152,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     window.addEventListener('freedom-extensions-changed', load);
     return () => window.removeEventListener('freedom-extensions-changed', load);
   }, [extensionsApi]);
-  const [showSecurityDetails, setShowSecurityDetails] = useState(false);
-  const [showScreenshot, setShowScreenshot] = useState(false);
-  useEffect(() => {
-    if (!screenshotMenuSignal) return;
-    setShowScreenshot(true);
-    setShowMenu(false);
-    setShowExtensions(false);
-  }, [screenshotMenuSignal]);
+  const [showSecurityDetails, setShowSecurityDetails] = usePanel('security');
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Sync address input when current tab changes
   useEffect(() => {
@@ -180,20 +165,6 @@ export const Navigation: React.FC<NavigationProps> = ({
       }
     }
   }, [currentTab?.id, currentTab?.url]);
-
-  // Close menu on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowMenu(false);
-        setShowExtensions(false);
-        setShowSecurityDetails(false);
-        setShowScreenshot(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,7 +300,8 @@ export const Navigation: React.FC<NavigationProps> = ({
             {/* Security Indicator */}
             <button
               type="button"
-              onClick={() => setShowSecurityDetails(!showSecurityDetails)}
+              data-panel-toggle="security"
+              onClick={() => setShowSecurityDetails((v) => !v)}
               className="mr-2 flex items-center gap-1.5 px-1.5 py-0.5 rounded-md hover:bg-white/10 text-xs text-neutral-400 hover:text-white transition-colors"
               title={securityTitle}
               aria-label={securityTitle}
@@ -406,7 +378,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
         {/* Security / Privacy details popup */}
         {showSecurityDetails && (
-          <div className={`absolute ${popUp ? 'bottom-9' : 'top-9'} left-0 w-80 max-w-[calc(100vw-24px)] p-3.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}>
+          <div data-panel="security" className={`absolute ${popUp ? 'bottom-9' : 'top-9'} left-0 w-80 max-w-[calc(100vw-24px)] p-3.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}>
             <div className="flex items-center gap-2 mb-2.5 pb-2 border-b border-white/[0.08]">
               <Shield className="w-4 h-4 text-emerald-400" />
               <span className="font-semibold text-white tracking-tight">{t('nav.guardTitle')}</span>
@@ -442,7 +414,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Right Controls: Split View, Find, History, Bookmarks, Task Manager, Downloads, DevTools, Menu */}
-      <div className={`flex items-center gap-0.5 shrink-0 app-no-drag ${vertical ? 'flex-wrap' : ''}`} ref={menuRef}>
+      <div className={`flex items-center gap-0.5 shrink-0 app-no-drag ${vertical ? 'flex-wrap' : ''}`}>
         {/* Split View Toggle Button */}
         {onToggleSplitView && (
           <button
@@ -473,75 +445,12 @@ export const Navigation: React.FC<NavigationProps> = ({
           </button>
         )}
 
-        {/* Screenshot of the page */}
-        {onScreenshot && (
-          <div className="relative">
-            <button
-              id="btn-screenshot"
-              type="button"
-              onClick={() => {
-                setShowScreenshot((v) => !v);
-                setShowMenu(false);
-                setShowExtensions(false);
-              }}
-              className={`w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] active:scale-95 transition-all ${
-                showScreenshot ? 'text-white bg-white/[0.08]' : 'text-neutral-400 hover:text-white hover:bg-white/[0.08]'
-              }`}
-              title={`${t('screenshot.title')} (Ctrl+Shift+S)`}
-            >
-              <Camera className="w-4 h-4" />
-            </button>
-            {showScreenshot && (
-              <div
-                id="screenshot-menu"
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setShowScreenshot(false);
-                }}
-                className={`absolute ${dock === 'left' ? 'left-0' : 'right-0'} ${popUp ? 'bottom-9' : 'top-9'} w-64 p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}
-              >
-                <div className="px-2.5 pt-1 pb-1.5 text-[10px] uppercase tracking-wider text-neutral-500 font-mono">
-                  {t('screenshot.title')}
-                </div>
-                {(['visible', 'full'] as const).map((area) => (
-                  <div key={area} className="flex items-center gap-1 px-1 py-0.5">
-                    <span className="flex-1 px-1.5 text-neutral-300">{t(area === 'visible' ? 'screenshot.visible' : 'screenshot.full')}</span>
-                    <button
-                      type="button"
-                      data-shot={`${area}-clipboard`}
-                      autoFocus={area === 'visible'}
-                      onClick={() => {
-                        setShowScreenshot(false);
-                        onScreenshot(area, 'clipboard');
-                      }}
-                      className="px-2 py-1 rounded-md flex items-center gap-1 text-neutral-300 hover:text-white hover:bg-white/[0.08] focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/60"
-                    >
-                      <Clipboard className="w-3 h-3" />
-                      <span>{t('screenshot.toClipboard')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      data-shot={`${area}-file`}
-                      onClick={() => {
-                        setShowScreenshot(false);
-                        onScreenshot(area, 'file');
-                      }}
-                      className="px-2 py-1 rounded-md flex items-center gap-1 text-neutral-300 hover:text-white hover:bg-white/[0.08] focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/60"
-                    >
-                      <Save className="w-3 h-3" />
-                      <span>{t('screenshot.toFile')}</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Bookmarks Manager button */}
         {onOpenBookmarks && (
           <button
             id="btn-open-bookmarks"
             type="button"
+            data-panel-toggle="bookmarks"
             onClick={onOpenBookmarks}
             className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
             title={t('nav.bookmarks')}
@@ -555,6 +464,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <button
             id="btn-open-history"
             type="button"
+            data-panel-toggle="history"
             onClick={onOpenHistory}
             className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
             title={t('nav.historyTooltip')}
@@ -569,10 +479,8 @@ export const Navigation: React.FC<NavigationProps> = ({
             <button
               id="btn-extensions"
               type="button"
-              onClick={() => {
-                setShowExtensions((v) => !v);
-                setShowMenu(false);
-              }}
+              data-panel-toggle="extensions"
+              onClick={() => setShowExtensions((v) => !v)}
               className={`w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] transition-colors ${
                 showExtensions ? 'text-white bg-white/[0.08]' : 'text-neutral-400 hover:text-white hover:bg-white/[0.08]'
               }`}
@@ -583,6 +491,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             {showExtensions && (
               <div
                 id="extensions-menu"
+                data-panel="extensions"
                 className={`absolute ${dock === 'left' ? 'left-0' : 'right-0'} ${popUp ? 'bottom-9' : 'top-9'} w-64 p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}
               >
                 {extensions.filter((e) => e.enabled).length === 0 && (
@@ -632,6 +541,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         <button
           id="btn-frc-hud"
           type="button"
+          data-panel-toggle="frc"
           onClick={onToggleFRCPopover || onOpenTaskManager}
           className={`flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs font-medium border active:scale-95 transition-all cursor-pointer ${
             isFRCPopoverOpen
@@ -659,6 +569,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         <button
           id="btn-open-downloads"
           type="button"
+          data-panel-toggle="downloads"
           onClick={onOpenDownloads}
           className="relative w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
           title={t('nav.downloadsTooltip')}
@@ -691,7 +602,8 @@ export const Navigation: React.FC<NavigationProps> = ({
           <button
             id="btn-main-menu"
             type="button"
-            onClick={() => setShowMenu(!showMenu)}
+            data-panel-toggle="menu"
+            onClick={() => setShowMenu((v) => !v)}
             className="w-7 h-7 flex items-center justify-center rounded-[var(--fb-radius-sm)] text-neutral-400 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all border border-white/[0.06]"
             title={t('nav.mainMenu')}
           >
@@ -699,7 +611,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           </button>
 
           {showMenu && (
-            <div className={`absolute ${dock === 'left' ? 'left-0' : 'right-0'} ${popUp ? 'bottom-9' : 'top-9'} w-72 max-h-[calc(100vh-80px)] overflow-y-auto p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}>
+            <div data-panel="menu" className={`absolute ${dock === 'left' ? 'left-0' : 'right-0'} ${popUp ? 'bottom-9' : 'top-9'} w-72 max-h-[calc(100vh-80px)] overflow-y-auto p-1.5 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}>
               <button
                 type="button"
                 onClick={() => {
@@ -781,23 +693,6 @@ export const Navigation: React.FC<NavigationProps> = ({
                     <span>{t('nav.findInPage')}</span>
                   </div>
                   <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+F</span>
-                </button>
-              )}
-
-              {onScreenshot && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMenu(false);
-                    setShowScreenshot(true);
-                  }}
-                  className="w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-white/[0.08] flex items-center justify-between text-neutral-300 hover:text-white transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <Camera className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>{t('screenshot.title')}</span>
-                  </div>
-                  <span className="ml-3 shrink-0 whitespace-nowrap text-[10px] font-mono text-neutral-500">Ctrl+Shift+S</span>
                 </button>
               )}
 

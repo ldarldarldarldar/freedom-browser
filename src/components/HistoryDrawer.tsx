@@ -83,13 +83,13 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   };
 
   return (
-    <div className="fixed top-[calc(var(--fb-top-chrome))] bottom-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[var(--fb-surface)] border-l border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] flex flex-col text-neutral-200 animate-slide-left">
+    <div data-panel="history" className="fixed top-[calc(var(--fb-top-chrome))] bottom-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[var(--fb-surface)] border-l border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] flex flex-col text-neutral-200 animate-slide-left">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] bg-[var(--fb-bg)]/80">
-        <div className="flex items-center gap-2.5">
-          <HistoryIcon className="w-4 h-4 text-emerald-400" />
-          <h2 className="text-sm font-semibold text-white tracking-wide">{t('history.title')}</h2>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.06] text-neutral-400">
+      <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-white/[0.08] bg-[var(--fb-bg)]/80">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <HistoryIcon className="w-4 h-4 text-emerald-400 shrink-0" />
+          <h2 className="text-sm font-semibold text-white tracking-wide truncate">{t('history.title')}</h2>
+          <span className="shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.06] text-neutral-400">
             Ctrl+H
           </span>
         </div>

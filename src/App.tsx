@@ -33,6 +33,21 @@ import { BookmarkService } from './services/bookmarkService';
 import { SessionService } from './services/sessionService';
 import { ZoomService } from './services/zoomService';
 import { TabSortService, TabSortMode } from './services/tabSortService';
+import {
+  TabGroup,
+  normalizeGroups,
+  createGroup,
+  addToGroup,
+  removeFromGroup,
+  ungroup,
+  updateGroup,
+  moveTab,
+  moveTabToGroupStart,
+  moveTabToEnd,
+  moveGroup,
+  insertIntoGroup,
+  groupRange,
+} from './services/tabGroupService';
 import { FaviconService } from './services/faviconService';
 import { SplitViewService, SplitViewState, SplitLayoutType } from './services/splitViewService';
 import { SessionRestoreService } from './services/sessionRestoreService';
@@ -41,7 +56,8 @@ import { NEW_TAB_URL, newTabUrl, homepageUrl, startupUrl, alwaysKeepsTabs, close
 import { CloseConfirmationModal } from './components/CloseConfirmationModal';
 import { I18nProvider } from './i18n';
 import { FileCode, AppWindow, ShieldCheck, ShieldBan, EyeOff, X } from 'lucide-react';
-import { translate, normalizeLanguage, TranslationKey } from './i18n';
+import { translate, normalizeLanguage } from './i18n';
+import { usePanelManager, panelSetter, PanelProvider } from './hooks/usePanel';
 
 const SETTINGS_KEY = 'freedom_browser_settings';
 
@@ -131,6 +147,7 @@ export default function App() {
           zoomLevel: t.zoomLevel || ZoomService.getZoomForUrl(t.url),
           security: t.url.startsWith('https://') || t.url.startsWith('file://') ? 'secure' : (t.url.startsWith('freedom://') ? 'internal' : 'insecure'),
           isPinned: t.isPinned,
+          groupId: typeof t.groupId === 'string' && t.groupId ? t.groupId : undefined,
         }));
       }
 
@@ -234,18 +251,27 @@ export default function App() {
   const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
 
   // Modals and Drawers
-  const [isTaskManagerOpen, setIsTaskManagerOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  // One panel or pop-up at a time (src/hooks/usePanel.tsx)
+  const panels = usePanelManager();
+  const activePanel = panels.active;
+  const isTaskManagerOpen = activePanel === 'taskManager';
+  const setIsTaskManagerOpen = useMemo(() => panelSetter('taskManager', panels.setActive), [panels.setActive]);
+  const isSettingsOpen = activePanel === 'settings';
+  const setIsSettingsOpen = useMemo(() => panelSetter('settings', panels.setActive), [panels.setActive]);
   // Layout edit mode: panels and New Tab elements can be moved only while it is on
   const [isEditingLayout, setIsEditingLayout] = useState(false);
-  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const isAboutOpen = activePanel === 'about';
+  const setIsAboutOpen = useMemo(() => panelSetter('about', panels.setActive), [panels.setActive]);
   const [availableUpdate, setAvailableUpdate] = useState<FreedomUpdateInfo | null>(null);
   // "Later" holds for this run: the periodic check does not ask again about the same version
   const dismissedUpdateVersion = useRef<string | null>(null);
-  const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
+  const isDownloadsOpen = activePanel === 'downloads';
+  const setIsDownloadsOpen = useMemo(() => panelSetter('downloads', panels.setActive), [panels.setActive]);
   const [isDevToolsOpen, setIsDevToolsOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isTabsOverviewOpen, setIsTabsOverviewOpen] = useState(false);
+  const isHistoryOpen = activePanel === 'history';
+  const setIsHistoryOpen = useMemo(() => panelSetter('history', panels.setActive), [panels.setActive]);
+  const isTabsOverviewOpen = activePanel === 'tabsOverview';
+  const setIsTabsOverviewOpen = useMemo(() => panelSetter('tabsOverview', panels.setActive), [panels.setActive]);
   const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     try {
@@ -259,8 +285,10 @@ export default function App() {
       localStorage.setItem('freedom_sidebar_collapsed', isSidebarCollapsed ? '1' : '0');
     } catch {}
   }, [isSidebarCollapsed]);
-  const [isBookmarksOpen, setIsBookmarksOpen] = useState(false);
-  const [isFRCPopoverOpen, setIsFRCPopoverOpen] = useState(false);
+  const isBookmarksOpen = activePanel === 'bookmarks';
+  const setIsBookmarksOpen = useMemo(() => panelSetter('bookmarks', panels.setActive), [panels.setActive]);
+  const isFRCPopoverOpen = activePanel === 'frc';
+  const setIsFRCPopoverOpen = useMemo(() => panelSetter('frc', panels.setActive), [panels.setActive]);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [frcStats, setFrcStats] = useState<SystemStats | null>(() => frcService.getLatestStats());
 
@@ -271,6 +299,25 @@ export default function App() {
   const [closedTabsCount, setClosedTabsCount] = useState<number>(
     () => SessionService.getRecentlyClosed().length
   );
+
+  // Tab groups (src/services/tabGroupService.ts), restored with the tabs of the saved session
+  const [tabGroups, setTabGroups] = useState<TabGroup[]>(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get('openUrl')) return [];
+      return SessionRestoreService.getSavedSession()?.groups || [];
+    } catch {
+      return [];
+    }
+  });
+  const tabGroupsRef = useRef(tabGroups);
+  tabGroupsRef.current = tabGroups;
+
+  // A group's tabs stay together; a group without tabs (its last tab closed) is gone
+  useEffect(() => {
+    const next = normalizeGroups(tabs, tabGroups);
+    if (next.tabs !== tabs) setTabs(next.tabs);
+    if (next.groups !== tabGroups) setTabGroups(next.groups);
+  }, [tabs, tabGroups]);
 
   // Tab sorting mode state
   const [activeSortMode, setActiveSortMode] = useState<TabSortMode | 'none'>('none');
@@ -552,7 +599,7 @@ export default function App() {
   const newTabUrlRef = useRef(newTabUrl(settings));
   newTabUrlRef.current = newTabUrl(settings);
 
-  const handleNewTab = useCallback((requestedUrl?: string, options?: { isPrivate?: boolean; background?: boolean }) => {
+  const handleNewTab = useCallback((requestedUrl?: string, options?: { isPrivate?: boolean; background?: boolean; groupId?: string }) => {
     const targetUrl = requestedUrl ?? newTabUrlRef.current;
     const newId = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const isPrivate = Boolean(options?.isPrivate);
@@ -576,7 +623,8 @@ export default function App() {
       security: targetUrl.startsWith('https://') || targetUrl.startsWith('file://') ? 'secure' : 'internal',
     };
 
-    setTabs((prev) => [...prev, newTab]);
+    const groupId = options?.groupId;
+    setTabs((prev) => (groupId ? insertIntoGroup(prev, tabGroupsRef.current, newTab, groupId) : [...prev, newTab]));
     // Background tabs (Ctrl/middle click on a link) stay behind the current one
     if (options?.background) return;
     setActiveTabId(newId);
@@ -684,7 +732,7 @@ export default function App() {
   const clearDataOnExit = settings.clearBrowsingDataOnExit;
   const closeKeepingTabs = useCallback(() => {
     setShowCloseConfirmModal(false);
-    SessionRestoreService.saveSession(tabs, activeTabId);
+    SessionRestoreService.saveSession(tabs, activeTabId, tabGroupsRef.current);
     if (clearDataOnExit) clearLocalBrowsingData();
     tauriBridge.forceClose();
   }, [tabs, activeTabId, clearDataOnExit]);
@@ -710,7 +758,7 @@ export default function App() {
 
   // Settings → "Restart now": the open tabs come back when restoreTabsAfterRestart is on
   const handleRelaunch = useCallback(() => {
-    if (settings.restoreTabsAfterRestart || alwaysKeepsTabs(settings)) SessionRestoreService.saveSession(tabs, activeTabId);
+    if (settings.restoreTabsAfterRestart || alwaysKeepsTabs(settings)) SessionRestoreService.saveSession(tabs, activeTabId, tabGroupsRef.current);
     else SessionRestoreService.clearSavedSession();
     if (settings.clearBrowsingDataOnExit) clearLocalBrowsingData();
     window.electronAPI?.relaunchApp?.();
@@ -778,11 +826,11 @@ export default function App() {
   useEffect(() => {
     if (!keepsTabs) return;
     const timer = window.setTimeout(() => {
-      SessionRestoreService.saveSession(tabs, activeTabId);
+      SessionRestoreService.saveSession(tabs, activeTabId, tabGroupsRef.current);
       window.electronAPI?.flushUiStorage?.();
     }, 1000);
     return () => window.clearTimeout(timer);
-  }, [keepsTabs, tabs, activeTabId]);
+  }, [keepsTabs, tabs, activeTabId, tabGroups]);
 
   const handleRestoreClosedTab = useCallback(() => {
     const restored = SessionService.popRecentlyClosed();
@@ -805,7 +853,9 @@ export default function App() {
       zoomLevel: restored.zoomLevel || 100,
       security: restored.url.startsWith('https://') ? 'secure' : 'insecure',
     };
-    setTabs((prev) => [...prev, newTab]);
+    // Back into its group while that group is still open
+    const groupId = restored.groupId;
+    setTabs((prev) => (groupId ? insertIntoGroup(prev, tabGroupsRef.current, newTab, groupId) : [...prev, newTab]));
     setActiveTabId(newTab.id);
   }, []);
 
@@ -818,7 +868,7 @@ export default function App() {
     setBookmarks(BookmarkService.getBookmarks());
   }, [activeTab]);
 
-  // Short messages at the bottom of the window (screenshots, bookmark import/export)
+  // Short messages at the bottom of the window (bookmark import/export)
   const [notice, setNotice] = useState<{ id: number; text: string; tone: 'ok' | 'error' } | null>(null);
   const showNotice = useCallback((text: string, tone: 'ok' | 'error' = 'ok') => {
     setNotice({ id: Date.now(), text, tone });
@@ -828,35 +878,6 @@ export default function App() {
     const timer = setTimeout(() => setNotice(null), notice.tone === 'error' ? 7000 : 4500);
     return () => clearTimeout(timer);
   }, [notice]);
-  const tr = useCallback(
-    (key: TranslationKey, params?: Record<string, string | number>) => translate(normalizeLanguage(settings.language), key, params),
-    [settings.language]
-  );
-
-  // Toolbar camera button / Ctrl+Shift+S (the shortcut opens the toolbar menu)
-  const [screenshotMenuSignal, setScreenshotMenuSignal] = useState(0);
-  const handleScreenshot = useCallback(
-    async (area: 'visible' | 'full', target: 'clipboard' | 'file') => {
-      let id: number | undefined;
-      try {
-        if (activeTab && !activeTab.url.startsWith('freedom://')) id = tauriBridge.getWebview(activeTab.id)?.getWebContentsId?.();
-      } catch {}
-      if (!id || !window.electronAPI?.screenshot) {
-        showNotice(tr('screenshot.unavailable'), 'error');
-        return;
-      }
-      const result = await window.electronAPI.screenshot(id, { area, target });
-      if (result.ok) {
-        const text = result.target === 'file'
-          ? tr('screenshot.saved', { path: result.path || '' })
-          : tr('screenshot.copied', { width: result.width || 0, height: result.height || 0 });
-        showNotice(result.truncated ? `${text}. ${tr('screenshot.truncated')}` : text);
-      } else if (!result.canceled) {
-        showNotice(tr('screenshot.failed', { error: result.error || '?' }), 'error');
-      }
-    },
-    [activeTab, showNotice, tr]
-  );
 
   // Bookmarks bar folder chip → the manager opened on that folder
   const [bookmarksInitialFolder, setBookmarksInitialFolder] = useState<string | undefined>(undefined);
@@ -1287,6 +1308,111 @@ export default function App() {
       if (id) window.electronAPI?.pictureInPicture?.(id);
     } catch {}
   }, []);
+
+  // ---- Tab groups ----
+  const applyGroups = useCallback(
+    (fn: (t: BrowserTab[], g: TabGroup[]) => { tabs: BrowserTab[]; groups: TabGroup[] }) => {
+      const next = fn(tabs, tabGroups);
+      if (next.tabs !== tabs) setTabs(next.tabs);
+      if (next.groups !== tabGroups) setTabGroups(next.groups);
+    },
+    [tabs, tabGroups]
+  );
+
+  const handleCreateGroup = useCallback(
+    (tabIds: string[]) => applyGroups((t, g) => createGroup(t, g, tabIds)),
+    [applyGroups]
+  );
+  const handleAddToGroup = useCallback(
+    (tabIds: string[], groupId: string) => applyGroups((t, g) => addToGroup(t, g, tabIds, groupId)),
+    [applyGroups]
+  );
+  const handleRemoveFromGroup = useCallback(
+    (tabIds: string[]) => applyGroups((t, g) => removeFromGroup(t, g, tabIds)),
+    [applyGroups]
+  );
+  const handleUngroup = useCallback(
+    (groupId: string) => applyGroups((t, g) => ungroup(t, g, groupId)),
+    [applyGroups]
+  );
+  const handleUpdateGroup = useCallback((groupId: string, patch: Partial<Pick<TabGroup, 'title' | 'color'>>) => {
+    setTabGroups((prev) => updateGroup(prev, groupId, patch));
+  }, []);
+  const handleMoveTab = useCallback(
+    (tabId: string, targetId: string, side: 'before' | 'after') => applyGroups((t, g) => moveTab(t, g, tabId, targetId, side)),
+    [applyGroups]
+  );
+  const handleMoveTabToEnd = useCallback(
+    (tabId: string) => applyGroups((t, g) => moveTabToEnd(t, g, tabId)),
+    [applyGroups]
+  );
+  const handleMoveTabToGroup = useCallback(
+    (tabId: string, groupId: string) => applyGroups((t, g) => moveTabToGroupStart(t, g, tabId, groupId)),
+    [applyGroups]
+  );
+  const handleMoveGroup = useCallback(
+    (groupId: string, targetId: string, side: 'before' | 'after') => applyGroups((t, g) => moveGroup(t, g, groupId, targetId, side)),
+    [applyGroups]
+  );
+  const handleNewTabInGroup = useCallback((groupId: string) => {
+    setTabGroups((prev) => updateGroup(prev, groupId, { collapsed: false }));
+    handleNewTab(undefined, { groupId });
+  }, [handleNewTab]);
+
+  // Collapsing the group of the active tab first moves to the nearest tab outside it (a new one if there is none)
+  const handleToggleGroupCollapsed = useCallback(
+    (groupId: string) => {
+      const group = tabGroups.find((g) => g.id === groupId);
+      if (!group) return;
+      if (!group.collapsed && activeTab?.groupId === groupId) {
+        const range = groupRange(tabs, groupId);
+        const outside = range ? tabs[range[1] + 1] || tabs[range[0] - 1] : undefined;
+        if (outside) setActiveTabId(outside.id);
+        else handleNewTab();
+      }
+      setTabGroups((prev) => updateGroup(prev, groupId, { collapsed: !group.collapsed }));
+    },
+    [tabGroups, tabs, activeTab?.groupId, handleNewTab]
+  );
+
+  // The active tab never hides in a collapsed group (Ctrl+Tab, a link, closing the tab before it)
+  useEffect(() => {
+    const groupId = activeTab?.groupId;
+    if (groupId && tabGroups.some((g) => g.id === groupId && g.collapsed)) {
+      setTabGroups((prev) => updateGroup(prev, groupId, { collapsed: false }));
+    }
+  }, [activeTab?.groupId, tabGroups]);
+
+  const handleCloseGroup = useCallback(
+    (groupId: string) => {
+      const toClose = tabs.filter((t) => t.groupId === groupId);
+      if (toClose.length === 0) return;
+      const closing = new Set(toClose.map((t) => t.id));
+      toClose.forEach((t) => {
+        tauriBridge.closeNativeTab(t.id);
+        frcService.removeSerializedTabSession(t.id);
+        SessionService.recordClosedTab(t, Boolean(t.isPrivate));
+      });
+      setClosedTabsCount(SessionService.getRecentlyClosed().length);
+      setSplitViewState((prev) =>
+        prev.enabled && prev.panes.some((p) => p.tabId && closing.has(p.tabId)) ? { ...prev, enabled: false } : prev
+      );
+      const range = groupRange(tabs, groupId);
+      const remaining = tabs.filter((t) => !closing.has(t.id));
+      if (remaining.length === 0) {
+        setTabs([]);
+        handleNewTab(NEW_TAB_URL);
+      } else {
+        setTabs(remaining);
+        if (closing.has(activeTabId)) {
+          const nextIndex = range ? Math.min(range[0], remaining.length - 1) : 0;
+          setActiveTabId(remaining[nextIndex].id);
+        }
+      }
+      logger.log('INFO', 'RENDERER', `Closed tab group ${groupId} (${toClose.length} tabs)`);
+    },
+    [tabs, activeTabId, handleNewTab]
+  );
 
   const handleSortTabs = useCallback(
     async (mode: TabSortMode) => {
@@ -1886,9 +2012,6 @@ export default function App() {
           case 'toggle-bookmark':
             handleToggleBookmark();
             break;
-          case 'screenshot':
-            setScreenshotMenuSignal((n) => n + 1);
-            break;
           case 'open-downloads':
             setIsDownloadsOpen((prev) => !prev);
             break;
@@ -2046,13 +2169,6 @@ export default function App() {
         return;
       }
 
-      // Ctrl+Shift+S: screenshot menu
-      if (isCtrlOrCmd && e.shiftKey && keyIs(e, 's')) {
-        e.preventDefault();
-        setScreenshotMenuSignal((n) => n + 1);
-        return;
-      }
-
       // Ctrl+Shift+R: Hard reload
       if (isCtrlOrCmd && e.shiftKey && keyIs(e, 'r')) {
         e.preventDefault();
@@ -2140,21 +2256,8 @@ export default function App() {
           tauriBridge.setFullScreen(false).then(() => setIsFullScreen(false));
           return;
         }
-        if (findState.isOpen) {
-          handleCloseFind();
-        } else if (isHistoryOpen) {
-          setIsHistoryOpen(false);
-        } else if (isBookmarksOpen) {
-          setIsBookmarksOpen(false);
-        } else if (isDownloadsOpen) {
-          setIsDownloadsOpen(false);
-        } else if (isSettingsOpen) {
-          setIsSettingsOpen(false);
-        } else if (isAboutOpen) {
-          setIsAboutOpen(false);
-        } else if (isTaskManagerOpen) {
-          setIsTaskManagerOpen(false);
-        }
+        // Panels and menus close through the panel manager (src/hooks/usePanel.tsx)
+        if (findState.isOpen && !activePanel) handleCloseFind();
       }
     };
 
@@ -2167,12 +2270,7 @@ export default function App() {
     isFullScreen,
     showCloseConfirmModal,
     findState.isOpen,
-    isHistoryOpen,
-    isBookmarksOpen,
-    isDownloadsOpen,
-    isSettingsOpen,
-    isAboutOpen,
-    isTaskManagerOpen,
+    activePanel,
     handleNewTab,
     handleOpenFile,
     handleRestoreClosedTab,
@@ -2438,7 +2536,7 @@ export default function App() {
       }}
       onOpenSettings={() => setIsSettingsOpen(true)}
       onOpenTaskManager={() => setIsTaskManagerOpen(true)}
-      onOpenDownloads={() => setIsDownloadsOpen(!isDownloadsOpen)}
+      onOpenDownloads={() => setIsDownloadsOpen((v) => !v)}
       onToggleDevTools={() => setIsDevToolsOpen(!isDevToolsOpen)}
       onOpenAbout={() => setIsAboutOpen(true)}
       defaultSearchEngine={settings.defaultSearchEngine}
@@ -2447,11 +2545,9 @@ export default function App() {
       isDevToolsOpen={isDevToolsOpen}
       isBookmarked={isCurrentBookmarked}
       onToggleBookmark={handleToggleBookmark}
-      onOpenBookmarks={() => setIsBookmarksOpen(true)}
-      onOpenHistory={() => setIsHistoryOpen(true)}
+      onOpenBookmarks={() => setIsBookmarksOpen((v) => !v)}
+      onOpenHistory={() => setIsHistoryOpen((v) => !v)}
       onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
-      onScreenshot={handleScreenshot}
-      screenshotMenuSignal={screenshotMenuSignal}
       zoomLevel={activeTab?.zoomLevel || 100}
       onZoomIn={handleZoomIn}
       onZoomOut={handleZoomOut}
@@ -2516,6 +2612,7 @@ export default function App() {
         setSettings((prev) => ({ ...prev, language: newLang }))
       }
     >
+      <PanelProvider value={panels}>
       <div
         id="freedom-browser-app"
       className={`relative flex flex-col h-screen w-screen overflow-hidden text-white font-sans select-none ${
@@ -2605,6 +2702,19 @@ export default function App() {
             onCloseWindow={handleAttemptClose}
             onToggleMuteTab={handleToggleMuteTab}
             onPictureInPicture={handlePictureInPicture}
+            groups={tabGroups}
+            onCreateGroup={handleCreateGroup}
+            onAddToGroup={handleAddToGroup}
+            onRemoveFromGroup={handleRemoveFromGroup}
+            onUngroup={handleUngroup}
+            onUpdateGroup={handleUpdateGroup}
+            onToggleGroupCollapsed={handleToggleGroupCollapsed}
+            onCloseGroup={handleCloseGroup}
+            onNewTabInGroup={handleNewTabInGroup}
+            onMoveTab={handleMoveTab}
+            onMoveTabToGroup={handleMoveTabToGroup}
+            onMoveTabToEnd={handleMoveTabToEnd}
+            onMoveGroup={handleMoveGroup}
           />
 
           {toolbarDock === 'top' && navigationBar}
@@ -2888,7 +2998,7 @@ export default function App() {
           update={availableUpdate}
           activeDownloads={downloads.filter((d) => d.state === 'progressing').length}
           onBeforeInstall={() => {
-            if (settings.restoreTabsAfterRestart || alwaysKeepsTabs(settings)) SessionRestoreService.saveSession(tabs, activeTabId);
+            if (settings.restoreTabsAfterRestart || alwaysKeepsTabs(settings)) SessionRestoreService.saveSession(tabs, activeTabId, tabGroupsRef.current);
           }}
           onOpenUrl={(url) => handleNewTab(url)}
           onClose={() => {
@@ -2928,6 +3038,7 @@ export default function App() {
         onCancel={handleCancelClose}
       />
     </div>
+    </PanelProvider>
     </I18nProvider>
   );
 }

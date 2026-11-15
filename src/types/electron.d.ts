@@ -113,10 +113,6 @@ declare global {
       };
       /** Toggles picture in picture for the playing (or largest) video of a tab */
       pictureInPicture?: (webContentsId: number) => Promise<'entered' | 'exited' | 'none'>;
-      screenshot?: (
-        webContentsId: number,
-        options: { area: 'visible' | 'full'; target: 'clipboard' | 'file' }
-      ) => Promise<{ ok: boolean; target?: string; path?: string; width?: number; height?: number; truncated?: boolean; canceled?: boolean; error?: string }>;
       docxViewUrl?: (filePath: string) => Promise<string | null>;
       bookmarks?: {
         listSources: () => Promise<Array<{ id: string; browser: string; profile: string; kind: 'chromium' | 'firefox' }>>;
