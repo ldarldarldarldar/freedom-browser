@@ -19,6 +19,8 @@ interface SidebarProps {
   onDownloads: () => void;
   onSettings: () => void;
   onToggleCollapsed: () => void;
+  /** "VI" button: opens the Vice Run mini-game */
+  onViceRun?: () => void;
   /** Edge the rail is docked to; top/bottom render it as a horizontal bar */
   dock?: DockEdge;
   onDockDragStart?: (e: React.PointerEvent) => void;
@@ -37,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDownloads,
   onSettings,
   onToggleCollapsed,
+  onViceRun,
   dock = 'left',
   onDockDragStart,
 }) => {
@@ -121,6 +124,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </ul>
 
       <div className={horizontal ? 'ml-auto flex flex-row items-center gap-1' : `mt-auto flex flex-col gap-1 ${collapsed ? 'items-center' : 'px-2.5'}`}>
+        {onViceRun && (
+          <button id="sidebar-vicerun" type="button" onClick={onViceRun} className={`${iconBtn} vc-vi-btn`} title={t('sidebar.viceRun')}>
+            <span className="text-[11px] font-black italic tracking-tight leading-none">VI</span>
+          </button>
+        )}
         <button
           id="sidebar-collapse"
           type="button"

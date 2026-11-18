@@ -305,6 +305,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
             className={`relative self-center text-center mb-[5vh] touch-none ${grab(bigClockDrag.isDragging)}`}
           >
             <div style={zoomOf('clock')}>
+              <div className="vc-only vc-radio mb-2">Vice City FM · 98.6</div>
               <div className="text-[clamp(56px,9vw,112px)] font-light leading-none tracking-tight tabular-nums">{time || '00:00'}</div>
               <div className="mt-2 text-[14px] text-[var(--fb-text-2)]">{date}</div>
             </div>
@@ -498,6 +499,7 @@ export const NewTabPage: React.FC<NewTabPageProps> = ({
         <div className="flex items-center gap-2.5 pointer-events-none" style={zoomOf('clock')}>
           <Clock className="w-4.5 h-4.5 text-[var(--fb-text-2)]" strokeWidth={1.5} />
           <div className="leading-tight">
+            <div className="vc-only vc-radio">Vice City FM · 98.6</div>
             <div className="text-[13px] tabular-nums">{time || '00:00'}</div>
             <div className="text-[10px] text-[var(--fb-text-3)]">{date}</div>
           </div>

@@ -7,6 +7,15 @@
 
   const { webFrame } = require('electron');
 
+  // 0. Fingerprint protection (electron/fingerprint-shield.cjs), before any script of the page.
+  // The main process decides per site (Settings → Privacy and the lock popover) and returns the script or null.
+  if (/^https?:$/.test(location.protocol)) {
+    try {
+      const shield = require('electron').ipcRenderer.sendSync('freedom-fp-config', location.href, window.top === window);
+      if (shield) webFrame.executeJavaScript(shield).catch(() => {});
+    } catch {}
+  }
+
   // 1. Compatibility with Chrome, in the page's own world and in every frame (this preload runs in an isolated
   // world, where changes to window and navigator are invisible to the page). The User-Agent and Sec-CH-UA headers
   // already say Chrome: sites that compare them with these values, such as Twitch login, otherwise refuse the browser.

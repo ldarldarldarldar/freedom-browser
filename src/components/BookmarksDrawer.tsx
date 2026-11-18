@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Bookmark, BookmarkFolder } from '../browser/types';
 import { BookmarkService } from '../services/bookmarkService';
 import { useTranslation } from '../i18n';
+import { TAB_DRAG_TYPE } from '../services/tabGroupService';
 import {
   Bookmark as BookmarkIcon,
   X,
@@ -29,6 +30,8 @@ interface BookmarksDrawerProps {
   /** Bookmarks or folders changed here: the bookmarks bar re-reads them */
   onChange?: () => void;
   onNotice?: (text: string, tone?: 'ok' | 'error') => void;
+  /** A tab dragged from the tab strip and dropped here: bookmark it in the folder shown (returns false if it cannot be) */
+  onDropTab?: (tabId: string, folderId: string) => boolean;
 }
 
 type BrowserSource = { id: string; browser: string; profile: string; kind: 'chromium' | 'firefox' };
@@ -40,8 +43,10 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
   initialFolderId,
   onChange,
   onNotice,
+  onDropTab,
 }) => {
   const { t } = useTranslation();
+  const [isTabOver, setIsTabOver] = useState(false);
   const bookmarksApi = window.electronAPI?.bookmarks;
   const [showImport, setShowImport] = useState(false);
   const [sources, setSources] = useState<BrowserSource[] | null>(null);
@@ -216,8 +221,44 @@ export const BookmarksDrawer: React.FC<BookmarksDrawerProps> = ({
     onClose();
   };
 
+  // "All" drops into the bookmarks bar
+  const dropFolderId = selectedFolderId === 'all' ? 'bar' : selectedFolderId;
+  const dropFolderName =
+    dropFolderId === 'bar'
+      ? t('bookmarks.barFolder')
+      : dropFolderId === 'other'
+      ? t('bookmarks.otherBookmarks')
+      : folders.find((f) => f.id === dropFolderId)?.name || t('bookmarks.barFolder');
+
   return (
-    <div data-panel="bookmarks" className="fixed top-[calc(var(--fb-top-chrome))] bottom-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[var(--fb-surface)] border-l border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] flex flex-col text-neutral-200 animate-slide-left">
+    <div
+      data-panel="bookmarks"
+      onDragOver={(e) => {
+        if (!onDropTab || !e.dataTransfer.types.includes(TAB_DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        if (!isTabOver) setIsTabOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsTabOver(false);
+      }}
+      onDrop={(e) => {
+        const tabId = e.dataTransfer.getData(TAB_DRAG_TYPE);
+        setIsTabOver(false);
+        if (!tabId || !onDropTab) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (onDropTab(tabId, dropFolderId)) loadData();
+      }}
+      className="fixed top-[calc(var(--fb-top-chrome))] bottom-0 right-0 z-50 w-full max-w-sm sm:max-w-md bg-[var(--fb-surface)] border-l border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] flex flex-col text-neutral-200 animate-slide-left">
+      {isTabOver && (
+        <div
+          id="bookmarks-drop-overlay"
+          className="absolute inset-2 z-10 rounded-[var(--fb-radius-lg)] border-2 border-dashed border-emerald-500/70 bg-emerald-500/10 flex items-center justify-center text-center px-6 text-sm text-emerald-200 pointer-events-none"
+        >
+          {t('bookmarks.dropTabInto', { folder: dropFolderName })}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-white/[0.08] bg-[var(--fb-bg)]/80">
         <div className="flex items-center gap-2.5 min-w-0">

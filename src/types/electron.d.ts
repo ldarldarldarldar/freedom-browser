@@ -12,6 +12,21 @@ declare global {
     size: number;
   }
 
+  /** Rules for one site; the first value of each is the default */
+  interface FreedomSiteRules {
+    cookies: 'allow' | 'session' | 'block';
+    javascript: 'allow' | 'block';
+    fingerprinting: 'on' | 'off';
+    /** default: as Settings → Privacy says */
+    popups: 'default' | 'allow' | 'block';
+  }
+  interface FreedomSiteSettings {
+    site: string;
+    rules: FreedomSiteRules;
+    /** Settings → Privacy switch; when off the per-site choice does nothing */
+    fingerprintProtection: boolean;
+  }
+
   /** Bookmark tree read by electron/bookmarks-io.cjs */
   type ImportedBookmarkNode =
     | { type: 'url'; title: string; url: string; addedAt?: number; favicon?: string }
@@ -129,6 +144,15 @@ declare global {
         list: () => Promise<Array<{ origin: string; permission: string; decision: 'allow' | 'block' }>>;
         remove: (origin: string, permission: string) => Promise<boolean>;
       };
+      /** Blocked pop-up icon: an entry the user opened leaves the list */
+      blockedPopups?: { remove: (webContentsId: number, url?: string) => Promise<boolean> };
+      /** Cookies, JavaScript and fingerprint protection for one site (electron/site-settings.cjs) */
+      siteSettings?: {
+        get: (webContentsId: number) => Promise<FreedomSiteSettings | null>;
+        set: (webContentsId: number, key: keyof FreedomSiteRules, value: string) => Promise<FreedomSiteSettings | null>;
+        list: () => Promise<Array<{ site: string; key: keyof FreedomSiteRules; value: string }>>;
+        remove: (site: string, key: string) => Promise<boolean>;
+      };
       updates?: {
         check: () => Promise<{ status: 'none' | 'error'; currentVersion: string } | { status: 'available'; update: FreedomUpdateInfo }>;
         download: () => Promise<{ ok: boolean; error?: string }>;
@@ -159,6 +183,7 @@ declare global {
         askWhereToSaveDownloads?: boolean;
         backgroundTabThrottling?: boolean;
         smoothScrolling?: boolean;
+        fingerprintProtection?: boolean;
       }) => Promise<unknown>;
       /** Cookies, site storage, cache and auth data of the tabs' profile; extension data is kept */
       clearBrowsingData?: () => Promise<boolean>;

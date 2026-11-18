@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Bookmark, BookmarkFolder } from '../browser/types';
 import { Globe, Folder } from 'lucide-react';
 import { useTranslation } from '../i18n';
+import { TAB_DRAG_TYPE } from '../services/tabGroupService';
 
 interface BookmarksBarProps {
   bookmarks: Bookmark[];
@@ -9,6 +10,9 @@ interface BookmarksBarProps {
   folders?: BookmarkFolder[];
   onNavigate: (url: string) => void;
   onOpenBookmarksManager: (folderId?: string) => void;
+  /** A tab is being dragged from the tab strip: the bar shows even when empty, to take it */
+  isTabDragging?: boolean;
+  onDropTab?: (tabId: string) => void;
 }
 
 export const BookmarksBar: React.FC<BookmarksBarProps> = ({
@@ -16,21 +20,48 @@ export const BookmarksBar: React.FC<BookmarksBarProps> = ({
   folders = [],
   onNavigate,
   onOpenBookmarksManager,
+  isTabDragging = false,
+  onDropTab,
 }) => {
   const { t } = useTranslation();
+  const [isOver, setIsOver] = useState(false);
   const barBookmarks = bookmarks.filter((b) => b.folderId === 'bar' || !b.folderId);
   const otherBookmarks = bookmarks.filter((b) => b.folderId === 'other');
   const barFolders = folders.filter((f) => f.parentId === 'bar');
 
-  if (barBookmarks.length === 0 && otherBookmarks.length === 0 && barFolders.length === 0) {
+  const isEmpty = barBookmarks.length === 0 && otherBookmarks.length === 0 && barFolders.length === 0;
+  const acceptsTab = isTabDragging && Boolean(onDropTab);
+  if (isEmpty && !acceptsTab) {
     return null;
   }
 
   return (
     <div
       id="freedom-bookmarks-bar"
-      className="flex items-center gap-1 px-3 py-1 bg-[var(--fb-bg)]/90 backdrop-blur-md border-b border-white/[0.06] text-xs text-neutral-300 select-none overflow-x-auto no-scrollbar shrink-0"
+      onDragOver={(e) => {
+        if (!onDropTab || !e.dataTransfer.types.includes(TAB_DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        if (!isOver) setIsOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsOver(false);
+      }}
+      onDrop={(e) => {
+        const tabId = e.dataTransfer.getData(TAB_DRAG_TYPE);
+        setIsOver(false);
+        if (!tabId || !onDropTab) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onDropTab(tabId);
+      }}
+      className={`flex items-center gap-1 px-3 py-1 min-h-[30px] bg-[var(--fb-bg)]/90 backdrop-blur-md border-b text-xs text-neutral-300 select-none overflow-x-auto no-scrollbar shrink-0 transition-colors ${
+        isOver ? 'border-emerald-500/60 bg-emerald-500/10' : acceptsTab ? 'border-emerald-500/25' : 'border-white/[0.06]'
+      }`}
     >
+      {acceptsTab && isEmpty && (
+        <span className="px-2 text-[11px] text-neutral-400 pointer-events-none">{t('bookmarks.dropTabHere')}</span>
+      )}
       {barBookmarks.slice(0, 15).map((bm) => (
         <button
           key={bm.id}

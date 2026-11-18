@@ -32,9 +32,8 @@ import { FreedomMark } from './FreedomLogo';
 import { FaviconService } from '../services/faviconService';
 import { SearchEngineService } from '../services/searchEngineService';
 import { usePanel } from '../hooks/usePanel';
-import { TabGroup, GROUP_COLORS, GROUP_COLOR_HEX } from '../services/tabGroupService';
+import { TabGroup, GROUP_COLORS, GROUP_COLOR_HEX, TAB_DRAG_TYPE } from '../services/tabGroupService';
 
-const TAB_DRAG_TYPE = 'application/x-freedom-tab';
 const GROUP_DRAG_TYPE = 'application/x-freedom-group';
 type DropSide = 'before' | 'after';
 
@@ -78,6 +77,8 @@ interface TabBarProps {
   onMoveTabToGroup?: (tabId: string, groupId: string) => void;
   onMoveTabToEnd?: (tabId: string) => void;
   onMoveGroup?: (groupId: string, targetId: string, side: DropSide) => void;
+  /** A tab is being dragged: the bookmarks bar shows up to take it */
+  onTabDragChange?: (dragging: boolean) => void;
 }
 
 interface ContextMenuState {
@@ -145,6 +146,7 @@ export const TabBar: React.FC<TabBarProps> = ({
   onMoveTabToGroup,
   onMoveTabToEnd,
   onMoveGroup,
+  onTabDragChange,
 }) => {
   const { t } = useTranslation();
   // Menus go through the panel manager: one menu or panel at a time, Esc and a click outside close it
@@ -408,9 +410,14 @@ export const TabBar: React.FC<TabBarProps> = ({
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.setData(TAB_DRAG_TYPE, tab.id);
-                  e.dataTransfer.effectAllowed = 'move';
+                  // move: inside the strip; copy: into bookmarks
+                  e.dataTransfer.effectAllowed = 'copyMove';
+                  onTabDragChange?.(true);
                 }}
-                onDragEnd={() => setDropTarget(null)}
+                onDragEnd={() => {
+                  setDropTarget(null);
+                  onTabDragChange?.(false);
+                }}
                 onDragOver={(e) => handleTabDragOver(e, tab)}
                 onDrop={(e) => handleTabDrop(e, tab)}
                 onClick={(e) => handleTabClick(e, tab)}
@@ -446,6 +453,7 @@ export const TabBar: React.FC<TabBarProps> = ({
                   />
                 )}
                 <div
+                  data-tab-active={isActive || undefined}
                   style={groupColor ? { boxShadow: `inset 0 -2px 0 ${groupColor}` } : undefined}
                   className={`relative flex items-center w-full h-7 px-2.5 rounded-[var(--fb-radius-md)] text-xs transition-colors duration-150 overflow-hidden ${isSelected ? 'ring-1 ring-emerald-400/60 bg-white/[0.06] ' : ''}${tab.isPrivate ? 'outline outline-1 outline-dashed outline-[var(--fb-border-strong)] -outline-offset-1 ' : ''}${
                     isActive

@@ -2,6 +2,9 @@
 // BrowserTab.groupId; a group's tabs always stand next to each other in the tab strip, and the group order
 // is the order of its tabs. Pure functions over (tabs, groups), so they can be tested without the UI.
 
+/** dataTransfer type of a tab dragged from the tab strip (its id): the strip, bookmarks bar and manager accept it */
+export const TAB_DRAG_TYPE = 'application/x-freedom-tab';
+
 export const GROUP_COLORS = ['grey', 'blue', 'red', 'yellow', 'green', 'pink', 'purple', 'cyan', 'orange'] as const;
 export type TabGroupColor = (typeof GROUP_COLORS)[number];
 

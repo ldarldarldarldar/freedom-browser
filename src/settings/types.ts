@@ -28,6 +28,7 @@ export type ThemePresetId =
   | 'mint'
   | 'midnight-amber'
   | 'arctic-blue'
+  | 'vice-city'
   | 'custom';
 
 export interface ThemePalette {
@@ -84,6 +85,8 @@ export interface BrowserSettings {
   hardwareAcceleration: boolean;
   /** Animated scrolling in pages; a Chromium switch, applied after a restart */
   smoothScrolling: boolean;
+  /** Canvas/WebGL noise, window-sized screen, no font list (electron/fingerprint-shield.cjs); sites can be excluded */
+  fingerprintProtection: boolean;
   /** "Restart now" in Settings and installing an update bring the open tabs back */
   restoreTabsAfterRestart: boolean;
   /** Closing the browser with open tabs: ask every time, or keep / close them without asking */

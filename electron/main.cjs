@@ -12,6 +12,9 @@ const { createPermissionManager, originOf } = require('./permissions.cjs');
 const { createUpdater } = require('./updater.cjs');
 const downloadNames = require('./download-names.cjs');
 const netPrivacy = require('./net-privacy.cjs');
+const siteSettingsLib = require('./site-settings.cjs');
+const { shieldScript } = require('./fingerprint-shield.cjs');
+const { createPopupWindow } = require('./popup-window.cjs');
 
 // Must happen before app ready
 registerUiScheme(protocol, [STUB_SCHEME_PRIVILEGES, DOCX_SCHEME_PRIVILEGES]);
@@ -899,6 +902,41 @@ function isWebTabUrl(targetUrl, opener) {
   return false;
 }
 
+// Pages of site pop-up windows: they get the same protection as tabs (fingerprinting, ad blocking)
+const popupPages = new WeakSet();
+const isPageContents = (contents) => contents.getType() === 'webview' || popupPages.has(contents);
+
+// Pop-ups the blocker stopped in each tab, shown behind the icon in the address bar until the tab navigates
+const blockedPopups = new Map(); // webview webContents id -> [url]
+function sendBlockedPopups(contents) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('webview-popups-blocked', { webContentsId: contents.id, urls: blockedPopups.get(contents.id) || [] });
+}
+function notePopupBlocked(contents, targetUrl) {
+  // Pop-ups opened by a pop-up window have no address bar to show them in
+  if (contents.getType() !== 'webview') return;
+  if (!blockedPopups.has(contents.id)) contents.once('destroyed', () => blockedPopups.delete(contents.id));
+  const list = (blockedPopups.get(contents.id) || []).filter((u) => u !== targetUrl);
+  blockedPopups.set(contents.id, [...list, targetUrl].slice(-20));
+  sendBlockedPopups(contents);
+}
+function clearBlockedPopups(contents) {
+  if (!blockedPopups.get(contents.id)?.length) return;
+  blockedPopups.set(contents.id, []);
+  sendBlockedPopups(contents);
+}
+
+// Blocked pop-up icon → "Open": it leaves the list (the UI opens it in a tab)
+handleUi('popups_blocked_remove', (event, webContentsId, targetUrl) => {
+  const id = Number(webContentsId);
+  const list = blockedPopups.get(id);
+  if (!list) return false;
+  blockedPopups.set(id, typeof targetUrl === 'string' ? list.filter((u) => u !== targetUrl) : []);
+  const wc = webContents.fromId(id);
+  if (wc && !wc.isDestroyed()) sendBlockedPopups(wc);
+  return true;
+});
+
 // target=_blank, Ctrl/middle click and window.open from tab pages and their popups
 function routeNewWindows(pageContents) {
   // Popup blocker: like Chrome, a page may only open tabs/windows right after the user clicked or
@@ -914,21 +952,38 @@ function routeNewWindows(pageContents) {
   // Links that ask for a new tab/window (target=_blank, Ctrl/middle click, window.open).
   // Electron would otherwise open them in a bare BrowserWindow.
   pageContents.setWindowOpenHandler(({ url: targetUrl, disposition }) => {
-    if (!isWebTabUrl(targetUrl, pageContents)) return { action: 'deny' };
-    if (privacyState.popupsBlocked && Date.now() - lastUserInput > 1500) return { action: 'deny' };
-    if (disposition === 'save-to-disk') {
+    // window.open('') / 'about:blank': sign-in flows (SoundCloud → Google/Apple/Facebook) open an empty window and
+    // send it to the provider afterwards. Only a script does that, so it becomes a pop-up window that keeps opener.
+    const blankWindow = !targetUrl || targetUrl === 'about:blank';
+    if (!blankWindow && !isWebTabUrl(targetUrl, pageContents)) return { action: 'deny' };
+    // Site rule (lock popover / blocked pop-up icon) first, then Settings → Privacy
+    const rule = siteRules(pageContents.session, pageContents.getURL()).popups;
+    const blocking = rule === 'block' || (rule !== 'allow' && privacyState.popupsBlocked);
+    if (blocking && Date.now() - lastUserInput > 1500) {
+      if (!blankWindow) notePopupBlocked(pageContents, targetUrl);
+      return { action: 'deny' };
+    }
+    if (disposition === 'save-to-disk' && !blankWindow) {
       pageContents.downloadURL(targetUrl);
       return { action: 'deny' };
     }
-    // Shift+click / window.open with size features: a real popup, so sign-in flows keep window.opener
-    if (disposition === 'new-window') {
+    // Shift+click / window.open with size features: a real popup window (electron/popup-window.cjs) built around
+    // the page Chromium created, so sign-in and payment flows keep window.opener
+    if (disposition === 'new-window' || blankWindow) {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
-          autoHideMenuBar: true,
-          backgroundColor: '#16191c',
-          webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, nodeIntegrationInSubFrames: true, preload: path.join(__dirname, 'webview-preload.cjs') },
+          webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, nodeIntegrationInSubFrames: true, preload: path.join(__dirname, 'webview-preload.cjs'), spellcheck: true },
         },
+        createWindow: (options) => createPopupWindow({
+          options,
+          icon: process.platform === 'win32' ? path.join(__dirname, '../build/icons/icon.ico') : path.join(__dirname, '../build/icons/icon.png'),
+          language: () => currentAppLanguage,
+          onPage: (popupContents) => {
+            popupPages.add(popupContents);
+            routeNewWindows(popupContents);
+          },
+        }),
       };
     }
     // Ctrl+click and middle click open in the background (Ctrl+Shift+click in the foreground)
@@ -938,17 +993,6 @@ function routeNewWindows(pageContents) {
       isPrivate: pageContents.session !== session.defaultSession,
     });
     return { action: 'deny' };
-  });
-  pageContents.on('did-create-window', (popup) => {
-    routeNewWindows(popup.webContents);
-    // A popup has no address bar: its title always shows the real site, whatever the page calls itself
-    const showSite = () => {
-      if (!popup.isDestroyed()) popup.setTitle(originOf(popup.webContents.getURL()) || 'Freedom Browser');
-    };
-    popup.on('page-title-updated', (titleEvent) => { titleEvent.preventDefault(); showSite(); });
-    popup.webContents.on('did-navigate', showSite);
-    popup.webContents.on('did-navigate-in-page', showSite);
-    showSite();
   });
 }
 
@@ -1057,6 +1101,8 @@ app.on('web-contents-created', (event, contents) => {
     });
 
     routeNewWindows(contents);
+    // A new page starts with no blocked pop-ups
+    contents.on('did-navigate', () => clearBlockedPopups(contents));
 
     // Document views (freedom-docx://) open only from the browser itself or from another local document,
     // as Chromium does with file:// — a web page cannot point a tab or a frame at them
@@ -1730,14 +1776,16 @@ const privacyState = {
   askWhereToSaveDownloads: initialStorageConfig.askWhereToSaveDownloads === true,
   backgroundTabThrottling: initialStorageConfig.backgroundTabThrottling !== false,
   smoothScrolling: initialStorageConfig.smoothScrolling !== false,
+  // Kept in storage-config.json too: tabs restored at startup are protected before the UI sends its settings
+  fingerprintProtection: initialStorageConfig.fingerprintProtection !== false,
 };
 const PERSISTED_PRIVACY_KEYS = [
   'blockThirdPartyCookies', 'httpsOnly', 'spellcheck', 'secureDns', 'secureDnsCustomUrl',
-  'clearBrowsingDataOnExit', 'askWhereToSaveDownloads', 'backgroundTabThrottling', 'smoothScrolling',
+  'clearBrowsingDataOnExit', 'askWhereToSaveDownloads', 'backgroundTabThrottling', 'smoothScrolling', 'fingerprintProtection',
 ];
 const MIRRORED_FLAGS = [
   'doNotTrack', 'blockThirdPartyCookies', 'popupsBlocked', 'adBlockEnabled', 'checkForUpdates', 'httpsOnly', 'spellcheck',
-  'clearBrowsingDataOnExit', 'askWhereToSaveDownloads', 'backgroundTabThrottling', 'smoothScrolling',
+  'clearBrowsingDataOnExit', 'askWhereToSaveDownloads', 'backgroundTabThrottling', 'smoothScrolling', 'fingerprintProtection',
 ];
 
 // Background tabs: Chromium slows their timers and animations unless Settings → Performance turns it off
@@ -2020,7 +2068,7 @@ handleUi('tab_picture_in_picture', async (event, webContentsId) => {
 let adBlocker = null;
 // Sync call from electron/webview-preload.cjs at document start: page CSS is inserted, scriptlets returned
 ipcMain.on('freedom-adblock-start', (event, pageUrl) => {
-  if (event.sender.getType() !== 'webview') { event.returnValue = null; return; }
+  if (!isPageContents(event.sender)) { event.returnValue = null; return; }
   try {
     event.returnValue = adBlocker?.pageStart(event.sender, pageUrl) ?? null;
   } catch (err) {
@@ -2029,23 +2077,12 @@ ipcMain.on('freedom-adblock-start', (event, pageUrl) => {
   }
 });
 ipcMain.on('freedom-adblock-dom', (event, pageUrl, dom) => {
-  if (event.sender.getType() !== 'webview') return;
+  if (!isPageContents(event.sender)) return;
   try { adBlocker?.pageDom(event.sender, pageUrl, dom); } catch (err) { console.warn('[adblock]', err); }
 });
 
-// Approximate registrable domain ("sub.example.co.uk" -> "example.co.uk") for first/third-party checks
-function siteOf(rawUrl) {
-  try {
-    const { hostname, protocol } = new URL(rawUrl);
-    if (!/^https?:$/.test(protocol) || !hostname) return '';
-    if (/^[\d.]+$/.test(hostname) || hostname.includes(':')) return hostname;
-    const parts = hostname.split('.');
-    const twoLevelSuffix = parts.length > 2 && /^(co|com|net|org|gov|edu|ac)$/.test(parts[parts.length - 2]) && parts[parts.length - 1].length === 2;
-    return parts.slice(twoLevelSuffix ? -3 : -2).join('.');
-  } catch {
-    return '';
-  }
-}
+// Registrable domain for first/third-party checks and site rules (electron/site-settings.cjs)
+const { siteOf } = siteSettingsLib;
 
 function isThirdPartyRequest(details) {
   if (!privacyState.blockThirdPartyCookies || details.resourceType === 'mainFrame') return false;
@@ -2055,6 +2092,77 @@ function isThirdPartyRequest(details) {
   const reqSite = siteOf(details.url);
   return Boolean(topSite && reqSite && topSite !== reqSite);
 }
+
+// ---- Settings for one site: cookies, JavaScript, fingerprint protection (electron/site-settings.cjs) ----
+let siteSettings = null;
+const siteRules = (ses, rawUrl) => {
+  const site = siteOf(rawUrl);
+  return site && siteSettings ? siteSettings.get(ses, site) : siteSettingsLib.DEFAULTS;
+};
+
+async function removeSiteCookies(ses, site) {
+  const cookies = await ses.cookies.get({ domain: site }).catch(() => []);
+  await Promise.allSettled(cookies.map((c) => ses.cookies.remove(siteSettingsLib.cookieUrl(c), c.name)));
+}
+
+/** "Delete when the browser closes": cookies and site data of those sites, at exit and (after a crash) at startup */
+async function clearSessionOnlySites() {
+  const sites = siteSettings?.sessionOnlySites() || [];
+  if (!sites.length) return;
+  const ses = session.defaultSession;
+  await Promise.allSettled(sites.map((site) => removeSiteCookies(ses, site)));
+  const origins = sites.flatMap((site) => ['https', 'http'].flatMap((scheme) => [`${scheme}://${site}`, `${scheme}://www.${site}`]));
+  await ses.clearData({ dataTypes: ['localStorage', 'indexedDB', 'serviceWorkers', 'cacheStorage', 'fileSystems'], origins }).catch((err) => {
+    console.warn('[site-settings] clear data:', err.message);
+  });
+}
+
+function tabContents(webContentsId) {
+  if (!isWebviewId(webContentsId)) return null;
+  const wc = webContents.fromId(Number(webContentsId));
+  return wc && !wc.isDestroyed() ? wc : null;
+}
+
+// Lock popover: the rules of the tab's site. null for pages that are not http(s).
+handleUi('site_settings_get', (event, webContentsId) => {
+  const wc = tabContents(webContentsId);
+  const site = wc ? siteOf(wc.getURL()) : '';
+  if (!site || !siteSettings) return null;
+  return { site, rules: siteSettings.get(wc.session, site), fingerprintProtection: privacyState.fingerprintProtection };
+});
+
+handleUi('site_settings_set', async (event, webContentsId, key, value) => {
+  const wc = tabContents(webContentsId);
+  const site = wc ? siteOf(wc.getURL()) : '';
+  if (!site || !siteSettings || !siteSettings.set(wc.session, site, key, value)) return null;
+  // Blocking cookies also takes the ones the site already has
+  if (key === 'cookies' && value === 'block') await removeSiteCookies(wc.session, site);
+  return { site, rules: siteSettings.get(wc.session, site), fingerprintProtection: privacyState.fingerprintProtection };
+});
+
+// Settings → Privacy: saved site rules
+handleUi('site_settings_list', () => siteSettings?.list() || []);
+handleUi('site_settings_remove', (event, site, key) => siteSettings?.remove(site, key) || false);
+
+// Sync call from electron/webview-preload.cjs at document start of every http(s) frame: the protection script
+// for this page, or null. The seed belongs to the tab's top site, so the frames of one page agree.
+// Setting event.returnValue sends the reply at once: it is assigned exactly once
+function fingerprintScriptFor(sender, frameUrl, isTop) {
+  if (!isPageContents(sender) || !privacyState.fingerprintProtection || !siteSettings) return null;
+  const topUrl = isTop ? frameUrl : sender.getURL();
+  const site = siteOf(topUrl) || siteOf(frameUrl);
+  if (!site || siteSettings.get(sender.session, site).fingerprinting === 'off') return null;
+  return shieldScript(siteSettings.seedFor(sender.session, site));
+}
+ipcMain.on('freedom-fp-config', (event, frameUrl, isTop) => {
+  let script = null;
+  try {
+    script = fingerprintScriptFor(event.sender, frameUrl, isTop);
+  } catch (err) {
+    console.warn('[fingerprint]', err.message);
+  }
+  event.returnValue = script;
+});
 
 // Performance mode notification to main process
 // Kept for the UI; the mode itself is applied in the renderer (a forced main-process gc gave nothing measurable)
@@ -2343,6 +2451,7 @@ handleUi('relaunch_app', async () => {
   // app.exit skips before-quit: save the UI's storage (the tabs kept for the restart) and clear data here
   uiSession?.flushStorageData();
   if (privacyState.clearBrowsingDataOnExit) await withTimeout(clearBrowsingSessionData(), 8000);
+  await withTimeout(clearSessionOnlySites(), 8000);
   app.relaunch();
   app.exit(0);
 });
@@ -2412,7 +2521,7 @@ function configureBrowsingSession(ses) {
       details.requestHeaders['DNT'] = '1';
       details.requestHeaders['Sec-GPC'] = '1';
     }
-    if (isThirdPartyRequest(details)) {
+    if (isThirdPartyRequest(details) || siteRules(ses, details.url).cookies === 'block') {
       delete details.requestHeaders['Cookie'];
     }
     callback({ cancel: false, requestHeaders: details.requestHeaders });
@@ -2431,14 +2540,26 @@ function configureBrowsingSession(ses) {
     callback(verdict || {});
   });
 
-  // Third-party cookie blocking: drop Set-Cookie on cross-site subresource responses
+  // Third-party cookie blocking: drop Set-Cookie on cross-site subresource responses.
+  // Site rules: a site with cookies blocked sets none; a site with JavaScript blocked gets a no-script policy.
   ses.webRequest.onHeadersReceived((details, callback) => {
-    if (details.responseHeaders && isThirdPartyRequest(details)) {
-      for (const name of Object.keys(details.responseHeaders)) {
-        if (name.toLowerCase() === 'set-cookie') delete details.responseHeaders[name];
+    let headers = details.responseHeaders;
+    if (headers) {
+      const rules = siteRules(ses, details.url);
+      if (isThirdPartyRequest(details) || rules.cookies === 'block') headers = siteSettingsLib.withoutHeader(headers, 'set-cookie');
+      if (rules.javascript === 'block' && (details.resourceType === 'mainFrame' || details.resourceType === 'subFrame')) {
+        headers = siteSettingsLib.withScriptsBlocked(headers);
       }
     }
-    callback({ cancel: false, responseHeaders: details.responseHeaders });
+    callback({ cancel: false, responseHeaders: headers });
+  });
+  // Cookies a blocked site writes from its scripts are removed as they appear
+  ses.cookies.on('changed', (event, cookie, cause, removed) => {
+    if (removed || !siteSettings) return;
+    const site = siteSettingsLib.siteOfHost(cookie.domain);
+    if (site && siteSettings.get(ses, site).cookies === 'block') {
+      ses.cookies.remove(siteSettingsLib.cookieUrl(cookie), cookie.name).catch(() => {});
+    }
   });
   if (ses !== session.defaultSession) {
     // Incognito downloads go through the same download manager (files are kept, like other browsers)
@@ -2599,6 +2720,7 @@ app.whenReady().then(async () => {
   // Before any tab exists, so restored tabs never resolve names through the system first
   applySecureDns();
 
+  siteSettings = siteSettingsLib.createSiteSettings({ app, session });
   permissionManager = createPermissionManager({
     app,
     session,
@@ -2624,6 +2746,7 @@ app.whenReady().then(async () => {
   await extensionManager.loadAllOnStartup().catch((err) => console.warn('[extensions]', err));
   // "Clear browsing data on exit" also runs at startup: it covers a crash or a killed process
   if (privacyState.clearBrowsingDataOnExit) await withTimeout(clearBrowsingSessionData(), 10000);
+  await withTimeout(clearSessionOnlySites(), 10000);
   setTimeout(() => extensionManager.updateFromStore().catch((err) => console.warn('[extensions] update check:', err.message)), EXTENSION_UPDATE_DELAY_MS);
 
   registerLinuxDesktopIntegration();
@@ -2642,11 +2765,13 @@ app.whenReady().then(async () => {
 let exitDataCleared = false;
 app.on('before-quit', (event) => {
   uiSession?.flushStorageData();
-  if (!startupComplete || !privacyState.clearBrowsingDataOnExit || exitDataCleared) return;
-  // Cookies, site data and cache of the tabs go before the browser does
+  const sessionOnly = siteSettings?.sessionOnlySites().length > 0;
+  if (!startupComplete || exitDataCleared || (!privacyState.clearBrowsingDataOnExit && !sessionOnly)) return;
+  // Cookies, site data and cache of the tabs (or only of the sites set to "delete on close") go before the browser does
   event.preventDefault();
   exitDataCleared = true;
-  withTimeout(clearBrowsingSessionData(), 8000).finally(() => app.quit());
+  const clearing = privacyState.clearBrowsingDataOnExit ? clearBrowsingSessionData() : clearSessionOnlySites();
+  withTimeout(clearing, 8000).finally(() => app.quit());
 });
 
 app.on('will-quit', () => docxViewer.cleanup());

@@ -34,6 +34,8 @@ export interface BrowserTab {
   isMuted?: boolean;
   security: 'secure' | 'insecure' | 'internal';
   isPinned?: boolean;
+  /** Pop-ups the blocker stopped on the current page (address bar icon) */
+  blockedPopups?: string[];
   /** Tab group (src/services/tabGroupService.ts) */
   groupId?: string;
   /** Incognito: in-memory session partition, never written to history/session restore */

@@ -17,6 +17,7 @@ export type PanelId =
   | 'extensions'
   | 'security'
   | 'tabContextMenu'
+  | 'blockedPopups'
   | 'groupContextMenu'
   | 'tabSortMenu'
   | 'settings'
@@ -55,9 +56,23 @@ export function usePanelManager() {
       if (!el) return false;
       return Boolean(el.closest(`[data-panel="${active}"], [data-panel-toggle="${active}"]`));
     };
+    const close = () => setActive((prev) => (prev === active ? null : prev));
+    const closeOnClick = (e: MouseEvent) => {
+      document.removeEventListener('dragstart', cancelClickClose, true);
+      if (!insideCurrent(e.target)) close();
+    };
+    const cancelClickClose = () => document.removeEventListener('click', closeOnClick, true);
     const onMouseDown = (e: MouseEvent) => {
-      if (MODALS.has(active)) return;
-      if (!insideCurrent(e.target)) setActive((prev) => (prev === active ? null : prev));
+      if (MODALS.has(active) || insideCurrent(e.target)) return;
+      // A tab grabbed to drop it into the open panel (bookmarks) must not close it: close on the click instead,
+      // which does not come when the mouse was dragged
+      const el = e.target instanceof Element ? e.target : null;
+      if (el?.closest('[draggable="true"]')) {
+        document.addEventListener('click', closeOnClick, { once: true, capture: true });
+        document.addEventListener('dragstart', cancelClickClose, { once: true, capture: true });
+        return;
+      }
+      close();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
@@ -75,6 +90,8 @@ export function usePanelManager() {
     window.addEventListener('blur', onBlur);
     return () => {
       document.removeEventListener('mousedown', onMouseDown, true);
+      document.removeEventListener('click', closeOnClick, true);
+      document.removeEventListener('dragstart', cancelClickClose, true);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('blur', onBlur);
     };

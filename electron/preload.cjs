@@ -13,6 +13,7 @@ const EVENT_CHANNELS = new Set([
   'webview-html-fullscreen',
   'webview-new-window',
   'webview-open-tab',
+  'webview-popups-blocked',
   'webview-search-text',
   'webview-shortcut',
   'webview-zoom-in',
@@ -74,6 +75,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sitePermissions: {
     list: () => ipcRenderer.invoke('permissions_list'),
     remove: (origin, permission) => ipcRenderer.invoke('permissions_remove', origin, permission),
+  },
+  blockedPopups: {
+    remove: (webContentsId, url) => ipcRenderer.invoke('popups_blocked_remove', webContentsId, url),
+  },
+  siteSettings: {
+    get: (webContentsId) => ipcRenderer.invoke('site_settings_get', webContentsId),
+    set: (webContentsId, key, value) => ipcRenderer.invoke('site_settings_set', webContentsId, key, value),
+    list: () => ipcRenderer.invoke('site_settings_list'),
+    remove: (site, key) => ipcRenderer.invoke('site_settings_remove', site, key),
   },
   extensions: {
     list: () => ipcRenderer.invoke('extensions_list'),

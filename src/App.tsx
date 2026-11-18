@@ -19,6 +19,7 @@ import { SystemStats } from './taskmanager/types';
 import { BrowserSettings } from './settings/types';
 import { DEFAULT_SETTINGS, SEARCH_ENGINES } from './settings/defaults';
 import { Sidebar, SidebarSection } from './components/Sidebar';
+import { ViceRunOverlay } from './components/ViceRunOverlay';
 import { TabsOverview } from './components/TabsOverview';
 import { DockDropOverlay, nearestEdge } from './components/DockDropOverlay';
 import { LayoutEditBar } from './components/LayoutEditBar';
@@ -86,12 +87,14 @@ export default function App() {
         parsed.startpageDefaultApplied = true;
         if (parsed.defaultSearchEngine === 'duckduckgo') parsed.defaultSearchEngine = DEFAULT_SETTINGS.defaultSearchEngine;
       }
-      // One-time switch to the redesigned default theme; later choices are respected
-      if (!storedSettings.uiDesignVersion || storedSettings.uiDesignVersion < 2) {
-        parsed.uiDesignVersion = 2;
+      // One-time switch to the current default theme; later choices are respected.
+      // v2: redesign; v3 (0.6.6-4): Vice City replaces Graphite, profiles on another preset keep it
+      const designVersion = Number(storedSettings.uiDesignVersion) || 0;
+      if (designVersion < 2 || (designVersion < 3 && parsed.themePreset === 'graphite')) {
         parsed.themePreset = DEFAULT_SETTINGS.themePreset;
         parsed.palette = DEFAULT_SETTINGS.palette;
       }
+      parsed.uiDesignVersion = DEFAULT_SETTINGS.uiDesignVersion;
       return parsed;
     } catch {
       return DEFAULT_SETTINGS;
@@ -862,6 +865,21 @@ export default function App() {
   // A Word document view is bookmarked by the document's own address
   const isCurrentBookmarked = activeTab ? BookmarkService.isBookmarked(SearchEngineService.addressOf(activeTab.url)) : false;
 
+  // A tab dropped on the bookmarks bar or into the bookmarks manager
+  const [isTabDragging, setIsTabDragging] = useState(false);
+  const handleBookmarkTab = useCallback(
+    (tabId: string, folderId: string) => {
+      const tab = tabs.find((t) => t.id === tabId);
+      if (!tab || tab.url.startsWith('freedom://newtab')) return false;
+      const added = BookmarkService.addBookmark(tab.title, SearchEngineService.addressOf(tab.url), tab.favicon, folderId);
+      if (!added) return false;
+      setBookmarks(BookmarkService.getBookmarks());
+      showNotice(translate(normalizeLanguage(settings.language), 'bookmarks.tabAdded', { title: added.title }));
+      return true;
+    },
+    [tabs, settings.language]
+  );
+
   const handleToggleBookmark = useCallback(() => {
     if (!activeTab || activeTab.url.startsWith('freedom://newtab')) return;
     BookmarkService.toggleBookmark(activeTab.title, SearchEngineService.addressOf(activeTab.url), activeTab.favicon);
@@ -1295,6 +1313,17 @@ export default function App() {
       });
       if (!tab || Boolean(tab.isAudioPlaying) === audible) return;
       setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, isAudioPlaying: audible } : t)));
+    });
+  }, []);
+
+  // Blocked pop-up icon in the address bar: the main process keeps the list per tab and sends it on every change
+  useEffect(() => {
+    return window.electronAPI?.on?.('webview-popups-blocked', ({ webContentsId, urls }: { webContentsId: number; urls: string[] }) => {
+      const tab = tabsForAudioRef.current.find((t) => {
+        try { return tauriBridge.getWebview(t.id)?.getWebContentsId?.() === webContentsId; } catch { return false; }
+      });
+      if (!tab) return;
+      setTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, blockedPopups: Array.isArray(urls) ? urls : [] } : t)));
     });
   }, []);
 
@@ -2418,11 +2447,12 @@ export default function App() {
       askWhereToSaveDownloads: settings.askWhereToSaveDownloads,
       backgroundTabThrottling: settings.backgroundTabThrottling,
       smoothScrolling: settings.smoothScrolling,
+      fingerprintProtection: settings.fingerprintProtection,
     });
   }, [
     settings.doNotTrack, settings.blockThirdPartyCookies, settings.popupsBlocked, settings.adBlockEnabled, settings.checkForUpdates,
     settings.httpsOnly, settings.spellcheck, settings.secureDns, settings.secureDnsCustomUrl,
-    settings.clearBrowsingDataOnExit, settings.askWhereToSaveDownloads, settings.backgroundTabThrottling, settings.smoothScrolling,
+    settings.clearBrowsingDataOnExit, settings.askWhereToSaveDownloads, settings.backgroundTabThrottling, settings.smoothScrolling, settings.fingerprintProtection,
   ]);
 
   // Local diagnostic log (Settings → Diagnostics): on from the start when it was left on
@@ -2440,6 +2470,16 @@ export default function App() {
     const root = document.documentElement;
     Object.entries(paletteToTokens(settings.palette)).forEach(([k, v]) => v && root.style.setProperty(k, v));
   }, [settings.palette]);
+
+  // Vice City preset adds gradients, glow and the sunset wallpaper (src/styles/vice-city.css)
+  useEffect(() => {
+    const root = document.documentElement;
+    if (settings.themePreset === 'vice-city') root.dataset.theme = 'vice-city';
+    else delete root.dataset.theme;
+  }, [settings.themePreset]);
+
+  // "VI" sidebar button: the Vice Run mini-game (not mounted, so no game loop, while closed)
+  const [isViceRunOpen, setIsViceRunOpen] = useState(false);
 
   // Color theme classes & palette resolution
   const getBackgroundColor = () => {
@@ -2548,6 +2588,7 @@ export default function App() {
       onOpenBookmarks={() => setIsBookmarksOpen((v) => !v)}
       onOpenHistory={() => setIsHistoryOpen((v) => !v)}
       onToggleFind={() => setFindState((prev) => ({ ...prev, isOpen: !prev.isOpen }))}
+      onOpenBlockedPopup={(url) => handleNewTab(url, { isPrivate: activeTab?.isPrivate })}
       zoomLevel={activeTab?.zoomLevel || 100}
       onZoomIn={handleZoomIn}
       onZoomOut={handleZoomOut}
@@ -2602,6 +2643,7 @@ export default function App() {
       onDownloads={() => setIsDownloadsOpen((v) => !v)}
       onSettings={() => setIsSettingsOpen(true)}
       onToggleCollapsed={() => setIsSidebarCollapsed((v) => !v)}
+      onViceRun={() => setIsViceRunOpen(true)}
     />
   );
 
@@ -2715,6 +2757,7 @@ export default function App() {
             onMoveTabToGroup={handleMoveTabToGroup}
             onMoveTabToEnd={handleMoveTabToEnd}
             onMoveGroup={handleMoveGroup}
+            onTabDragChange={setIsTabDragging}
           />
 
           {toolbarDock === 'top' && navigationBar}
@@ -2738,6 +2781,8 @@ export default function App() {
               setBookmarksInitialFolder(folderId);
               setIsBookmarksOpen(true);
             }}
+            isTabDragging={isTabDragging}
+            onDropTab={(tabId) => handleBookmarkTab(tabId, 'bar')}
           />
         </>
       )}
@@ -2938,6 +2983,7 @@ export default function App() {
             setBookmarkFolders(BookmarkService.getFolders());
           }}
           onNotice={showNotice}
+          onDropTab={handleBookmarkTab}
         />
       )}
 
@@ -2954,6 +3000,8 @@ export default function App() {
       )}
 
       {/* Settings Modal */}
+      {isViceRunOpen && <ViceRunOverlay onClose={() => setIsViceRunOpen(false)} />}
+
       {isSettingsOpen && (
         <SettingsModal
           isOpen={isSettingsOpen}

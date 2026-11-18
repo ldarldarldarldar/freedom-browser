@@ -20,6 +20,7 @@ import {
   Terminal,
   Settings as SettingsIcon,
   Star,
+  AppWindow,
   ExternalLink,
   Zap,
   History as HistoryIcon,
@@ -41,6 +42,7 @@ import { tauriBridge } from '../services/tauriBridge';
 import { TabSortMode } from '../services/tabSortService';
 import { useTranslation } from '../i18n';
 import { usePanel } from '../hooks/usePanel';
+import { SiteSettingsControls } from './SiteSettingsControls';
 import { useNewTabElements } from '../hooks/useNewTabElements';
 import { ResizeHandle } from './ResizeHandle';
 
@@ -68,7 +70,8 @@ interface NavigationProps {
   onOpenBookmarks?: () => void;
   onOpenHistory?: () => void;
   onToggleFind?: () => void;
-  /** Toolbar camera button: visible area or whole page, to the clipboard or a file */
+  /** Blocked pop-up icon → an address the blocker stopped, opened in a new tab */
+  onOpenBlockedPopup?: (url: string) => void;
   zoomLevel?: number;
   onZoomIn?: () => void;
   onZoomOut?: () => void;
@@ -113,6 +116,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenBookmarks,
   onOpenHistory,
   onToggleFind,
+  onOpenBlockedPopup,
   zoomLevel = 100,
   onZoomIn,
   onZoomOut,
@@ -153,6 +157,28 @@ export const Navigation: React.FC<NavigationProps> = ({
     return () => window.removeEventListener('freedom-extensions-changed', load);
   }, [extensionsApi]);
   const [showSecurityDetails, setShowSecurityDetails] = usePanel('security');
+  const [showBlockedPopups, setShowBlockedPopups] = usePanel('blockedPopups');
+  const currentSiteLabel = (() => {
+    try {
+      return new URL(currentTab?.url || '').hostname.replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  })();
+  const blockedPopups = currentTab?.blockedPopups || [];
+  const [popupsChoice, setPopupsChoice] = useState<'allow' | 'block'>('block');
+  useEffect(() => {
+    if (showBlockedPopups) setPopupsChoice('block');
+  }, [showBlockedPopups]);
+  // Site rules apply to web pages only; the main process checks the address itself
+  const currentTabWebContentsId = (anyPage = false) => {
+    if (!currentTab || (!anyPage && !/^https?:/.test(currentTab.url))) return undefined;
+    try {
+      return tauriBridge.getWebview(currentTab.id)?.getWebContentsId?.();
+    } catch {
+      return undefined;
+    }
+  };
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Sync address input when current tab changes
@@ -354,6 +380,21 @@ export const Navigation: React.FC<NavigationProps> = ({
               </button>
             )}
 
+            {/* Pop-ups the blocker stopped on this page */}
+            {blockedPopups.length > 0 && (
+              <button
+                type="button"
+                id="btn-blocked-popups"
+                data-panel-toggle="blockedPopups"
+                onClick={() => setShowBlockedPopups((v) => !v)}
+                title={t('popups.blockedTitle')}
+                aria-label={t('popups.blockedTitle')}
+                className={`p-1 rounded-md transition-colors shrink-0 ${showBlockedPopups ? 'text-amber-300 bg-white/10' : 'text-amber-400/90 hover:text-amber-300 hover:bg-white/10'}`}
+              >
+                <AppWindow className="w-3.5 h-3.5" />
+              </button>
+            )}
+
             {/* Bookmark Current Page Star Button */}
             {onToggleBookmark && currentTab && !currentTab.url.startsWith('freedom://newtab') && (
               <button
@@ -375,6 +416,64 @@ export const Navigation: React.FC<NavigationProps> = ({
             )}
           </div>
         </form>
+
+        {/* Blocked pop-ups: open one, or allow them for the site (as Chromium/Brave do) */}
+        {showBlockedPopups && blockedPopups.length > 0 && (
+          <div
+            id="blocked-popups"
+            data-panel="blockedPopups"
+            className={`absolute ${popUp ? 'bottom-9' : 'top-9'} right-0 w-80 max-w-[calc(100vw-24px)] p-3 rounded-[var(--fb-radius-lg)] bg-[var(--fb-surface)] border border-[var(--fb-border)] shadow-[var(--fb-shadow-pop)] z-50 text-xs text-neutral-200 animate-fade-in`}
+          >
+            <div className="font-semibold text-white mb-2">{t('popups.blockedTitle')}</div>
+            <ul className="space-y-0.5 max-h-40 overflow-y-auto mb-2.5">
+              {blockedPopups.map((url) => (
+                <li key={url}>
+                  <button
+                    type="button"
+                    data-blocked-popup={url}
+                    onClick={() => {
+                      const id = currentTabWebContentsId(true);
+                      if (id) window.electronAPI?.blockedPopups?.remove(id, url);
+                      setShowBlockedPopups(false);
+                      onOpenBlockedPopup?.(url);
+                    }}
+                    title={url}
+                    className="w-full text-left truncate px-1.5 py-1 rounded-md text-sky-300 hover:bg-white/[0.06] hover:text-sky-200"
+                  >
+                    {url}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="space-y-1.5 text-[11px] text-neutral-300">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="radio" name="popups-choice" id="popups-allow" checked={popupsChoice === 'allow'} onChange={() => setPopupsChoice('allow')} className="mt-0.5 accent-emerald-500" />
+                <span>{t('popups.alwaysAllow', { site: currentSiteLabel })}</span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="radio" name="popups-choice" id="popups-block" checked={popupsChoice === 'block'} onChange={() => setPopupsChoice('block')} className="mt-0.5 accent-emerald-500" />
+                <span>{t('popups.keepBlocking')}</span>
+              </label>
+            </div>
+            <div className="flex justify-end mt-3">
+              <button
+                type="button"
+                id="popups-done"
+                onClick={async () => {
+                  const id = currentTabWebContentsId(true);
+                  if (popupsChoice === 'allow' && id) {
+                    await window.electronAPI?.siteSettings?.set(id, 'popups', 'allow');
+                    await window.electronAPI?.blockedPopups?.remove(id);
+                  }
+                  setShowBlockedPopups(false);
+                }}
+                className="px-3 py-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium"
+              >
+                {t('popups.done')}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Security / Privacy details popup */}
         {showSecurityDetails && (
@@ -409,6 +508,13 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <span className="text-emerald-400 font-mono">{t('nav.isolated')}</span>
               </p>
             </div>
+            <SiteSettingsControls
+              webContentsId={currentTabWebContentsId()}
+              onReload={() => {
+                setShowSecurityDetails(false);
+                onReload();
+              }}
+            />
           </div>
         )}
       </div>

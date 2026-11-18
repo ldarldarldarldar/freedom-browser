@@ -610,6 +610,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </p>
                 </div>
 
+                {/* Vice City on/off: off returns to the preset that was active before it */}
+                <div className="vc-toggle p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-white">{t('settings.viceCity')}</div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">{t('settings.viceCityDesc')}</div>
+                  </div>
+                  <input
+                    id="settings-vice-city"
+                    type="checkbox"
+                    checked={settings.themePreset === 'vice-city'}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        try {
+                          localStorage.setItem('freedom_theme_before_vice', settings.themePreset);
+                        } catch { /* falls back to graphite */ }
+                        handlePresetSelect('vice-city');
+                      } else {
+                        let prev: string | null = null;
+                        try {
+                          prev = localStorage.getItem('freedom_theme_before_vice');
+                        } catch { /* ignore */ }
+                        handlePresetSelect(prev && prev in THEME_PRESETS && prev !== 'vice-city' ? (prev as ThemePresetId) : 'graphite');
+                      }
+                    }}
+                    className="accent-emerald-500 w-4 h-4 rounded cursor-pointer"
+                  />
+                </div>
+
                 {/* 10 Curated Theme Presets */}
                 <div>
                   <div className="text-xs font-medium text-neutral-300 mb-2">
@@ -642,6 +670,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           ? t('settings.theme.midnightAmber')
                           : presetKey === 'arctic-blue'
                           ? t('settings.theme.arcticBlue')
+                          : presetKey === 'vice-city'
+                          ? t('settings.theme.viceCity')
                           : presetKey;
 
                       return (
@@ -1169,6 +1199,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     { key: 'doNotTrack', label: t('settings.doNotTrack') },
                     { key: 'blockThirdPartyCookies', label: t('settings.blockThirdParty') },
                     { key: 'popupsBlocked', label: t('settings.blockPopups') },
+                    { key: 'fingerprintProtection', label: t('settings.fingerprintProtection'), desc: t('settings.fingerprintProtectionDesc') },
                     { key: 'clearBrowsingDataOnExit', label: t('settings.clearOnExit'), desc: t('settings.clearOnExitDesc') },
                     { key: 'checkForUpdates', label: t('settings.checkForUpdates') },
                   ].map(({ key, label, desc }: { key: string; label: string; desc?: string }) => (

@@ -1,0 +1,169 @@
+/* ==========================================================================
+   Vice City theme (Settings → Themes → "Vice City theme").
+   Base colours come from the 'vice-city' preset in src/settings/themePresets.ts
+   through the usual --fb-* tokens; this file only adds what a palette cannot:
+   sunset gradients, neon glow and the New Tab scene. Everything is scoped to
+   :root[data-theme="vice-city"] (set in App.tsx), so other themes are untouched.
+   ========================================================================== */
+:root {
+  --vc-purple: #1a0b3b;
+  --vc-pink: #ff2e88;
+  --vc-orange: #ff8a3d;
+  --vc-teal: #18e0d0;
+  --vc-sunset: linear-gradient(90deg, var(--vc-orange), var(--vc-pink));
+  --vc-sunset-soft: linear-gradient(90deg, rgba(255, 138, 61, 0.38), rgba(255, 46, 136, 0.42));
+  --vc-glow-pink: 0 0 10px rgba(255, 46, 136, 0.55);
+  --vc-glow-teal: 0 0 10px rgba(24, 224, 208, 0.6);
+}
+
+/* Theme-only bits stay hidden in other themes */
+.vc-only,
+.vc-scene {
+  display: none;
+}
+
+:root[data-theme="vice-city"] {
+  --fb-on-accent: #ffffff;
+  --fb-border-strong: rgba(255, 46, 136, 0.35);
+  --fb-shadow-pop: 0 12px 32px rgba(8, 2, 24, 0.7), 0 0 0 1px rgba(255, 46, 136, 0.35), 0 0 18px rgba(255, 46, 136, 0.18);
+}
+
+/* ---- Top chrome: tab strip and toolbar ---- */
+:root[data-theme="vice-city"] #browser-tab-bar {
+  background-image: linear-gradient(180deg, #24104e, var(--fb-chrome));
+}
+:root[data-theme="vice-city"] [data-tab-active] {
+  background: var(--vc-sunset-soft);
+  border-color: rgba(255, 46, 136, 0.6);
+  box-shadow: var(--vc-glow-pink), inset 0 -2px 0 var(--vc-orange);
+}
+:root[data-theme="vice-city"] #browser-nav-toolbar {
+  box-shadow: inset 0 -1px 0 rgba(255, 46, 136, 0.45);
+}
+
+/* Address bar: turquoise neon while focused */
+:root[data-theme="vice-city"] #browser-nav-toolbar :has(> #browser-omnibar-input) {
+  transition: box-shadow var(--fb-dur) var(--fb-ease), border-color var(--fb-dur) var(--fb-ease);
+}
+:root[data-theme="vice-city"] #browser-nav-toolbar :has(> #browser-omnibar-input:focus) {
+  border-color: var(--vc-teal);
+  box-shadow: var(--vc-glow-teal);
+}
+
+/* ---- Buttons: neon on hover ---- */
+:root[data-theme="vice-city"] #browser-nav-toolbar button:hover,
+:root[data-theme="vice-city"] #browser-tab-bar button:hover,
+:root[data-theme="vice-city"] #browser-sidebar button:hover {
+  color: var(--vc-teal);
+  filter: drop-shadow(0 0 4px rgba(24, 224, 208, 0.7));
+}
+:root[data-theme="vice-city"] #browser-sidebar {
+  background-image: linear-gradient(180deg, var(--fb-sidebar), #150833);
+}
+:root[data-theme="vice-city"] #browser-sidebar [aria-current="page"] {
+  background: var(--vc-sunset-soft);
+  color: #fff;
+  box-shadow: var(--vc-glow-pink);
+}
+
+/* "VI" button: always lit in this theme, pink-orange text */
+#sidebar-vicerun span {
+  background: var(--vc-sunset);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="vice-city"] #sidebar-vicerun {
+  box-shadow: inset 0 0 0 1px rgba(255, 46, 136, 0.5), var(--vc-glow-pink);
+}
+
+/* ---- Keyboard focus ---- */
+:root[data-theme="vice-city"] :focus-visible:not(input[type="text"], input[type="search"], input[type="url"], input:not([type]), textarea) {
+  outline-color: var(--vc-teal);
+  box-shadow: var(--vc-glow-teal);
+}
+
+/* ---- Menus, drawers, popovers, settings ---- */
+:root[data-theme="vice-city"] [data-panel],
+:root[data-theme="vice-city"] #freedom-settings-dialog {
+  border-color: rgba(255, 46, 136, 0.45) !important;
+  box-shadow: var(--fb-shadow-pop);
+}
+:root[data-theme="vice-city"] [data-panel] button:hover,
+:root[data-theme="vice-city"] #freedom-settings-dialog button:hover {
+  box-shadow: inset 0 0 0 1px rgba(24, 224, 208, 0.35);
+}
+:root[data-theme="vice-city"] input[type="checkbox"]:checked {
+  background: var(--vc-sunset);
+  box-shadow: var(--vc-glow-pink);
+}
+
+/* ---- Scrollbars ---- */
+:root[data-theme="vice-city"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--vc-pink), var(--vc-orange));
+}
+:root[data-theme="vice-city"] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--vc-teal), var(--vc-pink));
+}
+
+/* ---- New Tab: sunset scene, neon title, radio clock ---- */
+:root[data-theme="vice-city"] .wp-theme::before {
+  display: none;
+}
+:root[data-theme="vice-city"] .vc-scene {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+:root[data-theme="vice-city"] .vc-only {
+  display: block;
+}
+:root[data-theme="vice-city"] #newtab-title h1 span {
+  color: var(--vc-pink);
+  text-shadow: 0 0 12px rgba(255, 46, 136, 0.7);
+}
+:root[data-theme="vice-city"] #newtab-title p {
+  color: #ffd9ec;
+}
+:root[data-theme="vice-city"] #newtab-search > form > div {
+  background: rgba(26, 11, 59, 0.82);
+  border-color: rgba(255, 46, 136, 0.55);
+  box-shadow: var(--vc-glow-pink);
+}
+:root[data-theme="vice-city"] #newtab-search > form > div:focus-within {
+  border-color: var(--vc-teal);
+  box-shadow: var(--vc-glow-teal);
+}
+:root[data-theme="vice-city"] #newtab-links [role="link"] > div {
+  background: rgba(26, 11, 59, 0.78);
+}
+:root[data-theme="vice-city"] #newtab-links [role="link"]:hover > div {
+  border-color: var(--vc-teal);
+  box-shadow: var(--vc-glow-teal);
+}
+:root[data-theme="vice-city"] #newtab-links [role="link"] span {
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+:root[data-theme="vice-city"] #newtab-clock {
+  color: #fff;
+  border-color: rgba(255, 46, 136, 0.55);
+  background: rgba(26, 11, 59, 0.78);
+  box-shadow: var(--vc-glow-pink);
+}
+:root[data-theme="vice-city"] #newtab-clock[data-clock-style="big"] {
+  background: none;
+  box-shadow: none;
+  text-shadow: 0 0 18px rgba(255, 46, 136, 0.8), 0 0 4px rgba(255, 138, 61, 0.9);
+}
+.vc-radio {
+  font-size: 10px;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--vc-teal);
+  text-shadow: 0 0 8px rgba(24, 224, 208, 0.8);
+}
